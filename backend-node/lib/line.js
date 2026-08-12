@@ -136,18 +136,38 @@ async function sendBorrowingFlex(data, status, targetId) {
       spacing: 'md',
       paddingAll: '20px',
       contents: [
-        {
-          type: 'box',
-          layout: 'vertical',
-          backgroundColor: '#f8fafc',
-          cornerRadius: '12px',
-          paddingAll: '16px',
-          contents: [
-            { type: 'text', text: 'อุปกรณ์ที่ยืม', size: 'xs', color: '#64748b' },
-            { type: 'text', text: String(data['ชื่ออุปกรณ์'] || '-'), size: 'xl', weight: 'bold', color: '#0f172a', wrap: true },
-            { type: 'text', text: 'จำนวน ' + (data['จำนวน'] || 1) + ' รายการ', size: 'sm', color: '#64748b', margin: 'xs' },
-          ],
-        },
+        Array.isArray(data['รายการอุปกรณ์']) && data['รายการอุปกรณ์'].length > 0
+          ? {
+              type: 'box',
+              layout: 'vertical',
+              backgroundColor: '#f8fafc',
+              cornerRadius: '12px',
+              paddingAll: '16px',
+              contents: [
+                { type: 'text', text: `อุปกรณ์ที่ยืม (${data['รายการอุปกรณ์'].length} รายการ)`, size: 'xs', color: '#64748b' },
+                ...data['รายการอุปกรณ์'].map((item) => ({
+                  type: 'text',
+                  text: `• ${item['ชื่ออุปกรณ์']} (x${item['จำนวน']})`,
+                  size: 'sm',
+                  weight: 'bold',
+                  color: '#0f172a',
+                  wrap: true,
+                  margin: 'xs',
+                })),
+              ],
+            }
+          : {
+              type: 'box',
+              layout: 'vertical',
+              backgroundColor: '#f8fafc',
+              cornerRadius: '12px',
+              paddingAll: '16px',
+              contents: [
+                { type: 'text', text: 'อุปกรณ์ที่ยืม', size: 'xs', color: '#64748b' },
+                { type: 'text', text: String(data['ชื่ออุปกรณ์'] || '-'), size: 'xl', weight: 'bold', color: '#0f172a', wrap: true },
+                { type: 'text', text: 'จำนวน ' + (data['จำนวน'] || 1) + ' รายการ', size: 'sm', color: '#64748b', margin: 'xs' },
+              ],
+            },
         { type: 'separator', margin: 'md' },
         {
           type: 'box',

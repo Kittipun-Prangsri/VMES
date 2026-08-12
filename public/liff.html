@@ -195,6 +195,96 @@
       transform: scale(0.95);
     }
 
+    /* Cart / Multi-item Styles */
+    .cart-container {
+      background: #f1f5f9;
+      border: 1.5px dashed #cbd5e1;
+      border-radius: 12px;
+      padding: 14px;
+      margin-bottom: 18px;
+    }
+
+    .cart-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+      font-size: 0.875rem;
+      font-weight: 700;
+      color: #1e293b;
+    }
+
+    .cart-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #ffffff;
+      padding: 10px 12px;
+      border-radius: 10px;
+      margin-bottom: 8px;
+      border: 1px solid #e2e8f0;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+
+    .cart-item-name {
+      font-weight: 600;
+      font-size: 0.85rem;
+      color: #0f172a;
+      flex: 1;
+    }
+
+    .cart-item-qty {
+      font-size: 0.775rem;
+      font-weight: 700;
+      color: #4f46e5;
+      background: #e0e7ff;
+      padding: 3px 10px;
+      border-radius: 12px;
+      margin: 0 8px;
+    }
+
+    .btn-remove-item {
+      background: #fee2e2;
+      color: #ef4444;
+      border: none;
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      cursor: pointer;
+      font-weight: bold;
+      font-size: 0.9rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.15s ease;
+    }
+
+    .btn-remove-item:active {
+      background: #fca5a5;
+    }
+
+    .btn-add-item {
+      width: 100%;
+      background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+      color: #1d4ed8;
+      border: 1.5px solid #bfdbfe;
+      padding: 10px;
+      border-radius: 10px;
+      font-size: 0.875rem;
+      font-weight: 700;
+      cursor: pointer;
+      margin-top: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: background 0.15s ease;
+    }
+
+    .btn-add-item:active {
+      background: #bfdbfe;
+    }
+
     /* Loading Overlay */
     .loading-overlay {
       display: none;
@@ -291,6 +381,18 @@
       <div class="form-group">
         <label class="form-label" for="qtyInput">จำนวนที่ต้องการยืม <span class="req">*</span></label>
         <input type="number" id="qtyInput" class="form-input" min="1" value="1" required>
+        <button type="button" class="btn-add-item" onclick="addItemToCart()">
+          ➕ เพิ่มอุปกรณ์นี้ลงในรายการยืม
+        </button>
+      </div>
+
+      <!-- รายการอุปกรณ์ที่เลือกยืม (Multi-Item Cart) -->
+      <div id="cartSection" class="cart-container" style="display: none;">
+        <div class="cart-header">
+          <span>🛒 รายการอุปกรณ์ที่เลือกยืม</span>
+          <span id="cartBadge" style="background:#4f46e5; color:#ffffff; font-size:0.75rem; padding:3px 10px; border-radius:12px;">0 รายการ</span>
+        </div>
+        <div id="cartList"></div>
       </div>
 
       <!-- ผู้ขอยืม -->
@@ -347,6 +449,7 @@
     let equipmentList = [];
     let selectedEquip = null;
     let lineProfile = null;
+    let selectedCartItems = [];
 
     // Default API Host (Vercel API)
     const API_URL = 'https://vmes-backend.vercel.app/api/rpc';
@@ -535,36 +638,136 @@
       }
     }
 
-    async function handleSubmit(e) {
-      e.preventDefault();
+    function addItemToCart() {
       if (!selectedEquip) {
-        alert('กรุณาเลือกอุปกรณ์ที่ต้องการยืม');
+        alert('กรุณาเลือกอุปกรณ์ที่ต้องการยืมก่อนครับ');
         return;
       }
 
       const reqQty = parseFloat(document.getElementById('qtyInput').value) || 1;
-      const availableQty = parseFloat(selectedEquip['จำนวน']) || 0;
+      const maxAvailable = selectedEquip.netAvailable !== undefined ? selectedEquip.netAvailable : (parseFloat(selectedEquip['จำนวน']) || 0);
 
-      if (reqQty > availableQty) {
-        alert(`จำนวนที่ขอ (${reqQty}) เกินกว่าจำนวนคงเหลือในคลัง (${availableQty})`);
+      if (reqQty <= 0) {
+        alert('กรุณาระบุจำนวนที่ต้องการยืมอย่างน้อย 1 รายการ');
         return;
       }
 
-      const rawDate = document.getElementById('dueDateInput').value;
-      const dateParts = rawDate.split('-');
-      const formattedDueDate = `${dateParts[2]}/${dateParts[1]}/${dateParts[0]}`;
+      if (reqQty > maxAvailable) {
+        alert(`จำนวนที่ขอ (${reqQty}) เกินกว่าจำนวนพร้อมยืมจริงในคลัง (${maxAvailable})`);
+        return;
+      }
 
-      const payload = {
-        'รหัสอุปกรณ์': selectedEquip['รหัส'],
-        'ชื่ออุปกรณ์': selectedEquip['ชื่ออุปกรณ์'],
-        'จำนวน': reqQty,
-        'ผู้ขอยืม': document.getElementById('borrowerName').value.trim(),
-        'หน่วยงาน': document.getElementById('deptInput').value.trim(),
-        'เบอร์ติดต่อ': document.getElementById('phoneInput').value.trim(),
-        'วันที่ครบกำหนด': formattedDueDate,
-        'วัตถุประสงค์': document.getElementById('purposeInput').value.trim(),
-        'LINE_USER_ID': lineProfile ? lineProfile.userId : ''
-      };
+      const existingIndex = selectedCartItems.findIndex(i => i['รหัสอุปกรณ์'] === selectedEquip['รหัส']);
+      if (existingIndex !== -1) {
+        const newTotal = selectedCartItems[existingIndex]['จำนวน'] + reqQty;
+        if (newTotal > maxAvailable) {
+          alert(`ไม่สามารถเพิ่มได้: รวมจำนวนเดิม (${selectedCartItems[existingIndex]['จำนวน']}) กับที่เพิ่มใหม่ (${reqQty}) เท่ากับ ${newTotal} เกินจำนวนในคลัง (${maxAvailable})`);
+          return;
+        }
+        selectedCartItems[existingIndex]['จำนวน'] = newTotal;
+      } else {
+        selectedCartItems.push({
+          'รหัสอุปกรณ์': selectedEquip['รหัส'],
+          'ชื่ออุปกรณ์': selectedEquip['ชื่ออุปกรณ์'],
+          'จำนวน': reqQty,
+          'หน่วยนับ': selectedEquip['หน่วยนับ'] || 'เครื่อง'
+        });
+      }
+
+      renderCart();
+      alert(`✅ เพิ่ม "${selectedEquip['ชื่ออุปกรณ์']} (x${reqQty})" ลงในรายการเรียบร้อยแล้ว`);
+    }
+
+    function removeItemFromCart(index) {
+      selectedCartItems.splice(index, 1);
+      renderCart();
+    }
+
+    function renderCart() {
+      const section = document.getElementById('cartSection');
+      const listEl = document.getElementById('cartList');
+      const badgeEl = document.getElementById('cartBadge');
+      const equipSelect = document.getElementById('equipSelect');
+
+      if (selectedCartItems.length === 0) {
+        section.style.display = 'none';
+        listEl.innerHTML = '';
+        badgeEl.textContent = '0 รายการ';
+        equipSelect.setAttribute('required', 'required');
+      } else {
+        section.style.display = 'block';
+        equipSelect.removeAttribute('required');
+        badgeEl.textContent = `${selectedCartItems.length} อุปกรณ์ (${selectedCartItems.reduce((s, i) => s + i['จำนวน'], 0)} ชิ้น)`;
+        
+        listEl.innerHTML = selectedCartItems.map((item, idx) => `
+          <div class="cart-item">
+            <span class="cart-item-name">📦 ${item['ชื่ออุปกรณ์']}</span>
+            <span class="cart-item-qty">x${item['จำนวน']} ${item['หน่วยนับ']}</span>
+            <button type="button" class="btn-remove-item" onclick="removeItemFromCart(${idx})" title="ลบออก">✕</button>
+          </div>
+        `).join('');
+      }
+    }
+
+    async function handleSubmit(e) {
+      e.preventDefault();
+
+      let payload = {};
+      if (selectedCartItems.length > 0) {
+        const itemNamesSummary = selectedCartItems.map(i => `${i['ชื่ออุปกรณ์']} (x${i['จำนวน']})`).join(', ');
+        const totalQtySum = selectedCartItems.reduce((sum, i) => sum + i['จำนวน'], 0);
+        const rawDate = document.getElementById('dueDateInput').value;
+        const dateParts = rawDate.split('-');
+        const formattedDueDate = `${dateParts[2]}/${dateParts[1]}/${dateParts[0]}`;
+
+        payload = {
+          'รหัสอุปกรณ์': selectedCartItems[0]['รหัสอุปกรณ์'],
+          'ชื่ออุปกรณ์': itemNamesSummary,
+          'จำนวน': totalQtySum,
+          'รายการอุปกรณ์': selectedCartItems,
+          'ผู้ขอยืม': document.getElementById('borrowerName').value.trim(),
+          'หน่วยงาน': document.getElementById('deptInput').value.trim(),
+          'เบอร์ติดต่อ': document.getElementById('phoneInput').value.trim(),
+          'วันที่ครบกำหนด': formattedDueDate,
+          'วัตถุประสงค์': document.getElementById('purposeInput').value.trim(),
+          'LINE_USER_ID': lineProfile ? lineProfile.userId : ''
+        };
+      } else {
+        if (!selectedEquip) {
+          alert('กรุณาเลือกอุปกรณ์หรือเพิ่มอุปกรณ์ในรายการอย่างน้อย 1 ชิ้น');
+          return;
+        }
+
+        const reqQty = parseFloat(document.getElementById('qtyInput').value) || 1;
+        const maxAvailable = selectedEquip.netAvailable !== undefined ? selectedEquip.netAvailable : (parseFloat(selectedEquip['จำนวน']) || 0);
+
+        if (reqQty > maxAvailable) {
+          alert(`จำนวนที่ขอ (${reqQty}) เกินกว่าจำนวนคงเหลือในคลัง (${maxAvailable})`);
+          return;
+        }
+
+        const rawDate = document.getElementById('dueDateInput').value;
+        const dateParts = rawDate.split('-');
+        const formattedDueDate = `${dateParts[2]}/${dateParts[1]}/${dateParts[0]}`;
+
+        payload = {
+          'รหัสอุปกรณ์': selectedEquip['รหัส'],
+          'ชื่ออุปกรณ์': `${selectedEquip['ชื่ออุปกรณ์']} (x${reqQty})`,
+          'จำนวน': reqQty,
+          'รายการอุปกรณ์': [{
+            'รหัสอุปกรณ์': selectedEquip['รหัส'],
+            'ชื่ออุปกรณ์': selectedEquip['ชื่ออุปกรณ์'],
+            'จำนวน': reqQty,
+            'หน่วยนับ': selectedEquip['หน่วยนับ'] || 'เครื่อง'
+          }],
+          'ผู้ขอยืม': document.getElementById('borrowerName').value.trim(),
+          'หน่วยงาน': document.getElementById('deptInput').value.trim(),
+          'เบอร์ติดต่อ': document.getElementById('phoneInput').value.trim(),
+          'วันที่ครบกำหนด': formattedDueDate,
+          'วัตถุประสงค์': document.getElementById('purposeInput').value.trim(),
+          'LINE_USER_ID': lineProfile ? lineProfile.userId : ''
+        };
+      }
 
       showLoading(true, 'กำลังบันทึกคำขอยืม...');
 
