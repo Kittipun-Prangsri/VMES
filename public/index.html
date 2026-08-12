@@ -1475,6 +1475,7 @@ tr:hover td {
       callApi('login', u, p)
         .then(r => {
           console.log('Login success handler response:', r);
+          if (r && r.success) {
             CURRENT_USER = r.user;
             storageSet('vmes_session_user', JSON.stringify(CURRENT_USER));
             
