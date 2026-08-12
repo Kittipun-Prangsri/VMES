@@ -63,10 +63,13 @@ async function login(username, password) {
     return {
       success: true,
       user: {
+        code: user['รหัส'],
+        username: user['ชื่อผู้ใช้'] || user['รหัส'],
         name: user['ชื่อ-นามสกุล'],
         role: user['บทบาท'],
         dept: user['หน่วยงาน'],
         phone: user['เบอร์ติดต่อ'],
+        email: user['อีเมล'],
       },
     };
   } catch (err) {
@@ -74,4 +77,70 @@ async function login(username, password) {
   }
 }
 
-module.exports = { login, verifyAdmin, getAdminCode };
+async function changeUserPassword(username, oldPassword, newPassword) {
+  try {
+    const cleanUser = String(username || '').trim().toLowerCase();
+    const cleanOld = String(oldPassword || '').trim();
+    const cleanNew = String(newPassword || '').trim();
+
+    if (!cleanUser || !cleanOld || !cleanNew) {
+      return { success: false, message: 'กรุณากรอกข้อมูลให้ครบถ้วน' };
+    }
+    if (cleanNew.length < 4) {
+      return { success: false, message: 'รหัสผ่านใหม่ต้องมีความยาวอย่างน้อย 4 ตัวอักษร' };
+    }
+
+    const loginRes = await login(cleanUser, cleanOld);
+    if (!loginRes || !loginRes.success) {
+      return { success: false, message: 'รหัสผ่านเดิมไม่ถูกต้อง' };
+    }
+
+    const users = await listDocs(SHEETS.USERS);
+    const user = users.find((u) => {
+      const uCode = String(u['รหัส'] || u['User ID'] || u['รหัสพนักงาน'] || '').trim().toLowerCase();
+      const uName = String(u['ชื่อ-นามสกุล'] || '').trim().toLowerCase();
+      const uUsername = String(u['ชื่อผู้ใช้'] || '').trim().toLowerCase();
+      const uEmail = String(u['อีเมล'] || '').trim().toLowerCase();
+      return uCode === cleanUser || uName === cleanUser || uUsername === cleanUser || uEmail === cleanUser;
+    });
+
+    if (user && user['รหัส']) {
+      const { setDoc } = require('./firestore');
+      const hashedNew = hashPassword(cleanNew);
+      await setDoc('userCredentials', user['รหัส'], { 'รหัส': user['รหัส'], 'รหัสผ่าน': hashedNew });
+      await logAudit('เปลี่ยนรหัสผ่าน', user['ชื่อ-นามสกุล'], 'อัปเดตรหัสผ่านสำเร็จ');
+      return { success: true, message: 'เปลี่ยนรหัสผ่านสำเร็จ' };
+    }
+
+    return { success: false, message: 'ไม่พบบัญชีผู้ใช้ในระบบ' };
+  } catch (err) {
+    return { success: false, message: 'ข้อผิดพลาด: ' + err.message };
+  }
+}
+
+async function updateUserProfile(username, profileData) {
+  try {
+    const cleanUser = String(username || '').trim().toLowerCase();
+    const users = await listDocs(SHEETS.USERS);
+    const user = users.find((u) => {
+      const uCode = String(u['รหัส'] || u['User ID'] || u['รหัสพนักงาน'] || '').trim().toLowerCase();
+      const uName = String(u['ชื่อ-นามสกุล'] || '').trim().toLowerCase();
+      const uEmail = String(u['อีเมล'] || '').trim().toLowerCase();
+      return uCode === cleanUser || uName === cleanUser || uEmail === cleanUser;
+    });
+
+    if (!user) {
+      return { success: false, message: 'ไม่พบบัญชีผู้ใช้' };
+    }
+
+    const { setDoc } = require('./firestore');
+    const updated = { ...user, ...profileData };
+    await setDoc(SHEETS.USERS, user['รหัส'], updated);
+    await logAudit('แก้ไขโปรไฟล์ส่วนตัว', user['ชื่อ-นามสกุล'], '');
+    return { success: true, message: 'อัปเดตข้อมูลส่วนตัวเรียบร้อย', user: updated };
+  } catch (err) {
+    return { success: false, message: 'ข้อผิดพลาด: ' + err.message };
+  }
+}
+
+module.exports = { login, verifyAdmin, getAdminCode, changeUserPassword, updateUserProfile };

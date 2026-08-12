@@ -1358,13 +1358,13 @@ tr:hover td {
         </div>
         <button class="btn btn-warning btn-sm" id="btnGlobalScanQr" onclick="openGlobalQrScannerModal()" title="สแกน QR Code">📷 สแกน QR</button>
         <button class="btn btn-info btn-sm" id="btnLine" onclick="testLine()" title="ทดสอบ LINE">📲 LINE</button>
-        <div class="user-chip">
+        <div class="user-chip" onclick="openUserProfileModal()" style="cursor: pointer;" title="คลิกเพื่อจัดการโปรไฟล์และเปลี่ยนรหัสผ่าน">
           <div class="avatar" id="userAvatar">A</div>
           <div class="info">
             <div class="name" id="userName">Admin</div>
             <div class="role" id="userRole">administrator</div>
           </div>
-          <button class="btn btn-sm btn-secondary" onclick="logout()" title="ออกจากระบบ">🚪</button>
+          <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); logout()" title="ออกจากระบบ">🚪</button>
         </div>
       </header>
       <div class="content" id="content"></div>
@@ -1475,8 +1475,8 @@ tr:hover td {
       callApi('login', u, p)
         .then(r => {
           console.log('Login success handler response:', r);
-          if (r && r.success) {
             CURRENT_USER = r.user;
+            storageSet('vmes_session_user', JSON.stringify(CURRENT_USER));
             
             const rem = document.getElementById('rememberMe');
             if (rem && rem.checked) {
@@ -1731,11 +1731,124 @@ tr:hover td {
     function logout() {
       if (!confirm('ออกจากระบบ?')) return;
       CURRENT_USER = null;
+      try {
+        localStorage.removeItem('vmes_session_user');
+      } catch (e) {}
       $('app').classList.remove('active');
       $('loginWrap').style.display = 'flex';
       $('loginBtn').disabled = false;
       $('loginBtn').innerHTML = '<span>🔐 เข้าสู่ระบบ</span>';
     }
+
+    function openUserProfileModal() {
+      if (!CURRENT_USER) {
+        toast('กรุณาเข้าสู่ระบบก่อน', 'warning');
+        return;
+      }
+      const roleBadges = {
+        'superadmin': '👑 ผู้ดูแลระบบสูงสุด (Super Admin)',
+        'admin': '🛡️ ผู้ดูแลระบบ (Admin)',
+        'manager': '👔 หัวหน้างาน / ผู้จัดการ (Manager)',
+        'user': '👤 ผู้ใช้งานทั่วไป (User)',
+      };
+      const roleDesc = roleBadges[CURRENT_USER.role] || CURRENT_USER.role || 'ผู้ใช้งานระบบ';
+      
+      const modalBody = `
+      <div style="text-align:center; padding:10px 0;">
+        <div style="width:72px; height:72px; border-radius:50%; background:var(--primary); color:#fff; font-size:32px; font-weight:700; display:flex; align-items:center; justify-content:center; margin:0 auto 12px auto; box-shadow:var(--shadow-md);">
+          ${esc((CURRENT_USER.name || '?')[0].toUpperCase())}
+        </div>
+        <h3 style="margin:0; font-size:20px; font-weight:700; color:var(--gray-900);">${esc(CURRENT_USER.name)}</h3>
+        <div style="font-size:13px; color:var(--primary); font-weight:600; margin-top:4px;">${esc(roleDesc)}</div>
+      </div>
+
+      <div style="background:var(--gray-50); border:1px solid var(--gray-200); border-radius:14px; padding:16px; margin:16px 0; display:grid; gap:12px;">
+        <div style="display:flex; justify-content:space-between; border-bottom:1px solid var(--gray-200); padding-bottom:8px;">
+          <span style="color:var(--gray-500); font-size:13px;">🏢 หน่วยงาน / แผนก:</span>
+          <strong style="color:var(--gray-900); font-size:13px;">${esc(CURRENT_USER.dept || '-')}</strong>
+        </div>
+        <div style="display:flex; justify-content:space-between; border-bottom:1px solid var(--gray-200); padding-bottom:8px;">
+          <span style="color:var(--gray-500); font-size:13px;">📞 เบอร์ติดต่อ:</span>
+          <strong style="color:var(--gray-900); font-size:13px;">${esc(CURRENT_USER.phone || '-')}</strong>
+        </div>
+        <div style="display:flex; justify-content:space-between;">
+          <span style="color:var(--gray-500); font-size:13px;">📧 อีเมล / บัญชี:</span>
+          <strong style="color:var(--gray-900); font-size:13px;">${esc(CURRENT_USER.email || CURRENT_USER.username || '-')}</strong>
+        </div>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:10px;">
+        <button class="btn btn-primary btn-block" onclick="openChangePasswordModal()" type="button" style="min-height:44px;">
+          🔑 เปลี่ยนรหัสผ่านส่วนตัว
+        </button>
+        <button class="btn btn-secondary btn-block" onclick="logout()" type="button" style="min-height:44px; color:var(--danger);">
+          🚪 ออกจากระบบ
+        </button>
+      </div>
+      `;
+
+      openModal('👤 ข้อมูลโปรไฟล์ผู้ใช้งาน', modalBody, null, false);
+      const saveBtn = $('modalSave');
+      if (saveBtn) saveBtn.style.display = 'none';
+    }
+    window.openUserProfileModal = openUserProfileModal;
+
+    function openChangePasswordModal() {
+      if (!CURRENT_USER) return;
+      const modalBody = `
+      <div class="form-grid" style="padding:10px 0;">
+        <div class="field full">
+          <label>รหัสผ่านปัจจุบัน *</label>
+          <input type="password" id="cp_old" placeholder="กรอกรหัสผ่านปัจจุบัน">
+        </div>
+        <div class="field full">
+          <label>รหัสผ่านใหม่ *</label>
+          <input type="password" id="cp_new" placeholder="กรอกรหัสผ่านใหม่ (อย่างน้อย 4 ตัวอักษร)">
+        </div>
+        <div class="field full">
+          <label>ยืนยันรหัสผ่านใหม่ *</label>
+          <input type="password" id="cp_confirm" placeholder="กรอกรหัสผ่านใหม่อีกครั้ง">
+        </div>
+      </div>
+      `;
+
+      openModal('🔑 เปลี่ยนรหัสผ่าน', modalBody, () => {
+        const oldP = $('cp_old').value.trim();
+        const newP = $('cp_new').value.trim();
+        const confP = $('cp_confirm').value.trim();
+
+        if (!oldP || !newP || !confP) {
+          toast('กรอกข้อมูลให้ครบถ้วนทุกช่อง', 'warning');
+          return;
+        }
+        if (newP !== confP) {
+          toast('รหัสผ่านใหม่และยืนยันรหัสผ่านไม่ตรงกัน', 'error');
+          return;
+        }
+        if (newP.length < 4) {
+          toast('รหัสผ่านใหม่ต้องมีความยาวอย่างน้อย 4 ตัวอักษร', 'warning');
+          return;
+        }
+
+        showLoading(true);
+        const usernameKey = CURRENT_USER.username || CURRENT_USER.code || CURRENT_USER.name;
+        callApi('changeUserPassword', usernameKey, oldP, newP)
+          .then(r => {
+            showLoading(false);
+            if (r.success) {
+              toast('เปลี่ยนรหัสผ่านสำเร็จ!', 'success');
+              closeModal();
+            } else {
+              toast(r.message || 'เปลี่ยนรหัสผ่านไม่สำเร็จ', 'error');
+            }
+          })
+          .catch(err => {
+            showLoading(false);
+            toast('ข้อผิดพลาด: ' + (err.message || err), 'error');
+          });
+      }, false);
+    }
+    window.openChangePasswordModal = openChangePasswordModal;
 
     function isSuperAdmin() { return CURRENT_USER && CURRENT_USER.role === 'superadmin'; }
     function isAdmin() { return CURRENT_USER && (CURRENT_USER.role === 'admin' || CURRENT_USER.role === 'superadmin'); }
@@ -6287,8 +6400,34 @@ tr:hover td {
         loginPassEl.addEventListener('keypress', e => { if (e.key === 'Enter') doLogin(); });
       }
 
-      // 4. Pre-fill saved login credentials
-      console.log('Loading saved login credentials...');
+      // 4. Pre-fill saved login credentials & check Auto Session
+      console.log('Loading saved login credentials & checking auto session...');
+      const savedSession = storageGet('vmes_session_user');
+      if (savedSession) {
+        try {
+          const user = JSON.parse(savedSession);
+          if (user && user.name) {
+            CURRENT_USER = user;
+            const wrap = document.getElementById('loginWrap');
+            if (wrap) wrap.style.display = 'none';
+            const appEl = document.getElementById('app');
+            if (appEl) appEl.classList.add('active');
+            const nameEl = document.getElementById('userName');
+            if (nameEl) nameEl.textContent = user.name;
+            const roleEl = document.getElementById('userRole');
+            if (roleEl) roleEl.textContent = user.role;
+            const avatarEl = document.getElementById('userAvatar');
+            if (avatarEl) avatarEl.textContent = (user.name || '?')[0];
+
+            if (typeof applyPermissions === 'function') applyPermissions();
+            if (typeof loadAll === 'function') loadAll();
+            if (typeof startAutoRefresh === 'function') startAutoRefresh();
+          }
+        } catch (e) {
+          console.error('Auto session restore failed:', e);
+        }
+      }
+
       const savedUser = storageGet('saved_login_user');
       const savedPass = storageGet('saved_login_pass');
       if (savedUser) {

@@ -6,7 +6,7 @@
 // migrateExistingSheetToFirestoreOnce_, purgeUserPasswordLeak_) และตัวสร้าง LINE
 // Rich Menu (createRiskRichMenuAPI, createVMESV2RichMenuAPI) ไม่รวมอยู่ในนี้โดยตั้งใจ
 
-const { login } = require('./auth');
+const { login, changeUserPassword, updateUserProfile } = require('./auth');
 const { getBootstrapInfo, saveSystemSettings } = require('./handlers/settings');
 const { saveVehicle, deleteVehicle } = require('./handlers/vehicles');
 const { saveUsage, returnVehicle } = require('./handlers/usage');
@@ -108,8 +108,10 @@ const API_WHITELIST = {
   testUserLine,
   testTelegramNotification,
 
-  // Password
+  // Password & Profile
   requestPasswordResetNotification,
+  changeUserPassword,
+  updateUserProfile,
 };
 
 module.exports = { API_WHITELIST };
