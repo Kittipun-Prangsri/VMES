@@ -146,17 +146,18 @@ async function handleVehicleStatus(replyToken) {
       spacing: 'md',
       paddingAll: '20px',
       contents: [
-        { type: 'box', layout: 'vertical', spacing: 'sm', contents: rows },
-        vehicles.length > 10
-          ? {
-              type: 'text',
-              text: `* แสดง 10 คันแรก จากทั้งหมด ${vehicles.length} คัน`,
-              size: 'xxs',
-              color: '#64748b',
-              margin: 'md',
-              style: 'italic',
-            }
-          : { type: 'spacer', size: 'xs' },
+        ...(vehicles.length > 10
+          ? [
+              {
+                type: 'text',
+                text: `* แสดง 10 คันแรก จากทั้งหมด ${vehicles.length} คัน`,
+                size: 'xxs',
+                color: '#64748b',
+                margin: 'md',
+                style: 'italic',
+              },
+            ]
+          : []),
       ],
     },
     footer: {
@@ -224,17 +225,18 @@ async function handleEquipmentStock(replyToken) {
       spacing: 'md',
       paddingAll: '20px',
       contents: [
-        { type: 'box', layout: 'vertical', spacing: 'sm', contents: rows },
-        equipment.length > 10
-          ? {
-              type: 'text',
-              text: `* แสดง 10 รายการแรก จากทั้งหมด ${equipment.length} รายการ`,
-              size: 'xxs',
-              color: '#64748b',
-              margin: 'md',
-              style: 'italic',
-            }
-          : { type: 'spacer', size: 'xs' },
+        ...(equipment.length > 10
+          ? [
+              {
+                type: 'text',
+                text: `* แสดง 10 รายการแรก จากทั้งหมด ${equipment.length} รายการ`,
+                size: 'xxs',
+                color: '#64748b',
+                margin: 'md',
+                style: 'italic',
+              },
+            ]
+          : []),
       ],
     },
     footer: {
