@@ -410,8 +410,9 @@
         if (Array.isArray(equipmentList) && equipmentList.length > 0) {
           equipmentList.forEach(eq => {
             const qty = parseFloat(eq['จำนวน']) || 0;
-            const status = eq['สถานะ'] || '';
-            const isAvailable = status === 'พร้อมใช้งาน' && qty > 0;
+            const statusStr = String(eq['สถานะ'] || '').trim();
+            const UNAVAILABLE_STATUSES = ['ชำรุด', 'อยู่ระหว่างยืม', 'ยืมอยู่', 'จำหน่าย', 'ส่งซ่อม', 'สูญหาย'];
+            const isAvailable = qty > 0 && !UNAVAILABLE_STATUSES.includes(statusStr);
 
             const option = document.createElement('option');
             option.value = eq['รหัส'];
