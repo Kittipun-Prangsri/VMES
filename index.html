@@ -1430,12 +1430,12 @@ tr:hover td {
 
   <script>
     // ============== BACKEND API CLIENT ==============
-    const API_URL = 'https://script.google.com/macros/s/AKfycby9soLTEQ9DM6zloBzZ0v4CdFGAm_8xoc1Gk7MFelTet89Y0ggbMwk3rTE5fWTa3VQ4fQ/exec';
+    const API_URL = 'https://vmes-backend.vercel.app/api/rpc';
 
     function callApi(fn, ...args) {
       return fetch(API_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // avoids CORS preflight — Apps Script Web Apps can't answer OPTIONS
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ fn, args })
       }).then(r => r.json());
     }
