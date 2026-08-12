@@ -175,6 +175,26 @@
       cursor: not-allowed;
     }
 
+    .btn-scan-qr {
+      background: linear-gradient(135deg, #059669 0%, #10b981 100%);
+      color: #ffffff;
+      border: none;
+      border-radius: 20px;
+      padding: 5px 12px;
+      font-size: 0.775rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      box-shadow: 0 2px 6px rgba(16, 185, 129, 0.25);
+      transition: transform 0.15s ease;
+    }
+
+    .btn-scan-qr:active {
+      transform: scale(0.95);
+    }
+
     /* Loading Overlay */
     .loading-overlay {
       display: none;
@@ -252,7 +272,12 @@
       
       <!-- เลือกอุปกรณ์ -->
       <div class="form-group">
-        <label class="form-label" for="equipSelect">เลือกอุปกรณ์ <span class="req">*</span></label>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+          <label class="form-label" for="equipSelect" style="margin-bottom: 0;">เลือกอุปกรณ์ <span class="req">*</span></label>
+          <button type="button" class="btn-scan-qr" onclick="scanEquipQr()">
+            📷 สแกน QR Code
+          </button>
+        </div>
         <select id="equipSelect" class="form-select" required onchange="handleEquipChange()">
           <option value="">-- กำลังโหลดรายการอุปกรณ์... --</option>
         </select>
@@ -397,12 +422,69 @@
             }
             selectEl.appendChild(option);
           });
+
+          // Check if URL has code/eq parameter to auto select
+          const urlParams = new URLSearchParams(window.location.search);
+          const autoCode = urlParams.get('code') || urlParams.get('eq');
+          if (autoCode) {
+            const matchIndex = Array.from(selectEl.options).findIndex(o => o.value.toUpperCase() === autoCode.toUpperCase());
+            if (matchIndex !== -1) {
+              selectEl.selectedIndex = matchIndex;
+              handleEquipChange();
+            }
+          }
         } else {
           selectEl.innerHTML = '<option value="">❌ ไม่พบอุปกรณ์ในระบบ</option>';
         }
       } catch (err) {
         console.error('Error loading equipment:', err);
         document.getElementById('equipSelect').innerHTML = '<option value="">❌ โหลดข้อมูลไม่สำเร็จ</option>';
+      }
+    }
+
+    async function scanEquipQr() {
+      try {
+        let scannedText = '';
+        if (typeof liff !== 'undefined' && liff.isLoggedIn()) {
+          if (liff.scanCodeV2) {
+            const result = await liff.scanCodeV2();
+            scannedText = result ? result.value : '';
+          } else if (liff.scanCode) {
+            const result = await liff.scanCode();
+            scannedText = result ? result.value : '';
+          }
+        }
+
+        if (!scannedText) {
+          scannedText = prompt('กรุณาระบุรหัสอุปกรณ์ที่สแกนได้ (เช่น EQ-001):');
+        }
+
+        if (scannedText) {
+          const match = scannedText.match(/EQ-[A-Z0-9-]+/i);
+          const equipCode = match ? match[0].toUpperCase() : scannedText.trim().toUpperCase();
+
+          const selectEl = document.getElementById('equipSelect');
+          let foundIndex = -1;
+          for (let i = 0; i < selectEl.options.length; i++) {
+            if (selectEl.options[i].value.toUpperCase() === equipCode) {
+              foundIndex = i;
+              break;
+            }
+          }
+
+          if (foundIndex !== -1) {
+            selectEl.selectedIndex = foundIndex;
+            handleEquipChange();
+            alert(`✅ สแกนสำเร็จ: เลือกอุปกรณ์ ${equipCode} เรียบร้อยแล้ว`);
+          } else {
+            alert(`❌ ไม่พบอุปกรณ์รหัส "${equipCode}" ในคลังหรืออุปกรณ์ไม่อยู่ในสถานะพร้อมยืม`);
+          }
+        }
+      } catch (err) {
+        console.log('scanEquipQr error:', err);
+        if (err.code !== 'USER_CANCELLED') {
+          alert('ไม่สามารถเปิดกล้องสแกนได้: ' + (err.message || err));
+        }
       }
     }
 
