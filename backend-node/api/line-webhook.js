@@ -726,60 +726,101 @@ async function handleReturnBorrowing(replyToken, userMessage) {
   }
 }
 
+function readRawBody(req) {
+  return new Promise((resolve, reject) => {
+    let data = '';
+    req.on('data', (chunk) => (data += chunk));
+    req.on('end', () => resolve(data));
+    req.on('error', reject);
+  });
+}
+
+async function parseBody(req) {
+  if (req.body && typeof req.body === 'object' && !Buffer.isBuffer(req.body)) {
+    return req.body;
+  }
+  if (req.body === undefined || req.body === null || req.body === '') {
+    const raw = await readRawBody(req);
+    if (!raw) return {};
+    try {
+      return JSON.parse(raw);
+    } catch (e) {
+      return {};
+    }
+  }
+  if (typeof req.body === 'string') {
+    try {
+      return JSON.parse(req.body);
+    } catch (e) {
+      return {};
+    }
+  }
+  if (Buffer.isBuffer(req.body)) {
+    try {
+      return JSON.parse(req.body.toString('utf8'));
+    } catch (e) {
+      return {};
+    }
+  }
+  return req.body;
+}
+
 module.exports = async function handler(req, res) {
   try {
-    const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : req.body || {};
+    const body = await parseBody(req);
     const events = body.events;
 
-    if (!events || events.length === 0) {
+    if (!events || !Array.isArray(events) || events.length === 0) {
       res.status(200).send('OK');
       return;
     }
 
-    const event = events[0];
-    const replyToken = event.replyToken;
-    const userId = event.source ? event.source.userId : '';
-    const userMessage = event.message && event.message.text ? String(event.message.text).trim() : '';
+    for (const event of events) {
+      if (!event.message || event.message.type !== 'text') {
+        continue;
+      }
 
-    if (!replyToken) {
-      res.status(200).send('OK');
-      return;
-    }
+      const replyToken = event.replyToken;
+      const userId = event.source ? event.source.userId : '';
+      const userMessage = String(event.message.text || '').trim();
 
-    const msgLower = userMessage.toLowerCase();
+      if (!replyToken) continue;
 
-    // 1. ขอไอดี
-    if (msgLower === 'ขอไอดี' || msgLower === 'id' || msgLower === 'user id') {
-      await handleAskId(replyToken, userId);
-    }
-    // 2. แจ้งคืนอุปกรณ์
-    else if (msgLower.indexOf('คืน br-') !== -1 || msgLower.indexOf('แจ้งคืน br-') !== -1) {
-      await handleReturnBorrowing(replyToken, userMessage);
-    }
-    // 3. เช็ครถยนต์
-    else if (msgLower.indexOf('เช็ครถ') !== -1 || msgLower === 'รถ' || msgLower === 'รถยนต์') {
-      await handleVehicleStatus(replyToken);
-    }
-    // 4. เช็คอุปกรณ์คงเหลือ
-    else if (msgLower.indexOf('เช็คอุปกรณ์') !== -1 || msgLower === 'อุปกรณ์' || msgLower.indexOf('คลัง') !== -1) {
-      await handleEquipmentStock(replyToken);
-    }
-    // 5. เช็คคำขอยืม
-    else if (msgLower.indexOf('คำขอ') !== -1 || msgLower.indexOf('ยืม') !== -1) {
-      await handleBorrowingList(replyToken);
-    }
-    // 6. ค้นหารหัส BR- / EQ-
-    else if (userMessage.toUpperCase().indexOf('BR-') === 0 || userMessage.toUpperCase().indexOf('EQ-') === 0) {
-      await handleCodeLookup(replyToken, userMessage);
-    }
-    // 7. เมนูช่วยเหลือ
-    else {
-      await handleHelpMenu(replyToken);
+      const msgLower = userMessage.toLowerCase();
+
+      // 1. ขอไอดี
+      if (msgLower === 'ขอไอดี' || msgLower === 'id' || msgLower === 'user id') {
+        await handleAskId(replyToken, userId);
+      }
+      // 2. แจ้งคืนอุปกรณ์
+      else if (msgLower.indexOf('คืน br-') !== -1 || msgLower.indexOf('แจ้งคืน br-') !== -1) {
+        await handleReturnBorrowing(replyToken, userMessage);
+      }
+      // 3. เช็ครถยนต์
+      else if (msgLower.indexOf('เช็ครถ') !== -1 || msgLower === 'รถ' || msgLower === 'รถยนต์') {
+        await handleVehicleStatus(replyToken);
+      }
+      // 4. เช็คอุปกรณ์คงเหลือ
+      else if (msgLower.indexOf('เช็คอุปกรณ์') !== -1 || msgLower === 'อุปกรณ์' || msgLower.indexOf('คลัง') !== -1) {
+        await handleEquipmentStock(replyToken);
+      }
+      // 5. เช็คคำขอยืม
+      else if (msgLower.indexOf('คำขอ') !== -1 || msgLower.indexOf('ยืม') !== -1) {
+        await handleBorrowingList(replyToken);
+      }
+      // 6. ค้นหารหัส BR- / EQ-
+      else if (userMessage.toUpperCase().indexOf('BR-') === 0 || userMessage.toUpperCase().indexOf('EQ-') === 0) {
+        await handleCodeLookup(replyToken, userMessage);
+      }
+      // 7. เมนูช่วยเหลือ
+      else {
+        await handleHelpMenu(replyToken);
+      }
     }
 
     res.status(200).send('OK');
   } catch (err) {
-    console.log('line-webhook error: ' + (err && err.message));
+    console.error('line-webhook handler error:', err);
     res.status(200).send('OK');
   }
 };
