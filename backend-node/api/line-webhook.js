@@ -179,10 +179,10 @@ async function handleEquipmentStock(replyToken) {
   }
 
   const rows = equipment.slice(0, 10).map((eq, idx) => {
-    const name = safeTruncate(eq['ชื่ออุปกรณ์'] || '', 25);
-    const category = safeTruncate(eq['หมวดหมู่'] || '', 15);
+    const name = safeTruncate(eq['ชื่ออุปกรณ์'] || eq['รหัส'], 25, 'อุปกรณ์');
+    const category = safeTruncate(eq['หมวดหมู่'], 15, 'ทั่วไป');
     const qty = parseFloat(eq['จำนวน']) || 0;
-    const unit = safeTruncate(eq['หน่วยนับ'] || 'รายการ', 8);
+    const unit = safeTruncate(eq['หน่วยนับ'], 8, 'รายการ');
     return {
       type: 'box',
       layout: 'horizontal',

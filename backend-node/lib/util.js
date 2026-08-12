@@ -50,9 +50,10 @@ function hashPassword(pass) {
   return crypto.createHash('sha256').update(String(pass || ''), 'utf8').digest('hex');
 }
 
-function safeTruncate(str, maxLength) {
-  if (!str) return '';
+function safeTruncate(str, maxLength, fallback = '-') {
+  if (!str) return fallback;
   str = String(str).replace(/[\r\n\t\s]+/g, ' ').trim();
+  if (!str) return fallback;
   if (str.length <= maxLength) return str;
   return str.substring(0, maxLength - 3) + '...';
 }
