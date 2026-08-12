@@ -322,13 +322,13 @@ async function handleBorrowingList(replyToken) {
           style: 'primary',
           color: '#4f46e5',
           height: 'sm',
-          action: { type: 'message', label: '💻 ดูรายการอุปกรณ์ที่ยืมได้', text: 'เช็คอุปกรณ์' },
+          action: { type: 'uri', label: '📦 ทำรายการยืมอุปกรณ์ (LIFF)', uri: 'https://liff.line.me/2011083425-G0pup6PQ' },
         },
         {
           type: 'button',
           style: 'secondary',
           height: 'sm',
-          action: { type: 'uri', label: '🌐 ทำรายการยืมบนเว็บไซต์', uri: 'https://vmes.web.app/#borrowing' },
+          action: { type: 'message', label: '💻 ดูรายการอุปกรณ์ที่ยืมได้', text: 'เช็คอุปกรณ์' },
         },
         { type: 'text', text: SYSTEM_NAME, size: 'xxs', color: '#94a3b8', align: 'center', margin: 'sm' },
       ],
@@ -572,6 +572,13 @@ async function handleHelpMenu(replyToken) {
           layout: 'vertical',
           spacing: 'sm',
           contents: [
+            {
+              type: 'button',
+              style: 'primary',
+              color: '#4f46e5',
+              height: 'sm',
+              action: { type: 'uri', label: '📦 ทำรายการยืมอุปกรณ์ (LIFF)', uri: 'https://liff.line.me/2011083425-G0pup6PQ' },
+            },
             {
               type: 'button',
               style: 'secondary',

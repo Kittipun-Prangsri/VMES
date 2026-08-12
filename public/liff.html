@@ -342,7 +342,7 @@
     async function initLiff() {
       try {
         const urlParams = new URLSearchParams(window.location.search);
-        const liffId = urlParams.get('liffId') || window.LIFF_ID;
+        const liffId = urlParams.get('liffId') || '2011083425-G0pup6PQ';
 
         if (typeof liff !== 'undefined' && liffId) {
           await liff.init({ liffId: liffId });
