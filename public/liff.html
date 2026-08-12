@@ -397,26 +397,51 @@
 
     async function loadEquipmentList() {
       try {
-        const res = await fetch(API_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fn: 'getEquipment', args: [] })
-        });
-        equipmentList = await res.json();
-        
+        const [resEquip, resBorrow] = await Promise.all([
+          fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fn: 'getEquipment', args: [] }) }),
+          fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fn: 'getBorrowing', args: [] }) }).catch(() => null)
+        ]);
+
+        equipmentList = await resEquip.json();
+        let borrowingList = [];
+        if (resBorrow && resBorrow.ok) {
+          try { borrowingList = await resBorrow.json(); } catch(e) {}
+        }
+        if (!Array.isArray(borrowingList)) borrowingList = [];
+
+        const ACTIVE_STATUSES = ['รอรับเรื่อง', 'รับเรื่องแล้ว', 'อยู่ในระหว่างการยืม', 'ถึงวันครบกำหนดคืน', 'อยู่ในระหว่างการคืน'];
+
         const selectEl = document.getElementById('equipSelect');
         selectEl.innerHTML = '<option value="">-- เลือกอุปกรณ์ที่ต้องการยืม --</option>';
 
         if (Array.isArray(equipmentList) && equipmentList.length > 0) {
           equipmentList.forEach(eq => {
-            const qty = parseFloat(eq['จำนวน']) || 0;
+            const eqCode = eq['รหัส'];
+            const totalStock = parseFloat(eq['จำนวน']) || 0;
             const statusStr = String(eq['สถานะ'] || '').trim();
-            const UNAVAILABLE_STATUSES = ['ชำรุด', 'อยู่ระหว่างยืม', 'ยืมอยู่', 'จำหน่าย', 'ส่งซ่อม', 'สูญหาย'];
-            const isAvailable = qty > 0 && !UNAVAILABLE_STATUSES.includes(statusStr);
+            const UNAVAILABLE_STATUSES = ['ชำรุด', 'ยืมอยู่', 'จำหน่าย', 'ส่งซ่อม', 'สูญหาย'];
+
+            // Find active borrowings for this equipment
+            const activeB = borrowingList.filter(b => b['รหัสอุปกรณ์'] === eqCode && ACTIVE_STATUSES.includes(b['สถานะ']));
+            const borrowedQty = activeB.reduce((sum, b) => sum + (parseFloat(b['จำนวน']) || 0), 0);
+            const netAvailable = totalStock - borrowedQty;
+
+            let isAvailable = netAvailable > 0 && !UNAVAILABLE_STATUSES.includes(statusStr);
+            let displayNote = `[ยืมได้: ${netAvailable < 0 ? 0 : netAvailable}/${totalStock} ${eq['หน่วยนับ'] || ''}]`;
+
+            if (netAvailable <= 0 && activeB.length > 0) {
+              const sortedB = [...activeB].sort((a, b) => String(b['วันที่ครบกำหนด'] || '').localeCompare(String(a['วันที่ครบกำหนด'] || '')));
+              const dueDate = sortedB[0]['วันที่ครบกำหนด'] || '-';
+              displayNote = `[ติดยืม/จองค้างไว้ ถึง ${dueDate}]`;
+            } else if (UNAVAILABLE_STATUSES.includes(statusStr)) {
+              displayNote = `[สถานะ: ${statusStr}]`;
+            }
+
+            eq.netAvailable = netAvailable < 0 ? 0 : netAvailable;
 
             const option = document.createElement('option');
-            option.value = eq['รหัส'];
-            option.textContent = `${eq['ชื่ออุปกรณ์']} ${eq['รุ่น'] ? '(' + eq['รุ่น'] + ')' : ''} [คงเหลือ: ${qty} ${eq['หน่วยนับ'] || ''}]`;
+            option.value = eqCode;
+            option.textContent = `${eq['ชื่ออุปกรณ์']} ${eq['รุ่น'] ? '(' + eq['รุ่น'] + ')' : ''} ${displayNote}`;
             if (!isAvailable) {
               option.disabled = true;
               option.textContent += ' - ไม่พร้อมยืม';
@@ -498,9 +523,9 @@
       const qtyInput = document.getElementById('qtyInput');
 
       if (selectedEquip) {
-        const qty = parseFloat(selectedEquip['จำนวน']) || 0;
+        const qty = selectedEquip.netAvailable !== undefined ? selectedEquip.netAvailable : (parseFloat(selectedEquip['จำนวน']) || 0);
         catEl.textContent = `หมวดหมู่: ${selectedEquip['หมวดหมู่'] || '-'}`;
-        availEl.textContent = `พร้อมยืม: ${qty} ${selectedEquip['หน่วยนับ'] || ''}`;
+        availEl.textContent = `พร้อมยืมได้จริง: ${qty} ${selectedEquip['หน่วยนับ'] || ''}`;
         qtyInput.max = qty;
         qtyInput.value = 1;
       } else {

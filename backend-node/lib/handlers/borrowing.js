@@ -38,9 +38,17 @@ async function saveBorrowing(data, user) {
       const available = totalStock - borrowedQty;
 
       if (reqQty > available) {
+        let errorDetail = '';
+        if (activeBorrowings.length > 0) {
+          const sorted = [...activeBorrowings].sort((a, b) => String(b['วันที่ครบกำหนด'] || '').localeCompare(String(a['วันที่ครบกำหนด'] || '')));
+          const lastB = sorted[0];
+          const lastBorrower = lastB['ผู้ขอยืม'] || 'ท่านอื่น';
+          const lastDate = lastB['วันที่ครบกำหนด'] || '-';
+          errorDetail = ` (ถูกยืม/จองล่วงหน้าอยู่โดย ${lastBorrower} กำหนดคืน ${lastDate})`;
+        }
         return {
           success: false,
-          message: `ไม่สามารถยืมได้: อุปกรณ์นี้เหลือในคลัง ${available} ${equip['หน่วยนับ'] || ''} (คุณขอ ${reqQty})`,
+          message: `ไม่สามารถยืมได้: อุปกรณ์ "${equip['ชื่ออุปกรณ์']}"${errorDetail} เหลือยืมได้ ${available < 0 ? 0 : available} ${equip['หน่วยนับ'] || ''} (คุณระบุ ${reqQty})`,
         };
       }
 
