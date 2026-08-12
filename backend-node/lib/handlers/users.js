@@ -107,4 +107,34 @@ async function requestPasswordResetNotification(contactInfo) {
   }
 }
 
-module.exports = { getUsers, getUserLineId, saveUser, deleteUser, requestPasswordResetNotification };
+async function autoLinkLineUser(lineUserId, displayName, userCodeOrName) {
+  try {
+    const cleanLineId = String(lineUserId || '').trim();
+    if (!cleanLineId) return { success: false, message: 'ไม่มี LINE User ID' };
+
+    const users = await getUsers();
+    const cleanKey = String(userCodeOrName || '').trim().toLowerCase();
+
+    const user = users.find((u) => {
+      const uCode = String(u['รหัส'] || '').trim().toLowerCase();
+      const uName = String(u['ชื่อ-นามสกุล'] || '').trim().toLowerCase();
+      const uUsername = String(u['ชื่อผู้ใช้'] || '').trim().toLowerCase();
+      const uEmail = String(u['อีเมล'] || '').trim().toLowerCase();
+      return uCode === cleanKey || uName === cleanKey || uUsername === cleanKey || uEmail === cleanKey;
+    });
+
+    if (user && user['รหัส']) {
+      const updated = { ...user, 'LINE ID': cleanLineId };
+      if (displayName) updated['LINE Display Name'] = displayName;
+      await setDoc(SHEETS.USERS, user['รหัส'], updated);
+      await logAudit('ผูกบัญชี LINE อัตโนมัติ', user['ชื่อ-นามสกุล'], `LINE ID: ${cleanLineId}`);
+      return { success: true, message: `ผูกบัญชี LINE อัตโนมัติสำเร็จ (${user['ชื่อ-นามสกุล']})` };
+    }
+
+    return { success: false, message: 'ไม่พบบัญชีผู้ใช้งานที่ต้องการผูก' };
+  } catch (err) {
+    return { success: false, message: 'ข้อผิดพลาด: ' + err.message };
+  }
+}
+
+module.exports = { getUsers, getUserLineId, saveUser, deleteUser, requestPasswordResetNotification, autoLinkLineUser };

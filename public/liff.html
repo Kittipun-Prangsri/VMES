@@ -477,6 +477,16 @@
           if (liff.isLoggedIn()) {
             lineProfile = await liff.getProfile();
             showUserProfile(lineProfile);
+            if (lineProfile && lineProfile.userId) {
+              fetch(API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  fn: 'autoLinkLineUser',
+                  args: [lineProfile.userId, lineProfile.displayName, lineProfile.displayName]
+                })
+              }).catch(() => {});
+            }
           }
         }
       } catch (err) {
