@@ -163,6 +163,22 @@ async function sendBorrowingFlex(data, status, targetId) {
             flexRow('📅 ครบกำหนดคืน', String(data['วันที่ครบกำหนด'] || '-')),
           ],
         },
+        { type: 'separator', margin: 'md' },
+        {
+          type: 'box',
+          layout: 'vertical',
+          alignItems: 'center',
+          margin: 'md',
+          contents: [
+            {
+              type: 'image',
+              url: 'https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=' + encodeURIComponent(String(data['รหัส'] || '')),
+              size: 'md',
+              aspectRatio: '1:1',
+            },
+            { type: 'text', text: 'QR Code คำขอยืม: ' + String(data['รหัส'] || ''), size: 'xxs', color: '#94a3b8', margin: 'xs', align: 'center' },
+          ],
+        },
       ],
     },
     footer: {

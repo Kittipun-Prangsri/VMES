@@ -446,6 +446,22 @@ async function handleCodeLookup(replyToken, userMessage) {
                 flexRow('📌 สถานะ', status),
               ],
             },
+            { type: 'separator', margin: 'md' },
+            {
+              type: 'box',
+              layout: 'vertical',
+              alignItems: 'center',
+              margin: 'md',
+              contents: [
+                {
+                  type: 'image',
+                  url: 'https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=' + encodeURIComponent(id),
+                  size: 'md',
+                  aspectRatio: '1:1',
+                },
+                { type: 'text', text: 'QR Code คำขอยืม: ' + id, size: 'xxs', color: '#94a3b8', margin: 'xs', align: 'center' },
+              ],
+            },
           ],
         },
         footer: {
@@ -517,14 +533,40 @@ async function handleCodeLookup(replyToken, userMessage) {
                 flexRow('📌 สถานะ', status),
               ],
             },
+            { type: 'separator', margin: 'md' },
+            {
+              type: 'box',
+              layout: 'vertical',
+              alignItems: 'center',
+              margin: 'md',
+              contents: [
+                {
+                  type: 'image',
+                  url: 'https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=' + encodeURIComponent('https://liff.line.me/2011083425-G0pup6PQ?code=' + id),
+                  size: 'md',
+                  aspectRatio: '1:1',
+                },
+                { type: 'text', text: 'สแกน QR Code เพื่อยืมอุปกรณ์ ' + id, size: 'xxs', color: '#94a3b8', margin: 'xs', align: 'center' },
+              ],
+            },
           ],
         },
         footer: {
           type: 'box',
           layout: 'vertical',
-          paddingAll: '12px',
+          spacing: 'sm',
+          paddingAll: '16px',
           backgroundColor: '#f1f5f9',
-          contents: [{ type: 'text', text: SYSTEM_NAME, size: 'xxs', color: '#94a3b8', align: 'center' }],
+          contents: [
+            {
+              type: 'button',
+              style: 'primary',
+              color: '#4f46e5',
+              height: 'sm',
+              action: { type: 'uri', label: '📦 ทำรายการยืมอุปกรณ์นี้ (LIFF)', uri: 'https://liff.line.me/2011083425-G0pup6PQ?code=' + id },
+            },
+            { type: 'text', text: SYSTEM_NAME, size: 'xxs', color: '#94a3b8', align: 'center', margin: 'sm' },
+          ],
         },
       };
       await replyLineFlex(replyToken, '💻 รายละเอียดอุปกรณ์ ' + id, flexContent);
