@@ -1,0 +1,11 @@
+**/node_modules/**
+tests/**
+docs/**
+public/**
+Style.html
+index.html
+*.bak
+firebase.json
+firestore.rules
+.firebaserc
+README.md

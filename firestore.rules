@@ -1,0 +1,40 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper functions (สำหรับอนาคตเมื่อเชื่อมต่อ Firebase Auth)
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && (request.auth.token.role == 'admin' || request.auth.token.role == 'superadmin');
+    }
+
+    // -------------------------------------------------------------
+    // Security Rules สำหรับระบบบริหารยานพาหนะและยืม-คืนอุปกรณ์ V2.0
+    // -------------------------------------------------------------
+    // หมายเหตุ: backend (Google Apps Script) เขียนข้อมูลผ่าน Firestore REST API
+    // ด้วย OAuth Bearer token (ScriptApp.getOAuthToken()) ซึ่งเป็นการเรียกแบบมี
+    // สิทธิ์สูง (bypass security rules ได้เหมือน Admin SDK) จึงปิดการเขียนจาก
+    // client ฝั่งเบราว์เซอร์ทั้งหมด เหลือแค่อ่านแบบ real-time ได้ตามเดิม
+    //
+    // สำคัญ: Firestore rules ใช้หลัก "อนุญาตถ้ามี allow ใดๆ ที่ตรง path เป็นจริง"
+    // (OR รวมกันของทุก match ที่ตรง) การใช้ match /{document=**} แบบเปิดกว้าง
+    // แล้วหวังให้ match /userCredentials/{docId} แยกต่างหาก "ปิด" ทับใช้ไม่ได้
+    // เพราะ allow read:true ของตัวกว้างจะยังอนุญาตอยู่ดี จึงต้องเขียนเงื่อนไข
+    // ยกเว้น userCredentials ไว้ในตัว allow read ของ collection ทั่วไปเอง
+
+    match /{collection}/{docId} {
+      allow read: if collection != 'userCredentials';
+      allow write: if false;
+    }
+
+    // เก็บรหัสผ่านผู้ใช้แยกจาก collection "users" ที่ frontend ฟัง real-time
+    // อยู่ — ปิดทั้งอ่านและเขียนจากทุกคน เข้าถึงได้เฉพาะทาง backend (OAuth) เท่านั้น
+    match /userCredentials/{docId} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ยืมอุปกรณ์ผ่าน LINE - ระบบ VMES</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <!-- LINE LIFF SDK -->
+  <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <style>
+    :root {
+      --primary: #4f46e5;
+      --primary-dark: #4338ca;
+      --primary-light: #818cf8;
+      --bg: #f8fafc;
+      --card-bg: #ffffff;
+      --text: #0f172a;
+      --text-muted: #64748b;
+      --border: #e2e8f0;
+      --success: #10b981;
+      --danger: #ef4444;
+      --radius: 16px;
+      --shadow: 0 10px 25px -5px rgba(79, 70, 229, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'IBM Plex Sans Thai', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      min-height: 100vh;
+      padding: 16px;
+    }
+
+    .app-container {
+      width: 100%;
+      max-width: 480px;
+      background: var(--card-bg);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      border: 1px solid var(--border);
+    }
+
+    .header {
+      background: linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%);
+      color: #ffffff;
+      padding: 24px 20px;
+      text-align: center;
+      position: relative;
+    }
+
+    .header h1 {
+      font-size: 1.35rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .header p {
+      font-size: 0.825rem;
+      color: #e0e7ff;
+      margin-top: 4px;
+    }
+
+    .user-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(255, 255, 255, 0.15);
+      backdrop-filter: blur(8px);
+      padding: 6px 14px;
+      border-radius: 20px;
+      margin-top: 12px;
+      font-size: 0.8rem;
+      color: #ffffff;
+    }
+
+    .user-avatar {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      object-fit: cover;
+      border: 1px solid #ffffff;
+    }
+
+    .form-body {
+      padding: 20px;
+    }
+
+    .form-group {
+      margin-bottom: 18px;
+    }
+
+    .form-label {
+      display: block;
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: #334155;
+      margin-bottom: 6px;
+    }
+
+    .form-label span.req {
+      color: var(--danger);
+    }
+
+    .form-input, .form-select, .form-textarea {
+      width: 100%;
+      padding: 12px 14px;
+      border: 1.5px solid var(--border);
+      border-radius: 10px;
+      font-size: 0.925rem;
+      color: var(--text);
+      background-color: #f8fafc;
+      transition: all 0.2s ease;
+      outline: none;
+    }
+
+    .form-input:focus, .form-select:focus, .form-textarea:focus {
+      border-color: var(--primary);
+      background-color: #ffffff;
+      box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
+    }
+
+    .stock-info {
+      font-size: 0.775rem;
+      color: var(--text-muted);
+      margin-top: 4px;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .stock-info .available {
+      color: var(--success);
+      font-weight: 600;
+    }
+
+    .submit-btn {
+      width: 100%;
+      padding: 14px;
+      background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%);
+      color: #ffffff;
+      border: none;
+      border-radius: 12px;
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .submit-btn:active {
+      transform: scale(0.98);
+    }
+
+    .submit-btn:disabled {
+      background: #cbd5e1;
+      box-shadow: none;
+      cursor: not-allowed;
+    }
+
+    /* Loading Overlay */
+    .loading-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.6);
+      backdrop-filter: blur(4px);
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+      z-index: 99;
+      color: #ffffff;
+    }
+
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 4px solid rgba(255, 255, 255, 0.3);
+      border-top-color: #ffffff;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin-bottom: 12px;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Success Card */
+    .success-card {
+      display: none;
+      text-align: center;
+      padding: 40px 20px;
+    }
+
+    .success-icon {
+      width: 64px;
+      height: 64px;
+      background: #d1fae5;
+      color: var(--success);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 32px;
+      margin: 0 auto 16px;
+    }
+
+    .success-card h2 {
+      font-size: 1.35rem;
+      color: #065f46;
+      margin-bottom: 8px;
+    }
+
+    .success-card p {
+      font-size: 0.875rem;
+      color: var(--text-muted);
+      margin-bottom: 24px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="app-container">
+    <div class="header">
+      <h1>📦 ฟอร์มยืมอุปกรณ์</h1>
+      <p>ระบบบริหารจัดการยานพาหนะและยืม-คืนอุปกรณ์ (VMES)</p>
+      <div id="userBadge" class="user-badge" style="display: none;">
+        <img id="userAvatar" class="user-avatar" src="" alt="Profile">
+        <span id="userName">กำลังโหลดโปรไฟล์...</span>
+      </div>
+    </div>
+
+    <form id="borrowForm" class="form-body" onsubmit="handleSubmit(event)">
+      
+      <!-- เลือกอุปกรณ์ -->
+      <div class="form-group">
+        <label class="form-label" for="equipSelect">เลือกอุปกรณ์ <span class="req">*</span></label>
+        <select id="equipSelect" class="form-select" required onchange="handleEquipChange()">
+          <option value="">-- กำลังโหลดรายการอุปกรณ์... --</option>
+        </select>
+        <div class="stock-info">
+          <span id="equipCat"></span>
+          <span id="equipAvailable" class="available"></span>
+        </div>
+      </div>
+
+      <!-- จำนวน -->
+      <div class="form-group">
+        <label class="form-label" for="qtyInput">จำนวนที่ต้องการยืม <span class="req">*</span></label>
+        <input type="number" id="qtyInput" class="form-input" min="1" value="1" required>
+      </div>
+
+      <!-- ผู้ขอยืม -->
+      <div class="form-group">
+        <label class="form-label" for="borrowerName">ชื่อ-นามสกุล ผู้ขอยืม <span class="req">*</span></label>
+        <input type="text" id="borrowerName" class="form-input" placeholder="ระบุชื่อ-นามสกุล" required>
+      </div>
+
+      <!-- หน่วยงาน -->
+      <div class="form-group">
+        <label class="form-label" for="deptInput">หน่วยงาน/สังกัด <span class="req">*</span></label>
+        <input type="text" id="deptInput" class="form-input" placeholder="เช่น งานสารสนเทศ, งานบริหาร" required>
+      </div>
+
+      <!-- เบอร์ติดต่อ -->
+      <div class="form-group">
+        <label class="form-label" for="phoneInput">เบอร์โทรศัพท์ติดต่อ <span class="req">*</span></label>
+        <input type="tel" id="phoneInput" class="form-input" placeholder="เช่น 0812345678" required>
+      </div>
+
+      <!-- วันที่ครบกำหนดคืน -->
+      <div class="form-group">
+        <label class="form-label" for="dueDateInput">วันที่ครบกำหนดคืน <span class="req">*</span></label>
+        <input type="date" id="dueDateInput" class="form-input" required>
+      </div>
+
+      <!-- วัตถุประสงค์ -->
+      <div class="form-group">
+        <label class="form-label" for="purposeInput">วัตถุประสงค์การยืม <span class="req">*</span></label>
+        <textarea id="purposeInput" class="form-textarea" rows="3" placeholder="ระบุรายละเอียดงานหรือสถานที่นำไปใช้งาน..." required></textarea>
+      </div>
+
+      <button type="submit" id="submitBtn" class="submit-btn">
+        🚀 ส่งคำขอยืมอุปกรณ์
+      </button>
+    </form>
+
+    <!-- Success View -->
+    <div id="successCard" class="success-card">
+      <div class="success-icon">✓</div>
+      <h2>ส่งคำขอยืมเรียบร้อยแล้ว!</h2>
+      <p>ระบบได้บันทึกคำขอยืมของคุณเรียบร้อยแล้ว<br>และส่งการ์ดแจ้งเตือนไปยังแชท LINE ของคุณ</p>
+      <button class="submit-btn" onclick="closeLiff()">ปิดหน้าต่างนี้</button>
+    </div>
+  </div>
+
+  <!-- Loading Overlay -->
+  <div id="loadingOverlay" class="loading-overlay">
+    <div class="spinner"></div>
+    <p id="loadingMsg">กำลังบันทึกคำขอ...</p>
+  </div>
+
+  <script>
+    let equipmentList = [];
+    let selectedEquip = null;
+    let lineProfile = null;
+
+    // Default API Host (Vercel API)
+    const API_URL = '/api/rpc';
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      // Set Default Due Date to +3 days from today
+      const today = new Date();
+      today.setDate(today.getDate() + 3);
+      const defaultDate = today.toISOString().split('T')[0];
+      document.getElementById('dueDateInput').value = defaultDate;
+      document.getElementById('dueDateInput').min = new Date().toISOString().split('T')[0];
+
+      // Init LIFF & Load Data
+      initLiff();
+      loadEquipmentList();
+    });
+
+    async function initLiff() {
+      try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const liffId = urlParams.get('liffId') || window.LIFF_ID;
+
+        if (typeof liff !== 'undefined' && liffId) {
+          await liff.init({ liffId: liffId });
+          if (liff.isLoggedIn()) {
+            lineProfile = await liff.getProfile();
+            showUserProfile(lineProfile);
+          }
+        }
+      } catch (err) {
+        console.log('LIFF init error:', err);
+      }
+    }
+
+    function showUserProfile(profile) {
+      if (!profile) return;
+      document.getElementById('userBadge').style.display = 'inline-flex';
+      document.getElementById('userName').textContent = profile.displayName || 'ผู้ใช้งาน LINE';
+      if (profile.pictureUrl) {
+        document.getElementById('userAvatar').src = profile.pictureUrl;
+      } else {
+        document.getElementById('userAvatar').style.display = 'none';
+      }
+      if (profile.displayName) {
+        document.getElementById('borrowerName').value = profile.displayName;
+      }
+    }
+
+    async function loadEquipmentList() {
+      try {
+        const res = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fn: 'getEquipment', args: [] })
+        });
+        equipmentList = await res.json();
+        
+        const selectEl = document.getElementById('equipSelect');
+        selectEl.innerHTML = '<option value="">-- เลือกอุปกรณ์ที่ต้องการยืม --</option>';
+
+        if (Array.isArray(equipmentList) && equipmentList.length > 0) {
+          equipmentList.forEach(eq => {
+            const qty = parseFloat(eq['จำนวน']) || 0;
+            const status = eq['สถานะ'] || '';
+            const isAvailable = status === 'พร้อมใช้งาน' && qty > 0;
+
+            const option = document.createElement('option');
+            option.value = eq['รหัส'];
+            option.textContent = `${eq['ชื่ออุปกรณ์']} ${eq['รุ่น'] ? '(' + eq['รุ่น'] + ')' : ''} [คงเหลือ: ${qty} ${eq['หน่วยนับ'] || ''}]`;
+            if (!isAvailable) {
+              option.disabled = true;
+              option.textContent += ' - ไม่พร้อมยืม';
+            }
+            selectEl.appendChild(option);
+          });
+        } else {
+          selectEl.innerHTML = '<option value="">❌ ไม่พบอุปกรณ์ในระบบ</option>';
+        }
+      } catch (err) {
+        console.error('Error loading equipment:', err);
+        document.getElementById('equipSelect').innerHTML = '<option value="">❌ โหลดข้อมูลไม่สำเร็จ</option>';
+      }
+    }
+
+    function handleEquipChange() {
+      const code = document.getElementById('equipSelect').value;
+      selectedEquip = equipmentList.find(e => e['รหัส'] === code);
+      
+      const catEl = document.getElementById('equipCat');
+      const availEl = document.getElementById('equipAvailable');
+      const qtyInput = document.getElementById('qtyInput');
+
+      if (selectedEquip) {
+        const qty = parseFloat(selectedEquip['จำนวน']) || 0;
+        catEl.textContent = `หมวดหมู่: ${selectedEquip['หมวดหมู่'] || '-'}`;
+        availEl.textContent = `พร้อมยืม: ${qty} ${selectedEquip['หน่วยนับ'] || ''}`;
+        qtyInput.max = qty;
+        qtyInput.value = 1;
+      } else {
+        catEl.textContent = '';
+        availEl.textContent = '';
+        qtyInput.removeAttribute('max');
+      }
+    }
+
+    async function handleSubmit(e) {
+      e.preventDefault();
+      if (!selectedEquip) {
+        alert('กรุณาเลือกอุปกรณ์ที่ต้องการยืม');
+        return;
+      }
+
+      const reqQty = parseFloat(document.getElementById('qtyInput').value) || 1;
+      const availableQty = parseFloat(selectedEquip['จำนวน']) || 0;
+
+      if (reqQty > availableQty) {
+        alert(`จำนวนที่ขอ (${reqQty}) เกินกว่าจำนวนคงเหลือในคลัง (${availableQty})`);
+        return;
+      }
+
+      const rawDate = document.getElementById('dueDateInput').value;
+      const dateParts = rawDate.split('-');
+      const formattedDueDate = `${dateParts[2]}/${dateParts[1]}/${dateParts[0]}`;
+
+      const payload = {
+        'รหัสอุปกรณ์': selectedEquip['รหัส'],
+        'ชื่ออุปกรณ์': selectedEquip['ชื่ออุปกรณ์'],
+        'จำนวน': reqQty,
+        'ผู้ขอยืม': document.getElementById('borrowerName').value.trim(),
+        'หน่วยงาน': document.getElementById('deptInput').value.trim(),
+        'เบอร์ติดต่อ': document.getElementById('phoneInput').value.trim(),
+        'วันที่ครบกำหนด': formattedDueDate,
+        'วัตถุประสงค์': document.getElementById('purposeInput').value.trim(),
+        'LINE_USER_ID': lineProfile ? lineProfile.userId : ''
+      };
+
+      showLoading(true, 'กำลังบันทึกคำขอยืม...');
+
+      try {
+        const res = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fn: 'saveBorrowing',
+            args: [payload, lineProfile ? lineProfile.displayName : 'LINE User']
+          })
+        });
+
+        const result = await res.json();
+        showLoading(false);
+
+        if (result && result.success !== false) {
+          document.getElementById('borrowForm').style.display = 'none';
+          document.getElementById('successCard').style.display = 'block';
+
+          // Close LIFF automatically after 2.5 seconds
+          setTimeout(() => {
+            closeLiff();
+          }, 2500);
+        } else {
+          alert('เกิดข้อผิดพลาด: ' + (result.message || 'ไม่สามารถบันทึกข้อมูลได้'));
+        }
+      } catch (err) {
+        showLoading(false);
+        alert('เกิดข้อผิดพลาดในการเชื่อมต่อระบบ: ' + err.message);
+      }
+    }
+
+    function showLoading(show, msg = 'กำลังโหลด...') {
+      const overlay = document.getElementById('loadingOverlay');
+      document.getElementById('loadingMsg').textContent = msg;
+      overlay.style.display = show ? 'flex' : 'none';
+    }
+
+    function closeLiff() {
+      if (typeof liff !== 'undefined' && liff.isLoggedIn()) {
+        liff.closeWindow();
+      } else {
+        window.close();
+      }
+    }
+  </script>
+</body>
+</html>
