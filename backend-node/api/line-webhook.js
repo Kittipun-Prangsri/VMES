@@ -173,83 +173,89 @@ async function handleVehicleStatus(replyToken) {
 }
 
 async function handleEquipmentStock(replyToken) {
-  const equipment = await safeGet(getEquipment);
-  if (equipment.length === 0) {
-    const flexContent = simpleErrorBubble('#ef4444', '💻 คลังอุปกรณ์', '❌ ไม่พบข้อมูลอุปกรณ์ในคลัง');
-    await replyLineFlex(replyToken, '💻 ไม่พบข้อมูลอุปกรณ์ในคลัง', flexContent);
-    return;
-  }
+  try {
+    const equipment = await safeGet(getEquipment);
+    if (equipment.length === 0) {
+      const flexContent = simpleErrorBubble('#ef4444', '💻 คลังอุปกรณ์', '❌ ไม่พบข้อมูลอุปกรณ์ในคลัง');
+      await replyLineFlex(replyToken, '💻 ไม่พบข้อมูลอุปกรณ์ในคลัง', flexContent);
+      return;
+    }
 
-  const rows = equipment.slice(0, 10).map((eq, idx) => {
-    const name = safeTruncate(eq['ชื่ออุปกรณ์'] || eq['รหัส'], 25, 'อุปกรณ์');
-    const category = safeTruncate(eq['หมวดหมู่'], 15, 'ทั่วไป');
-    const qty = parseFloat(eq['จำนวน']) || 0;
-    const unit = safeTruncate(eq['หน่วยนับ'], 8, 'รายการ');
-    return {
-      type: 'box',
-      layout: 'horizontal',
-      spacing: 'sm',
-      margin: idx === 0 ? 'none' : 'sm',
-      alignItems: 'center',
-      contents: [
-        { type: 'text', text: '📦', width: '18px', size: 'sm' },
-        {
-          type: 'box',
-          layout: 'vertical',
-          flex: 6,
-          contents: [
-            { type: 'text', text: name, size: 'sm', weight: 'bold', color: '#0f172a' },
-            { type: 'text', text: category, size: 'xxs', color: '#64748b' },
-          ],
-        },
-        { type: 'text', text: qty + ' ' + unit, size: 'sm', color: qty > 0 ? '#0f172a' : '#ef4444', align: 'end', flex: 4, weight: 'bold' },
-      ],
+    const rows = equipment.slice(0, 10).map((eq, idx) => {
+      const name = safeTruncate(eq['ชื่ออุปกรณ์'] || eq['รหัส'], 25, 'อุปกรณ์');
+      const category = safeTruncate(eq['หมวดหมู่'], 15, 'ทั่วไป');
+      const qty = parseFloat(eq['จำนวน']) || 0;
+      const unit = safeTruncate(eq['หน่วยนับ'], 8, 'รายการ');
+      return {
+        type: 'box',
+        layout: 'horizontal',
+        spacing: 'sm',
+        margin: idx === 0 ? 'none' : 'sm',
+        alignItems: 'center',
+        contents: [
+          { type: 'text', text: '📦', width: '18px', size: 'sm' },
+          {
+            type: 'box',
+            layout: 'vertical',
+            flex: 6,
+            contents: [
+              { type: 'text', text: name, size: 'sm', weight: 'bold', color: '#0f172a' },
+              { type: 'text', text: category, size: 'xxs', color: '#64748b' },
+            ],
+          },
+          { type: 'text', text: String(qty) + ' ' + String(unit), size: 'sm', color: qty > 0 ? '#0f172a' : '#ef4444', align: 'end', flex: 4, weight: 'bold' },
+        ],
+      };
+    });
+
+    const flexContent = {
+      type: 'bubble',
+      size: 'mega',
+      header: {
+        type: 'box',
+        layout: 'vertical',
+        backgroundColor: '#0d9488',
+        paddingAll: '20px',
+        contents: [
+          { type: 'text', text: '💻 คลังอุปกรณ์คงเหลือ', color: '#ffffff', size: 'lg', weight: 'bold' },
+          { type: 'text', text: 'รายการพัสดุและอุปกรณ์ที่พร้อมให้ยืม', color: '#ccfbf1', size: 'xs', margin: 'xs' },
+        ],
+      },
+      body: {
+        type: 'box',
+        layout: 'vertical',
+        spacing: 'md',
+        paddingAll: '20px',
+        contents: [
+          { type: 'box', layout: 'vertical', spacing: 'sm', contents: rows },
+          ...(equipment.length > 10
+            ? [
+                {
+                  type: 'text',
+                  text: `* แสดง 10 รายการแรก จากทั้งหมด ${equipment.length} รายการ`,
+                  size: 'xxs',
+                  color: '#64748b',
+                  margin: 'md',
+                  style: 'italic',
+                },
+              ]
+            : []),
+        ],
+      },
+      footer: {
+        type: 'box',
+        layout: 'vertical',
+        paddingAll: '12px',
+        backgroundColor: '#f1f5f9',
+        contents: [{ type: 'text', text: SYSTEM_NAME, size: 'xxs', color: '#94a3b8', align: 'center' }],
+      },
     };
-  });
-
-  const flexContent = {
-    type: 'bubble',
-    size: 'mega',
-    header: {
-      type: 'box',
-      layout: 'vertical',
-      backgroundColor: '#0d9488',
-      paddingAll: '20px',
-      contents: [
-        { type: 'text', text: '💻 คลังอุปกรณ์คงเหลือ', color: '#ffffff', size: 'lg', weight: 'bold' },
-        { type: 'text', text: 'รายการพัสดุและอุปกรณ์ที่พร้อมให้ยืม', color: '#ccfbf1', size: 'xs', margin: 'xs' },
-      ],
-    },
-    body: {
-      type: 'box',
-      layout: 'vertical',
-      spacing: 'md',
-      paddingAll: '20px',
-      contents: [
-        { type: 'box', layout: 'vertical', spacing: 'sm', contents: rows },
-        ...(equipment.length > 10
-          ? [
-              {
-                type: 'text',
-                text: `* แสดง 10 รายการแรก จากทั้งหมด ${equipment.length} รายการ`,
-                size: 'xxs',
-                color: '#64748b',
-                margin: 'md',
-                style: 'italic',
-              },
-            ]
-          : []),
-      ],
-    },
-    footer: {
-      type: 'box',
-      layout: 'vertical',
-      paddingAll: '12px',
-      backgroundColor: '#f1f5f9',
-      contents: [{ type: 'text', text: SYSTEM_NAME, size: 'xxs', color: '#94a3b8', align: 'center' }],
-    },
-  };
-  await replyLineFlex(replyToken, '💻 สรุปคลังอุปกรณ์คงเหลือ', flexContent);
+    await replyLineFlex(replyToken, '💻 สรุปคลังอุปกรณ์คงเหลือ', flexContent);
+  } catch (err) {
+    console.error('handleEquipmentStock error:', err);
+    const flexContent = simpleErrorBubble('#ef4444', '💻 คลังอุปกรณ์', 'เกิดข้อผิดพลาดในการดึงข้อมูลอุปกรณ์: ' + (err.message || err));
+    await replyLineFlex(replyToken, '❌ เกิดข้อผิดพลาด', flexContent);
+  }
 }
 
 async function handleBorrowingList(replyToken) {

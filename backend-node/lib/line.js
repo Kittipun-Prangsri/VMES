@@ -438,6 +438,23 @@ async function replyLineFlex(replyToken, altText, flexContent) {
     const code = res.status;
     const bodyText = (await res.text()).substring(0, 500);
     console.log(`replyLineFlex status: ${code}, response: ${bodyText}`);
+
+    if (code >= 400) {
+      console.error(`replyLineFlex failed (${code}): ${bodyText}. Attempting fallback text message.`);
+      try {
+        await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + String(token).trim() },
+          body: JSON.stringify({
+            replyToken: replyToken,
+            messages: [{ type: 'text', text: `${altText}\n(ไม่สามารถแสดงการ์ดได้)` }],
+          }),
+        });
+      } catch (err) {
+        console.error('replyLineFlex fallback failed:', err);
+      }
+    }
+
     return { success: code >= 200 && code < 300, status: code, body: bodyText };
   } catch (e) {
     console.log('replyLineFlex error: ' + e.message);
