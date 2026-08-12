@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <linearGradient id="shieldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1d4ed8" />
+      <stop offset="50%" stop-color="#2563eb" />
+      <stop offset="100%" stop-color="#0284c7" />
+    </linearGradient>
+    <linearGradient id="shieldDarkGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1e3a8a" />
+      <stop offset="100%" stop-color="#0f172a" />
+    </linearGradient>
+  </defs>
+  <path d="M 256 32 C 340 50, 420 70, 448 96 C 452 230, 430 380, 256 480 C 82 380, 60 230, 64 96 C 92 70, 172 50, 256 32 Z" fill="url(#shieldDarkGrad)" />
+  <path d="M 256 44 C 330 62, 405 80, 432 104 C 436 222, 415 360, 256 454 C 97 360, 76 222, 80 104 C 107 80, 182 62, 256 44 Z" fill="url(#shieldGrad)" />
+  <path d="M 256 44 C 330 62, 405 80, 432 104 C 436 222, 415 360, 256 454 Z" fill="#000000" fill-opacity="0.12" />
+  <path d="M 236 120 H 276 V 150 H 306 V 190 H 276 V 220 H 236 V 190 H 206 V 150 H 236 Z" fill="#ffffff" />
+  <path d="M 128 190 L 256 400 L 384 190 L 334 190 L 256 320 L 178 190 Z" fill="#ffffff" />
+  <path d="M 150 206 L 256 376 L 362 206 L 334 206 L 256 332 L 178 206 Z" fill="url(#shieldGrad)" />
+</svg>
