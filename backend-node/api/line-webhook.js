@@ -146,6 +146,7 @@ async function handleVehicleStatus(replyToken) {
       spacing: 'md',
       paddingAll: '20px',
       contents: [
+        { type: 'box', layout: 'vertical', spacing: 'sm', contents: rows },
         ...(vehicles.length > 10
           ? [
               {
@@ -225,6 +226,7 @@ async function handleEquipmentStock(replyToken) {
       spacing: 'md',
       paddingAll: '20px',
       contents: [
+        { type: 'box', layout: 'vertical', spacing: 'sm', contents: rows },
         ...(equipment.length > 10
           ? [
               {
