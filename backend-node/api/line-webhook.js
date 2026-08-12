@@ -111,7 +111,7 @@ async function handleVehicleStatus(replyToken) {
       margin: idx === 0 ? 'none' : 'sm',
       alignItems: 'center',
       contents: [
-        { type: 'text', text: statusIcon, width: '18px', size: 'sm' },
+        { type: 'text', text: statusIcon, flex: 1, size: 'sm' },
         { type: 'text', text: plate, size: 'sm', weight: 'bold', color: '#0f172a', flex: 3 },
         { type: 'text', text: name, size: 'sm', color: '#475569', flex: 5 },
         {
@@ -193,7 +193,7 @@ async function handleEquipmentStock(replyToken) {
         margin: idx === 0 ? 'none' : 'sm',
         alignItems: 'center',
         contents: [
-          { type: 'text', text: '📦', width: '18px', size: 'sm' },
+          { type: 'text', text: '📦', flex: 1, size: 'sm' },
           {
             type: 'box',
             layout: 'vertical',
