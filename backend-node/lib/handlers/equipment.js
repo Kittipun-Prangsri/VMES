@@ -22,7 +22,7 @@ async function saveEquipment(data, adminCode) {
     delete data._row;
     await setDoc(SHEETS.EQUIPMENT, data['รหัส'], data);
     await logAudit(isNew ? 'เพิ่มอุปกรณ์ใหม่' : 'แก้ไขข้อมูลอุปกรณ์', 'admin', data['ชื่ออุปกรณ์']);
-    return { success: true };
+    return { success: true, code: data['รหัส'] };
   } catch (err) {
     return { success: false, message: err.message };
   }

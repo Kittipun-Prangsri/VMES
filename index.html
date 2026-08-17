@@ -1325,6 +1325,7 @@ tr:hover td {
         <div class="menu-section" style="color:#38bdf8; font-weight:700; display:flex; align-items:center; gap:4px;">⭐ ระบบอุปกรณ์ (งานหลัก)</div>
         <div class="menu-item featured" data-page="borrowing"><span class="menu-icon">📦</span>ระบบยืม-คืนอุปกรณ์ <span class="menu-badge" id="badgeBorrow"></span></div>
         <div class="menu-item featured" data-page="equipment"><span class="menu-icon">💻</span>คลังอุปกรณ์ทั้งหมด</div>
+        <div class="menu-item featured" data-page="fieldSurvey"><span class="menu-icon">🔎</span>สำรวจภาคสนาม</div>
 
         <div class="menu-section">ยานพาหนะ</div>
         <div class="menu-item" data-page="vehicles"><span class="menu-icon">🚗</span>ข้อมูลรถทั้งหมด</div>
@@ -1448,6 +1449,8 @@ tr:hover td {
     };
     let CURRENT_USER = null;
     let CURRENT_PAGE = 'dashboard';
+    // สถานะโหมดสำรวจภาคสนาม เก็บไว้นอก render function เพื่อไม่ให้หายเวลา Firestore realtime listener สั่ง re-render หน้าทั้งหมด
+    let FIELD_SURVEY_STATE = { room: '', category: '', items: [] };
     let CHARTS = {};
     let REFRESH_TIMER = null;
     const ADMIN_PASS = '11192'; // Internal admin code for authorized actions
@@ -1895,6 +1898,7 @@ tr:hover td {
       const titles = {
         dashboard: '📊 แดชบอร์ดรวม', vehicles: '🚗 ข้อมูลรถทั้งหมด', usage: '📋 บันทึกการใช้รถ',
         maintenance: '🔧 บันทึกบำรุงรักษา', fuel: '⛽ บันทึกการใช้น้ำมัน', equipment: '💻 คลังอุปกรณ์',
+        fieldSurvey: '🔎 สำรวจภาคสนาม',
         borrowing: '📦 ระบบยืม-คืนอุปกรณ์', users: '👥 ผู้ใช้งานระบบ', drivers: '👨‍✈️ พนักงานขับรถ',
         booking: '📅 จองรถล่วงหน้า', inspection: '🔍 ตรวจสภาพรถ', notifications: '🔔 ประวัติแจ้งเตือน',
         audit: '📜 ประวัติระบบ', settings: '⚙️ ตั้งค่าระบบ', departments: '🏢 หน่วยงาน', reports: '📈 รายงานสรุป'
@@ -1994,6 +1998,7 @@ tr:hover td {
       if (page === 'maintenance') return renderMaintenance();
       if (page === 'fuel') return renderFuel();
       if (page === 'equipment') return renderEquipment();
+      if (page === 'fieldSurvey') return renderFieldSurvey();
       if (page === 'borrowing') return renderBorrowing();
       if (page === 'users') return renderUsers();
       if (page === 'drivers') return renderDrivers();
@@ -2671,12 +2676,18 @@ tr:hover td {
               const st = e['สถานะ'] || 'พร้อมยืม';
               const stBadge = st === 'พร้อมยืม' ? `<span style="background:#dcfce7; color:#15803d; border:1px solid #bbf7d0; padding:3px 8px; border-radius:12px; font-weight:700; font-size:11px;">🟢 พร้อมยืม</span>`
                 : st === 'อยู่ระหว่างยืม' ? `<span style="background:#f3e8ff; color:#7e22ce; border:1px solid #e9d5ff; padding:3px 8px; border-radius:12px; font-weight:700; font-size:11px;">📦 อยู่ระหว่างยืม</span>`
+                : st === 'ประจำจุด' ? `<span style="background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd; padding:3px 8px; border-radius:12px; font-weight:700; font-size:11px;">🖥️ ประจำจุด</span>`
                 : `<span style="background:#fee2e2; color:#b91c1c; border:1px solid #fecaca; padding:3px 8px; border-radius:12px; font-weight:700; font-size:11px;">🔴 ${esc(st)}</span>`;
+              const noTag = e['สถานะป้ายครุภัณฑ์'] === 'ไม่มีป้าย';
+              const linkedParent = e['เชื่อมกับ'] ? DATA.equipment.find(p => String(p['รหัส']) === String(e['เชื่อมกับ'])) : null;
+              const linkedChildren = DATA.equipment.filter(c => c['เชื่อมกับ'] && String(c['เชื่อมกับ']) === String(e['รหัส']));
 
               return `
               <tr>
                 <td data-label="รหัสครุภัณฑ์" style="padding-left:20px;">
-                  <code style="font-size:13px; font-weight:700; color:#0f766e; background:#f0fdf4; padding:3px 8px; border-radius:6px; border:1px solid #ccfbf1;">${esc(e['รหัสครุภัณฑ์'] || '-')}</code>
+                  ${noTag
+                    ? `<span style="font-size:11px; font-weight:700; color:#b45309; background:#fffbeb; padding:3px 8px; border-radius:6px; border:1px solid #fde68a;">⚠️ ยังไม่มีป้าย</span>`
+                    : `<code style="font-size:13px; font-weight:700; color:#0f766e; background:#f0fdf4; padding:3px 8px; border-radius:6px; border:1px solid #ccfbf1;">${esc(e['รหัสครุภัณฑ์'] || '-')}</code>`}
                   <div style="font-size:12px; color:#64748b; margin-top:4px;">🏷️ ${esc(e['หมวดหมู่'] || 'ทั่วไป')}</div>
                 </td>
                 <td data-label="ชื่ออุปกรณ์">
@@ -2684,6 +2695,8 @@ tr:hover td {
                   <div style="font-size:12px; color:#64748b; margin-top:2px;">
                     ${esc(e['ยี่ห้อ'] || '')} ${esc(e['รุ่น'] || '')} ${e['Serial'] ? `<span style="color:#94a3b8; font-size:11px;">(S/N: ${esc(e['Serial'])})</span>` : ''}
                   </div>
+                  ${linkedParent ? `<div style="font-size:11px; color:#7c3aed; margin-top:3px;">🔗 เชื่อมกับ: ${esc(linkedParent['ชื่ออุปกรณ์'] || linkedParent['รหัส'])}</div>` : ''}
+                  ${linkedChildren.length ? `<div style="font-size:11px; color:#0891b2; margin-top:3px;">🔌 มีอุปกรณ์เชื่อมต่อ ${linkedChildren.length} ชิ้น</div>` : ''}
                 </td>
                 <td data-label="จำนวน & สถานะ">
                   <div style="font-weight:700; color:#1e293b; font-size:14px; margin-bottom:4px;">
@@ -2699,7 +2712,7 @@ tr:hover td {
                 </td>
                 <td data-label="การจัดการ" style="text-align:center;">
                   <div style="display:inline-flex; gap:6px; justify-content:center; align-items:center;">
-                    <button class="btn btn-sm btn-primary" onclick="quickBorrow('${esc(e['รหัส'])}','${esc(e['ชื่ออุปกรณ์'])}')" title="ยืมอุปกรณ์นี้" style="padding:4px 10px; font-weight:600;">📦 ยืม</button>
+                    ${st !== 'ประจำจุด' ? `<button class="btn btn-sm btn-primary" onclick="quickBorrow('${esc(e['รหัส'])}','${esc(e['ชื่ออุปกรณ์'])}')" title="ยืมอุปกรณ์นี้" style="padding:4px 10px; font-weight:600;">📦 ยืม</button>` : ''}
                     <button class="btn btn-sm btn-info" onclick="showQrModal('${esc(e['รหัส'] || e['รหัสครุภัณฑ์'])}', '${esc(e['ชื่ออุปกรณ์'])}')" title="สร้าง QR Code" style="padding:4px 8px;">🔲 QR</button>
                     ${canManageEquipment() ? `
                       <button class="btn btn-sm btn-secondary" onclick="editEquip(${equipKey})" title="แก้ไขครุภัณฑ์" style="padding:4px 8px;">✏️</button> 
@@ -2779,6 +2792,7 @@ tr:hover td {
         <select id="e_status">
           <option ${e['สถานะ'] === 'พร้อมยืม' ? 'selected' : ''}>พร้อมยืม</option>
           <option ${e['สถานะ'] === 'อยู่ระหว่างยืม' ? 'selected' : ''}>อยู่ระหว่างยืม</option>
+          <option ${e['สถานะ'] === 'ประจำจุด' ? 'selected' : ''}>ประจำจุด</option>
           <option ${e['สถานะ'] === 'ชำรุด' ? 'selected' : ''}>ชำรุด</option>
         </select>
       </div>
@@ -2852,6 +2866,281 @@ tr:hover td {
     function quickBorrow(eqId, eqName) {
       navigate('borrowing');
       setTimeout(() => addBorrow(eqId, eqName), 100);
+    }
+
+    // ============== FIELD SURVEY MODE (โหมดสำรวจภาคสนาม) ==============
+    // สำหรับเดินสำรวจครุภัณฑ์คอมพิวเตอร์ที่กระจัดกระจาย/ไม่มีป้าย ทีละห้อง แล้วผูกอุปกรณ์เชื่อมต่อ (จอ/คีย์บอร์ด/เมาส์ ฯลฯ) เข้ากับเครื่องหลักผ่าน 'เชื่อมกับ'
+    const PERIPHERAL_TYPES = ['จอภาพ', 'คีย์บอร์ด', 'เมาส์', 'เครื่องสำรองไฟ (UPS)', 'ลำโพง', 'เครื่องพิมพ์', 'อื่นๆ'];
+
+    function fsSurveyorName() {
+      return (CURRENT_USER && (CURRENT_USER.name || CURRENT_USER.username)) || 'ไม่ระบุ';
+    }
+
+    function renderFieldSurvey() {
+      if (!canManageEquipment()) {
+        $('content').innerHTML = `
+      <div class="card"><div class="card-body" style="text-align:center; padding:60px 20px;">
+        <div style="font-size:48px; opacity:0.3; margin-bottom:12px;">🔒</div>
+        <div style="font-size:15px; font-weight:700; color:#64748b;">โหมดสำรวจภาคสนามใช้ได้เฉพาะผู้ดูแลระบบ/ผู้จัดการ</div>
+      </div></div>`;
+        return;
+      }
+
+      const render = () => {
+        const today = new Date().toLocaleDateString('en-CA');
+        const fieldItems = DATA.equipment.filter(e => e['บันทึกจากการสำรวจภาคสนาม']);
+        const todayCount = fieldItems.filter(e => (e['วันที่บันทึก'] || '').slice(0, 10) === today).length;
+        const pendingTag = DATA.equipment.filter(e => e['สถานะป้ายครุภัณฑ์'] === 'ไม่มีป้าย');
+        const roomsSurveyed = new Set(fieldItems.map(e => e['ที่เก็บ']).filter(Boolean)).size;
+        const rooms = Array.from(new Set(DATA.equipment.map(e => e['ที่เก็บ']).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'th'));
+        const defaultCat = FIELD_SURVEY_STATE.category || (DATA.categories.find(c => (c['ชื่อหมวด'] || '').includes('คอมพิวเตอร์')) || DATA.categories[0] || {})['ชื่อหมวด'] || '';
+
+        return `
+    <div style="background:linear-gradient(135deg,#0e7490 0%,#0891b2 55%,#06b6d4 100%); border-radius:20px; padding:20px 24px; margin-bottom:20px; box-shadow:0 8px 32px rgba(8,145,178,0.25); position:relative; overflow:hidden; color:#fff;">
+      <div style="position:absolute; width:220px; height:220px; border-radius:50%; background:rgba(255,255,255,0.06); top:-70px; right:-50px; pointer-events:none;"></div>
+      <div style="display:flex; align-items:center; gap:14px;">
+        <div style="background:rgba(255,255,255,0.18); border-radius:14px; width:52px; height:52px; display:flex; align-items:center; justify-content:center; font-size:26px; flex-shrink:0;">🔎</div>
+        <div>
+          <div style="font-size:20px; font-weight:700; line-height:1.2;">โหมดสำรวจภาคสนาม</div>
+          <div style="color:rgba(255,255,255,0.85); font-size:13px; margin-top:4px;">เดินตรวจแต่ละห้อง บันทึกเครื่องที่พบทันที แล้วผูกจอ/คีย์บอร์ด/เมาส์เข้ากับเครื่องหลัก — ถ้าไม่เห็นป้ายครุภัณฑ์ ให้บันทึกไว้ก่อนแล้วค่อยผูกเลขทีหลัง</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="stat-grid" style="margin-bottom:20px;">
+      <div class="stat s-blue"><div class="icon-big">📅</div><div class="label">สำรวจวันนี้</div><div class="value">${todayCount} <span style="font-size:14px;color:var(--gray-500)">รายการ</span></div><div class="sub">โดย ${esc(fsSurveyorName())}</div></div>
+      <div class="stat s-green"><div class="icon-big">🏠</div><div class="label">ห้อง/จุดที่สำรวจแล้ว</div><div class="value">${roomsSurveyed}</div><div class="sub">สะสมทั้งหมด</div></div>
+      <div class="stat s-purple"><div class="icon-big">📦</div><div class="label">บันทึกจากการสำรวจสะสม</div><div class="value">${fieldItems.length}</div><div class="sub">รวมทุกรอบ</div></div>
+      <div class="stat s-red"><div class="icon-big">⚠️</div><div class="label">รอผูกเลขครุภัณฑ์</div><div class="value">${pendingTag.length}</div><div class="sub">ยังไม่เห็นป้ายตอนสำรวจ</div></div>
+    </div>
+
+    <div style="display:flex; flex-wrap:wrap; gap:20px; align-items:flex-start;">
+      <div style="flex:1.2; min-width:340px; display:flex; flex-direction:column; gap:20px;">
+        <div class="card">
+          <div class="card-body">
+            <div style="font-weight:700; font-size:15px; color:#0f172a; margin-bottom:14px;">➕ บันทึกเครื่องที่พบ</div>
+            <div class="form-grid">
+              <div class="field full">
+                <label>ห้อง/จุดติดตั้ง *</label>
+                <input id="fs_room" list="fsRoomList" value="${esc(FIELD_SURVEY_STATE.room)}" placeholder="เช่น ห้องการเงิน ชั้น 2 ตึกผู้ป่วยนอก">
+                <datalist id="fsRoomList">${rooms.map(r => `<option value="${esc(r)}">`).join('')}</datalist>
+              </div>
+              <div class="field">
+                <label>ประเภทอุปกรณ์</label>
+                <select id="fs_type">${DATA.categories.map(c => `<option ${c['ชื่อหมวด'] === defaultCat ? 'selected' : ''}>${esc(c['ชื่อหมวด'])}</option>`).join('')}</select>
+              </div>
+              <div class="field"><label>ชื่ออุปกรณ์ *</label><input id="fs_name" placeholder="เช่น คอมพิวเตอร์ตั้งโต๊ะ"></div>
+              <div class="field"><label>ยี่ห้อ</label><input id="fs_brand"></div>
+              <div class="field"><label>รุ่น</label><input id="fs_model"></div>
+              <div class="field"><label>Serial Number</label><input id="fs_sn"></div>
+              <div class="field full">
+                <label>ป้ายครุภัณฑ์</label>
+                <div style="display:flex; gap:16px; align-items:center; margin-top:6px; flex-wrap:wrap;">
+                  <label style="display:flex; align-items:center; gap:6px; font-weight:500; font-size:13px; cursor:pointer;">
+                    <input type="radio" name="fs_tag" value="yes" onchange="window._fsToggleTag(true)"> มีป้าย เห็นเลขครุภัณฑ์
+                  </label>
+                  <label style="display:flex; align-items:center; gap:6px; font-weight:500; font-size:13px; cursor:pointer;">
+                    <input type="radio" name="fs_tag" value="no" checked onchange="window._fsToggleTag(false)"> ไม่มีป้าย / หาไม่พบ
+                  </label>
+                </div>
+                <input id="fs_code" placeholder="กรอกเลขครุภัณฑ์ที่เห็นบนป้าย" style="margin-top:8px; display:none;">
+              </div>
+              <div class="field full"><label>หมายเหตุ</label><input id="fs_note" placeholder="เช่น เครื่องอยู่มุมห้อง ใกล้หน้าต่าง"></div>
+            </div>
+            <button class="btn btn-primary btn-block" style="margin-top:14px; font-weight:700;" onclick="window._fsSaveDevice()">💾 บันทึกเครื่องนี้ แล้วสำรวจเครื่องถัดไป</button>
+          </div>
+        </div>
+
+        ${FIELD_SURVEY_STATE.items.length ? `
+        <div class="card">
+          <div class="card-body">
+            <div style="font-weight:700; font-size:14px; color:#0f172a; margin-bottom:10px;">📝 บันทึกแล้วในรอบนี้ (${FIELD_SURVEY_STATE.items.length} รายการ)</div>
+            ${FIELD_SURVEY_STATE.items.slice().reverse().map(it => {
+              const children = DATA.equipment.filter(c => c['เชื่อมกับ'] && String(c['เชื่อมกับ']) === String(it.code));
+              return `
+              <div style="border:1px solid #e2e8f0; border-radius:10px; padding:10px 14px; margin-bottom:8px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+                  <div>
+                    <div style="font-weight:700; font-size:13px; color:#0f172a;">💻 ${esc(it.name)}</div>
+                    <div style="font-size:12px; color:#64748b;">📍 ${esc(it.room)} ${it.hasTag ? '' : '<span style="color:#b45309; font-weight:600;">⚠️ ยังไม่มีป้าย</span>'}</div>
+                  </div>
+                  <button class="btn btn-sm btn-secondary" onclick="window._fsAddPeripheral('${esc(it.code)}','${esc(it.name)}')">🔌 + เพิ่มอุปกรณ์เชื่อมต่อ</button>
+                </div>
+                ${children.length ? `<div style="margin-top:8px; padding-top:8px; border-top:1px dashed #e2e8f0; display:flex; flex-wrap:wrap; gap:6px;">
+                  ${children.map(c => `<span style="font-size:11px; background:#f0f9ff; color:#0369a1; border:1px solid #bae6fd; padding:2px 8px; border-radius:10px;">${esc(c['ชื่ออุปกรณ์'])}</span>`).join('')}
+                </div>` : ''}
+              </div>`;
+            }).join('')}
+          </div>
+        </div>` : ''}
+      </div>
+
+      <div style="flex:1; min-width:320px;">
+        <div class="card">
+          <div class="card-body">
+            <div style="font-weight:700; font-size:14px; color:#0f172a; margin-bottom:10px;">📋 รอผูกเลขครุภัณฑ์ทั้งระบบ (${pendingTag.length})</div>
+            ${pendingTag.length ? pendingTag.map(e => `
+              <div style="border:1px solid #fde68a; background:#fffbeb; border-radius:10px; padding:10px 14px; margin-bottom:8px;">
+                <div style="font-weight:700; font-size:13px; color:#0f172a;">${esc(e['ชื่ออุปกรณ์'])}</div>
+                <div style="font-size:12px; color:#64748b; margin:2px 0 8px;">📍 ${esc(e['ที่เก็บ'] || '-')} ${e['เชื่อมกับ'] ? '· 🔗 อุปกรณ์เชื่อมต่อ' : ''} · โดย ${esc(e['ผู้สำรวจ'] || '-')}</div>
+                <button class="btn btn-sm btn-primary" style="width:100%;" onclick="window._fsResolveTag('${esc(e['รหัส'])}','${esc(e['ชื่ออุปกรณ์'])}')">🏷️ ผูกเลขครุภัณฑ์ที่ตรวจสอบได้</button>
+              </div>`).join('') : `<div style="text-align:center; padding:30px 10px; color:#94a3b8; font-size:13px;">🎉 ไม่มีรายการค้าง — ครุภัณฑ์ที่สำรวจแล้วมีป้ายครบ</div>`}
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+      };
+
+      window._fsToggleTag = (hasTag) => {
+        const el = $('fs_code');
+        if (el) el.style.display = hasTag ? '' : 'none';
+      };
+
+      window._fsRerender = () => { $('content').innerHTML = render(); };
+
+      window._fsSaveDevice = () => {
+        const room = ($('fs_room').value || '').trim();
+        const type = $('fs_type').value;
+        const name = ($('fs_name').value || '').trim();
+        const brand = ($('fs_brand').value || '').trim();
+        const model = ($('fs_model').value || '').trim();
+        const sn = ($('fs_sn').value || '').trim();
+        const hasTag = document.querySelector('input[name="fs_tag"]:checked').value === 'yes';
+        const code = ($('fs_code').value || '').trim();
+        const note = ($('fs_note').value || '').trim();
+
+        if (!room) { toast('กรอกห้อง/จุดติดตั้งก่อน', 'warning'); return; }
+        if (!name) { toast('กรอกชื่ออุปกรณ์', 'warning'); return; }
+        if (hasTag && !code) { toast('กรอกเลขครุภัณฑ์ที่เห็นบนป้าย', 'warning'); return; }
+
+        FIELD_SURVEY_STATE.room = room;
+        FIELD_SURVEY_STATE.category = type;
+
+        const data = {
+          'รหัสครุภัณฑ์': hasTag ? code : '', 'ชื่ออุปกรณ์': name, 'หมวดหมู่': type,
+          'ยี่ห้อ': brand, 'รุ่น': model, 'Serial': sn,
+          'จำนวน': 1, 'หน่วยนับ': 'เครื่อง', 'ที่เก็บ': room,
+          'มูลค่า': 0, 'สถานะ': 'ประจำจุด', 'หมายเหตุ': note,
+          'สถานะป้ายครุภัณฑ์': hasTag ? 'มีป้าย' : 'ไม่มีป้าย',
+          'บันทึกจากการสำรวจภาคสนาม': true,
+          'ผู้สำรวจ': fsSurveyorName()
+        };
+
+        showLoading(true);
+        callApi('saveEquipment', data, ADMIN_PASS)
+          .then(r => {
+            showLoading(false);
+            if (r.success) {
+              toast('บันทึกเครื่อง "' + name + '" แล้ว ✓');
+              FIELD_SURVEY_STATE.items.push({ code: r.code, name, room, hasTag });
+              window._fsRerender();
+            } else {
+              toast(r.message, 'error');
+            }
+          })
+          .catch(err => { showLoading(false); toast('ผิดพลาด: ' + err.message, 'error'); });
+      };
+
+      window._fpToggleTag = (hasTag) => {
+        const el = $('fp_code');
+        if (el) el.style.display = hasTag ? '' : 'none';
+      };
+
+      window._fsAddPeripheral = (parentCode, parentName) => {
+        const body = `
+          <div class="form-grid">
+            <div class="field"><label>ชนิดอุปกรณ์ *</label>
+              <select id="fp_type">${PERIPHERAL_TYPES.map(t => `<option>${esc(t)}</option>`).join('')}</select>
+            </div>
+            <div class="field"><label>ยี่ห้อ</label><input id="fp_brand"></div>
+            <div class="field"><label>รุ่น</label><input id="fp_model"></div>
+            <div class="field"><label>Serial Number</label><input id="fp_sn"></div>
+            <div class="field full">
+              <label>ป้ายครุภัณฑ์</label>
+              <div style="display:flex; gap:16px; align-items:center; margin-top:6px; flex-wrap:wrap;">
+                <label style="display:flex; align-items:center; gap:6px; font-weight:500; font-size:13px; cursor:pointer;">
+                  <input type="radio" name="fp_tag" value="yes" onchange="window._fpToggleTag(true)"> มีป้าย
+                </label>
+                <label style="display:flex; align-items:center; gap:6px; font-weight:500; font-size:13px; cursor:pointer;">
+                  <input type="radio" name="fp_tag" value="no" checked onchange="window._fpToggleTag(false)"> ไม่มีป้าย
+                </label>
+              </div>
+              <input id="fp_code" placeholder="เลขครุภัณฑ์" style="margin-top:8px; display:none;">
+            </div>
+          </div>`;
+        openModal('🔌 เพิ่มอุปกรณ์เชื่อมต่อกับ "' + esc(parentName) + '"', body, () => window._fsSavePeripheral(parentCode), false);
+      };
+
+      window._fsSavePeripheral = (parentCode) => {
+        const type = $('fp_type').value;
+        const brand = ($('fp_brand').value || '').trim();
+        const model = ($('fp_model').value || '').trim();
+        const sn = ($('fp_sn').value || '').trim();
+        const hasTag = document.querySelector('input[name="fp_tag"]:checked').value === 'yes';
+        const code = ($('fp_code').value || '').trim();
+        if (hasTag && !code) { toast('กรอกเลขครุภัณฑ์', 'warning'); return; }
+
+        const parent = DATA.equipment.find(x => String(x['รหัส']) === String(parentCode));
+        const data = {
+          'รหัสครุภัณฑ์': hasTag ? code : '', 'ชื่ออุปกรณ์': type, 'หมวดหมู่': type,
+          'ยี่ห้อ': brand, 'รุ่น': model, 'Serial': sn,
+          'จำนวน': 1, 'หน่วยนับ': 'เครื่อง', 'ที่เก็บ': (parent && parent['ที่เก็บ']) || FIELD_SURVEY_STATE.room,
+          'มูลค่า': 0, 'สถานะ': 'ประจำจุด',
+          'สถานะป้ายครุภัณฑ์': hasTag ? 'มีป้าย' : 'ไม่มีป้าย',
+          'บันทึกจากการสำรวจภาคสนาม': true,
+          'เชื่อมกับ': parentCode,
+          'ผู้สำรวจ': fsSurveyorName()
+        };
+
+        showLoading(true);
+        callApi('saveEquipment', data, ADMIN_PASS)
+          .then(r => {
+            showLoading(false);
+            if (r.success) {
+              toast('เพิ่มอุปกรณ์เชื่อมต่อแล้ว ✓');
+              closeModal();
+              window._fsRerender();
+            } else {
+              toast(r.message, 'error');
+            }
+          })
+          .catch(err => { showLoading(false); toast('ผิดพลาด: ' + err.message, 'error'); });
+      };
+
+      // ผูกเลขครุภัณฑ์ทีหลัง — ต้องส่งฟิลด์เดิมทั้งหมดกลับไปด้วยเพราะ setDoc เป็น full replace ไม่ merge
+      window._fsResolveTag = (code, name) => {
+        const existing = DATA.equipment.find(x => String(x['รหัส']) === String(code));
+        if (!existing) { toast('ไม่พบข้อมูลอุปกรณ์นี้แล้ว', 'error'); return; }
+        openModal('🏷️ ผูกเลขครุภัณฑ์ให้ "' + esc(name) + '"', `
+          <div class="field full">
+            <label>เลขครุภัณฑ์ที่ตรวจสอบพบ *</label>
+            <input id="fs_resolve_code" placeholder="กรอกเลขครุภัณฑ์">
+          </div>
+        `, () => {
+          const newCode = ($('fs_resolve_code').value || '').trim();
+          if (!newCode) { toast('กรอกเลขครุภัณฑ์', 'warning'); return; }
+          const data = {
+            'รหัส': existing['รหัส'], 'รหัสครุภัณฑ์': newCode, 'ชื่ออุปกรณ์': existing['ชื่ออุปกรณ์'],
+            'หมวดหมู่': existing['หมวดหมู่'], 'ยี่ห้อ': existing['ยี่ห้อ'], 'รุ่น': existing['รุ่น'], 'Serial': existing['Serial'],
+            'จำนวน': existing['จำนวน'], 'หน่วยนับ': existing['หน่วยนับ'], 'ที่เก็บ': existing['ที่เก็บ'],
+            'มูลค่า': existing['มูลค่า'], 'สถานะ': existing['สถานะ'], 'วันที่จัดซื้อ': existing['วันที่จัดซื้อ'],
+            'หมายเหตุ': existing['หมายเหตุ'], 'สถานะป้ายครุภัณฑ์': 'มีป้าย',
+            'บันทึกจากการสำรวจภาคสนาม': existing['บันทึกจากการสำรวจภาคสนาม'],
+            'เชื่อมกับ': existing['เชื่อมกับ'], 'ผู้สำรวจ': existing['ผู้สำรวจ']
+          };
+          showLoading(true);
+          callApi('saveEquipment', data, ADMIN_PASS)
+            .then(r => {
+              showLoading(false);
+              if (r.success) { toast('ผูกเลขครุภัณฑ์สำเร็จ ✓'); closeModal(); refreshData(); }
+              else toast(r.message, 'error');
+            })
+            .catch(err => { showLoading(false); toast('ผิดพลาด: ' + err.message, 'error'); });
+        }, false);
+      };
+
+      $('content').innerHTML = render();
     }
 
     // ============== BORROWING ==============
