@@ -80,4 +80,4 @@ async function getDoc(collection, docId) {
   return doc.exists ? doc.data() : null;
 }
 
-module.exports = { db, SHEETS, COLLECTION, setDoc, deleteDoc, deleteField, listDocs, getDoc };
+module.exports = { db, app, SHEETS, COLLECTION, setDoc, deleteDoc, deleteField, listDocs, getDoc };

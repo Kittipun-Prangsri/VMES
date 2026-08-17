@@ -1,0 +1,17 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    // รูปครุภัณฑ์: อ่านได้ทุกคน (ใช้แสดงในตาราง/รายงาน) แต่เขียนได้เฉพาะ backend
+    // ผ่าน Firebase Admin SDK เท่านั้น (bypass rules ได้เหมือน Firestore) —
+    // ปิดการเขียนจากฝั่ง client เบราว์เซอร์ทั้งหมด สอดคล้องกับ firestore.rules
+    match /equipment-photos/{allPaths=**} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
