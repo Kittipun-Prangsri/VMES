@@ -1306,9 +1306,13 @@ tr:hover td {
       <button class="btn btn-primary btn-block" onclick="doLogin()" id="loginBtn">
         <span>🔐 เข้าสู่ระบบ</span>
       </button>
-      <!-- <div style="text-align:center;margin-top:18px;color:var(--gray-500);font-size:12px">
-      💡 รหัส Admin: <strong>11192</strong> | ผู้ใช้ทั่วไปรหัส: <strong>12345</strong>
-    </div> -->
+
+      <div style="margin-top: 12px; text-align: center;">
+        <button type="button" class="btn btn-block" onclick="loginAsNewEmployeeGuest()" style="background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); color: white; border: none; font-weight: 700; border-radius: 12px; padding: 12px; box-shadow: 0 4px 14px rgba(2,132,199,0.25);">
+          ✨ พนักงานใหม่? ยื่นขอสิทธิ์ HOSxP, Internet & VPN
+        </button>
+      </div>
+
       <div style="text-align:center;margin-top:16px">
         <button class="btn btn-secondary btn-sm" onclick="runSetup()">⚙️ ติดตั้งระบบครั้งแรก (setupSystem)</button>
       </div>
@@ -1543,6 +1547,26 @@ tr:hover td {
     }
     console.log('doLogin function defined and exposed on window.');
     window.doLogin = doLogin;
+
+    function loginAsNewEmployeeGuest() {
+      CURRENT_USER = {
+        name: 'พนักงานใหม่ (รพ.คลองหาด)',
+        role: 'พนักงานใหม่',
+        dept: 'แรกเข้าทำงาน',
+        isNewEmployee: true,
+        startDate: new Date().toISOString().split('T')[0]
+      };
+      const wrap = document.getElementById('loginWrap');
+      if (wrap) wrap.style.display = 'none';
+      const appEl = document.getElementById('app');
+      if (appEl) appEl.classList.add('active');
+      
+      updateUserHeader();
+      applyPermissions();
+      navigate('serviceRequests');
+      toast('เข้าสู่ระบบในฐานะพนักงานใหม่: ยื่นแบบฟอร์มขอใช้บริการ HOSxP/VPN', 'info');
+    }
+    window.loginAsNewEmployeeGuest = loginAsNewEmployeeGuest;
 
     function toggleLoginPasswordShow() {
       const pEl = document.getElementById('loginPass');
