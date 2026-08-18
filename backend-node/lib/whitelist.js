@@ -22,7 +22,7 @@ const {
   getBorrowingByCode,
   deleteBorrowing,
 } = require('./handlers/borrowing');
-const { saveUser, deleteUser, requestPasswordResetNotification, autoLinkLineUser } = require('./handlers/users');
+const { saveUser, deleteUser, requestPasswordResetNotification, autoLinkLineUser, bindLineByCitizenId } = require('./handlers/users');
 const { saveDriver, deleteDriver } = require('./handlers/drivers');
 const { saveBooking, approveBooking, deleteBooking } = require('./handlers/booking');
 const { saveInspection, deleteInspection } = require('./handlers/inspection');
@@ -122,6 +122,7 @@ const API_WHITELIST = {
   changeUserPassword,
   updateUserProfile,
   autoLinkLineUser,
+  bindLineByCitizenId,
 
   // Service Requests & WiFi QR
   getServiceRequests,

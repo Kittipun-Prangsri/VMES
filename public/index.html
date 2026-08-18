@@ -1371,7 +1371,7 @@ tr:hover td {
           LIVE
         </div>
         <button class="btn btn-warning btn-sm" id="btnGlobalScanQr" onclick="openGlobalQrScannerModal()" title="สแกน QR Code">📷 สแกน QR</button>
-        <button class="btn btn-info btn-sm" id="btnLine" onclick="testLine()" title="ทดสอบ LINE">📲 LINE</button>
+        <button class="btn btn-info btn-sm" id="btnLine" onclick="openBindLineModal()" title="ผูกบัญชี LINE กับเลขบัตรประชาชน 13 หลัก">📲 ผูก LINE 13 หลัก</button>
         <div class="user-chip" onclick="openUserProfileModal()" style="cursor: pointer;" title="คลิกเพื่อจัดการโปรไฟล์และเปลี่ยนรหัสผ่าน">
           <div class="avatar" id="userAvatar">A</div>
           <div class="info">
@@ -1885,6 +1885,9 @@ tr:hover td {
       </div>
 
       <div style="display:flex; flex-direction:column; gap:10px;">
+        <button class="btn btn-info btn-block" onclick="openBindLineModal()" type="button" style="min-height:44px; background:linear-gradient(135deg,#0284c7,#0369a1); color:#fff; border:none; font-weight:700;">
+          📱 ผูกบัญชี LINE 13 หลักสำหรับรับแจ้งเตือนส่วนตัว
+        </button>
         <button class="btn btn-primary btn-block" onclick="openChangePasswordModal()" type="button" style="min-height:44px;">
           🔑 เปลี่ยนรหัสผ่านส่วนตัว
         </button>
@@ -1899,6 +1902,76 @@ tr:hover td {
       if (saveBtn) saveBtn.style.display = 'none';
     }
     window.openUserProfileModal = openUserProfileModal;
+
+    function openBindLineModal() {
+      const defaultId = (CURRENT_USER && (CURRENT_USER.idCard || CURRENT_USER['เลขบัตรประชาชน'] || CURRENT_USER.username)) || '';
+      const defaultLineId = (CURRENT_USER && CURRENT_USER['LINE ID']) || '';
+
+      const modalBody = `
+      <div style="text-align:center; padding:10px 0;">
+        <div style="font-size:44px; margin-bottom:8px;">📱</div>
+        <h3 style="margin:0; font-size:18px; font-weight:700; color:var(--gray-900);">ผูกบัญชี LINE กับเลขบัตรประชาชน 13 หลัก</h3>
+        <p style="font-size:13px; color:var(--gray-500); margin-top:4px;">เพื่อรับการ์ด Flex Message แจ้งเตือนสถานะส่วนตัวเข้า LINE ทันที</p>
+      </div>
+
+      <div class="form-grid" style="padding:10px 0;">
+        <div class="field full">
+          <label>เลขบัตรประชาชน 13 หลัก *</label>
+          <input type="text" id="bind_id_card" maxlength="13" value="${esc(defaultId)}" placeholder="กรอกเลขบัตรประชาชน 13 หลัก">
+        </div>
+        <div class="field full">
+          <label>LINE User ID (ขึ้นต้นด้วย U...) *</label>
+          <input type="text" id="bind_line_id" value="${esc(defaultLineId)}" placeholder="เช่น U1234567890abcdef1234567890abcdef">
+          <div style="font-size:12px; color:var(--gray-500); margin-top:4px;">
+            💡 พิมพ์คำว่า <strong>"ID"</strong> ในแชท LINE Official Bot ของโรงพยาบาล เพื่อรับเลข LINE User ID ของคุณ
+          </div>
+        </div>
+        <div class="field full">
+          <label>ชื่อแสดงใน LINE (LINE Display Name)</label>
+          <input type="text" id="bind_line_name" placeholder="เช่น Somchai (LINE)">
+        </div>
+      </div>
+      `;
+
+      openModal('📲 ผูกบัญชี LINE 13 หลัก', modalBody, submitBindLineByCitizenId, true);
+    }
+    window.openBindLineModal = openBindLineModal;
+
+    function submitBindLineByCitizenId() {
+      const idCard = $('bind_id_card').value.trim();
+      const lineId = $('bind_line_id').value.trim();
+      const lineName = $('bind_line_name') ? $('bind_line_name').value.trim() : '';
+
+      if (!idCard || idCard.length < 13) {
+        toast('กรุณากรอกเลขบัตรประชาชน 13 หลักให้ถูกต้อง', 'warning');
+        return;
+      }
+      if (!lineId || !lineId.startsWith('U')) {
+        toast('LINE User ID ต้องขึ้นต้นด้วยตัวอักษร U (เช่น U123456...)', 'warning');
+        return;
+      }
+
+      showLoading(true);
+      callApi('bindLineByCitizenId', idCard, lineId, lineName)
+        .then(r => {
+          showLoading(false);
+          if (r.success) {
+            toast(r.message || 'ผูกบัญชี LINE เรียบร้อยแล้ว!');
+            if (CURRENT_USER) {
+              CURRENT_USER['LINE ID'] = lineId;
+              storageSet('vmes_session_user', JSON.stringify(CURRENT_USER));
+            }
+            closeModal();
+          } else {
+            toast(r.message || 'ผูกบัญชีไม่สำเร็จ', 'error');
+          }
+        })
+        .catch(err => {
+          showLoading(false);
+          toast('ข้อผิดพลาด: ' + err.message, 'error');
+        });
+    }
+    window.submitBindLineByCitizenId = submitBindLineByCitizenId;
 
     function openChangePasswordModal() {
       if (!CURRENT_USER) return;

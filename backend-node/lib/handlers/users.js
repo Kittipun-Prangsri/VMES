@@ -136,5 +136,75 @@ async function autoLinkLineUser(lineUserId, displayName, userCodeOrName) {
     return { success: false, message: 'ข้อผิดพลาด: ' + err.message };
   }
 }
+async function bindLineByCitizenId(idCard, lineUserId, displayName) {
+  try {
+    if (!idCard) return { success: false, message: 'กรุณากรอกเลขบัตรประชาชน 13 หลัก' };
+    const cleanId = String(idCard).replace(/['\s-]/g, '');
+    const cleanLineId = String(lineUserId || '').trim();
 
-module.exports = { getUsers, getUserLineId, saveUser, deleteUser, requestPasswordResetNotification, autoLinkLineUser };
+    if (cleanId.length < 13) {
+      return { success: false, message: 'เลขบัตรประชาชนต้องมี 13 หลัก' };
+    }
+    if (!cleanLineId) {
+      return { success: false, message: 'ไม่พบ LINE User ID' };
+    }
+
+    const users = await getUsers();
+    let matchedUser = users.find((u) => {
+      const uCard = String(u['เลขบัตรประชาชน'] || u.idCard || '').replace(/['\s-]/g, '');
+      const uUser = String(u['ชื่อผู้ใช้'] || '').replace(/['\s-]/g, '');
+      return uCard === cleanId || uUser === cleanId;
+    });
+
+    if (matchedUser && matchedUser['รหัส']) {
+      const updated = {
+        ...matchedUser,
+        'LINE ID': cleanLineId,
+        'เลขบัตรประชาชน': cleanId
+      };
+      if (displayName) updated['LINE Display Name'] = displayName;
+
+      await setDoc(SHEETS.USERS, matchedUser['รหัส'], updated);
+      await logAudit('ผูกบัญชี LINE 13 หลัก', matchedUser['ชื่อ-นามสกุล'] || cleanId, `LINE ID: ${cleanLineId}`);
+      return {
+        success: true,
+        message: `ผูกบัญชี LINE กับคุณ "${matchedUser['ชื่อ-นามสกุล'] || cleanId}" เรียบร้อยแล้ว!`,
+        userName: matchedUser['ชื่อ-นามสกุล']
+      };
+    }
+
+    // Also update in serviceRequests if any
+    const requests = await listDocs(SHEETS.SERVICE_REQUESTS);
+    const matchedReq = requests.find((r) => String(r.idCard || '').replace(/['\s-]/g, '') === cleanId);
+    if (matchedReq) {
+      matchedReq.lineUserId = cleanLineId;
+      if (displayName) matchedReq.lineDisplayName = displayName;
+      await setDoc(SHEETS.SERVICE_REQUESTS, matchedReq.id, matchedReq);
+    }
+
+    // If no user record exists in USERS yet, create a pending user record bound to this ID card!
+    const newDocId = newId('UR');
+    const newUser = {
+      'รหัส': newDocId,
+      'ชื่อ-นามสกุล': (matchedReq && matchedReq.nameTh) || `ผู้ใช้งาน (${cleanId.slice(-4)})`,
+      'เลขบัตรประชาชน': cleanId,
+      'ชื่อผู้ใช้': cleanId,
+      'LINE ID': cleanLineId,
+      'LINE Display Name': displayName || '-',
+      'บทบาท': 'พนักงานใหม่',
+      'วันที่บันทึก': todayStr()
+    };
+    await setDoc(SHEETS.USERS, newDocId, newUser);
+    await logAudit('ลงทะเบียน LINE พนักงานใหม่ 13 หลัก', newUser['ชื่อ-นามสกุล'], `LINE ID: ${cleanLineId}`);
+
+    return {
+      success: true,
+      message: `ลงทะเบียนผูกบัญชี LINE สำหรับเลขบัตร 13 หลักเรียบร้อยแล้ว!`,
+      userName: newUser['ชื่อ-นามสกุล']
+    };
+  } catch (err) {
+    return { success: false, message: 'เกิดข้อผิดพลาด: ' + err.message };
+  }
+}
+
+module.exports = { getUsers, getUserLineId, saveUser, deleteUser, requestPasswordResetNotification, autoLinkLineUser, bindLineByCitizenId };
