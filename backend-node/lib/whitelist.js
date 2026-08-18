@@ -30,6 +30,14 @@ const { saveDepartment, deleteDepartment } = require('./handlers/departments');
 const { importUsers, importEquipment, importVehicles, importDrivers, fetchGoogleSheetData } = require('./handlers/imports');
 const { exportToCSV, getDashboard, checkOverdue } = require('./handlers/dashboard');
 const { testLineNotify, testUserLine, testTelegramNotification } = require('./line');
+const {
+  getServiceRequests,
+  trackServiceRequest,
+  createServiceRequest,
+  updateServiceRequestStatus,
+  getWifiQrLogs,
+  createWifiQrLog,
+} = require('./handlers/serviceRequests');
 
 const API_WHITELIST = {
   // Auth / Bootstrap
@@ -114,6 +122,14 @@ const API_WHITELIST = {
   changeUserPassword,
   updateUserProfile,
   autoLinkLineUser,
+
+  // Service Requests & WiFi QR
+  getServiceRequests,
+  trackServiceRequest,
+  createServiceRequest,
+  updateServiceRequestStatus,
+  getWifiQrLogs,
+  createWifiQrLog,
 };
 
 module.exports = { API_WHITELIST };
