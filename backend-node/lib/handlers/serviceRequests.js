@@ -4,6 +4,7 @@
 const { SHEETS, setDoc, listDocs, getDoc } = require('../firestore');
 const { newId, nowStr, todayStr, logAudit } = require('../util');
 const { verifyAdmin } = require('../auth');
+const { sendServiceRequestFlex, sendTelegramServiceNotify } = require('../line');
 
 /**
  * ดึงรายการคำขอใช้บริการทั้งหมด (สำหรับ Admin / Manager)
@@ -110,6 +111,15 @@ async function createServiceRequest(formData) {
     await setDoc(SHEETS.SERVICE_REQUESTS, docId, newReq);
     await logAudit('ขอใช้บริการ IT', formData.nameTh, `ประเภทคำขอ: ${newReq.requestType}, เลขบัตร: ${newReq.idCard}`);
 
+    // แจ้งเตือนผ่าน LINE Flex & Telegram Bot
+    try {
+      await sendServiceRequestFlex(newReq, 'รอพิจารณา');
+      const tgMsg = `📩 <b>มีคำขอใช้งานใหม่!</b>\n👤 <b>ชื่อ:</b> ${newReq.nameTh}\n💼 <b>ตำแหน่ง:</b> ${newReq.position}\n📌 <b>ประเภท:</b> ${newReq.requestType}\n📅 <b>เวลา:</b> ${newReq.createdAt}`;
+      await sendTelegramServiceNotify(tgMsg);
+    } catch (e) {
+      console.error('Notification dispatch error:', e);
+    }
+
     return { success: true, message: 'บันทึกคำขอใช้บริการเรียบร้อยแล้ว', docId };
   } catch (err) {
     return { success: false, message: err.message };
@@ -148,6 +158,16 @@ async function updateServiceRequestStatus(updateData, adminCode) {
 
     await setDoc(SHEETS.SERVICE_REQUESTS, docId, updated);
     await logAudit('อัปเดตคำขอ IT', 'admin', `รหัส: ${docId}, สถานะ: ${updated.status}`);
+
+    // แจ้งเตือนผลการอนุมัติผ่าน LINE Flex & Telegram
+    try {
+      await sendServiceRequestFlex(updated, updated.status);
+      const tgStatusIcon = updated.status === 'อนุมัติ' ? '✅' : (updated.status === 'ไม่อนุมัติ' ? '❌' : '⏳');
+      const tgMsg = `${tgStatusIcon} <b>อัปเดตสถานะคำขอ IT!</b>\n👤 <b>ผู้ขอ:</b> ${updated.nameTh}\n📌 <b>ประเภท:</b> ${updated.requestType}\n📊 <b>สถานะ:</b> ${updated.status}${updated.remark && updated.remark !== '-' ? '\n📝 <b>หมายเหตุ:</b> ' + updated.remark : ''}`;
+      await sendTelegramServiceNotify(tgMsg);
+    } catch (e) {
+      console.error('Notification status error:', e);
+    }
 
     return { success: true, message: `อัปเดตสถานะเป็น "${updated.status}" เรียบร้อยแล้ว` };
   } catch (err) {

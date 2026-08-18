@@ -526,6 +526,84 @@ async function testTelegramNotification(botToken, chatId) {
   }
 }
 
+async function sendServiceRequestFlex(data, status, targetId) {
+  const isApproved = status === 'อนุมัติ';
+  const isRejected = status === 'ไม่อนุมัติ';
+  const color = isApproved ? '#10b981' : (isRejected ? '#ef4444' : '#0284c7');
+  const icon = isApproved ? '✅' : (isRejected ? '❌' : '📩');
+  
+  const flex = {
+    type: 'bubble',
+    size: 'mega',
+    header: {
+      type: 'box',
+      layout: 'vertical',
+      backgroundColor: color,
+      paddingAll: '20px',
+      contents: [
+        { type: 'text', text: `${icon} คำขอใช้บริการ IT: ${status}`, color: '#ffffff', size: 'xl', weight: 'bold' },
+        { type: 'text', text: `ประเภท: ${data.requestType || 'HOSxP/VPN'}`, color: '#ffffff', size: 'sm', margin: 'sm' },
+      ],
+    },
+    body: {
+      type: 'box',
+      layout: 'vertical',
+      spacing: 'md',
+      paddingAll: '20px',
+      contents: [
+        {
+          type: 'box',
+          layout: 'vertical',
+          spacing: 'sm',
+          contents: [
+            flexRow('👤 ผู้ขอใช้บริการ', String(data.nameTh || '-')),
+            flexRow('💼 ตำแหน่ง', String(data.position || '-')),
+            flexRow('🪪 เลขบัตรประชาชน', String(data.idCard || '-')),
+            flexRow('📞 ติดต่อ', String(data.email || data.lineId || '-')),
+            data.requestType === 'VPN' ? flexRow('🎯 วัตถุประสงค์', String(data.vpnPurpose || '-')) : null,
+          ].filter(Boolean),
+        },
+        data.remark && data.remark !== '-' ? { type: 'text', text: '📝 หมายเหตุ: ' + data.remark, size: 'xs', color: '#ef4444', margin: 'md' } : null,
+      ].filter(Boolean),
+    },
+    footer: {
+      type: 'box',
+      layout: 'vertical',
+      spacing: 'sm',
+      paddingAll: '16px',
+      backgroundColor: '#f1f5f9',
+      contents: [
+        {
+          type: 'button',
+          style: 'primary',
+          color: '#0284c7',
+          height: 'sm',
+          action: { type: 'uri', label: '🔍 ติดตามคำขอในระบบ (vmes.web.app)', uri: 'https://vmes.web.app/#serviceRequests' },
+        },
+        { type: 'text', text: '⏱ ' + nowStr() + ' | ' + SYSTEM_NAME, size: 'xxs', color: '#94a3b8', align: 'center', margin: 'sm' },
+      ],
+    },
+  };
+
+  return sendLineFlex(`${icon} คำขอใช้บริการ IT: ${data.nameTh || ''}`, flex, targetId);
+}
+
+async function sendTelegramServiceNotify(htmlMessage) {
+  const botToken = (process.env.TELEGRAM_BOT_TOKEN || '7931324702:AAGVf1TZ808MWdiVq3uVoNU3DKJ0Z8ppt00').trim();
+  const chatId = (process.env.TELEGRAM_CHAT_ID || '7857036135').trim();
+  if (!botToken || !chatId) return;
+  try {
+    const url = 'https://api.telegram.org/bot' + botToken + '/sendMessage';
+    await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, text: htmlMessage, parse_mode: 'HTML' }),
+    });
+  } catch (e) {
+    console.error('Telegram notification error:', e);
+  }
+}
+
 module.exports = {
   getLineToken,
   getLineGroupId,
@@ -534,6 +612,8 @@ module.exports = {
   sendVehicleUsageFlex,
   sendBookingFlex,
   sendSmartSystemAlertFlex,
+  sendServiceRequestFlex,
+  sendTelegramServiceNotify,
   flexRow,
   replyMessage,
   replyLineFlex,
