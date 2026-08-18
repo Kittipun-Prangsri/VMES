@@ -9,6 +9,86 @@ const { getVehicles } = require('../lib/handlers/vehicles');
 const { getEquipment } = require('../lib/handlers/equipment');
 const { getBorrowing, updateBorrowingStatus } = require('../lib/handlers/borrowing');
 
+const { bindLineByCitizenId } = require('../lib/handlers/users');
+
+async function handleAutoBind13Digit(replyToken, userId, userMessage) {
+  try {
+    const match = userMessage.match(/\d{13}/);
+    if (!match) return false;
+    const citizenId = match[0];
+
+    const result = await bindLineByCitizenId(citizenId, userId, 'LINE User');
+    const isSuccess = result.success;
+    const headerColor = isSuccess ? '#10b981' : '#ef4444';
+    const headerText = isSuccess ? '🎉 ผูกบัญชี LINE อัตโนมัติสำเร็จ!' : '❌ ผูกบัญชี LINE ไม่สำเร็จ';
+
+    const flexContent = {
+      type: 'bubble',
+      size: 'mega',
+      header: {
+        type: 'box',
+        layout: 'vertical',
+        backgroundColor: headerColor,
+        paddingAll: '20px',
+        contents: [
+          { type: 'text', text: headerText, color: '#ffffff', size: 'lg', weight: 'bold' },
+          { type: 'text', text: 'ระบบผูก LINE ID อัตโนมัติแบบไม่ต้องคัดลอก', color: '#ffffff', size: 'xs', margin: 'xs', opacity: 0.9 },
+        ],
+      },
+      body: {
+        type: 'box',
+        layout: 'vertical',
+        spacing: 'md',
+        paddingAll: '20px',
+        contents: [
+          {
+            type: 'box',
+            layout: 'vertical',
+            backgroundColor: '#f8fafc',
+            cornerRadius: '12px',
+            paddingAll: '16px',
+            contents: [
+              { type: 'text', text: '👤 ชื่อผู้ใช้งานระบบ:', size: 'xs', color: '#64748b' },
+              { type: 'text', text: result.userName || 'ผู้ใช้งานระบบ', size: 'md', weight: 'bold', color: '#0f172a' },
+              { type: 'text', text: '🪪 เลขบัตรประชาชน: ' + citizenId, size: 'xs', color: '#475569', margin: 'xs' },
+            ],
+          },
+          {
+            type: 'text',
+            text: result.message || 'ระบบนำ LINE User ID ไปลงในตารางผู้ใช้ให้อัตโนมัติแล้วเรียบร้อยครับ!',
+            size: 'sm',
+            color: '#334155',
+            wrap: true,
+            margin: 'md',
+          },
+        ],
+      },
+      footer: {
+        type: 'box',
+        layout: 'vertical',
+        paddingAll: '12px',
+        backgroundColor: '#f1f5f9',
+        contents: [
+          {
+            type: 'button',
+            style: 'primary',
+            color: '#10b981',
+            height: 'sm',
+            action: { type: 'uri', label: '🌐 เข้าสู่ระบบ VMES (vmes.web.app)', uri: 'https://vmes.web.app' },
+          },
+          { type: 'text', text: SYSTEM_NAME, size: 'xxs', color: '#94a3b8', align: 'center', margin: 'sm' },
+        ],
+      },
+    };
+
+    await replyLineFlex(replyToken, isSuccess ? '🎉 ผูกบัญชี LINE สำเร็จ' : '❌ ผูกบัญชีไม่สำเร็จ', flexContent);
+    return true;
+  } catch (err) {
+    console.error('handleAutoBind13Digit error:', err);
+    return false;
+  }
+}
+
 async function handleAskId(replyToken, userId) {
   const truncatedUserId = safeTruncate(userId, 50);
   const flexContent = {
@@ -20,8 +100,8 @@ async function handleAskId(replyToken, userId) {
       backgroundColor: '#4f46e5',
       paddingAll: '20px',
       contents: [
-        { type: 'text', text: '🆔 LINE User ID', color: '#ffffff', size: 'lg', weight: 'bold' },
-        { type: 'text', text: 'รหัสประจำตัวของคุณในระบบ LINE', color: '#bfdbfe', size: 'xs', margin: 'xs' },
+        { type: 'text', text: '🆔 LINE User ID & ผูกบัญชี', color: '#ffffff', size: 'lg', weight: 'bold' },
+        { type: 'text', text: 'ระบบผูก LINE ID อัตโนมัติ ไม่ต้องพิมพ์/คัดลอก!', color: '#bfdbfe', size: 'xs', margin: 'xs' },
       ],
     },
     body: {
@@ -33,23 +113,28 @@ async function handleAskId(replyToken, userId) {
         {
           type: 'box',
           layout: 'vertical',
-          backgroundColor: '#f8fafc',
-          cornerRadius: '8px',
+          backgroundColor: '#eff6ff',
+          cornerRadius: '12px',
           paddingAll: '16px',
           borderWidth: '1px',
-          borderColor: '#e2e8f0',
+          borderColor: '#bfdbfe',
           contents: [
-            { type: 'text', text: 'LINE User ID', size: 'xs', color: '#64748b', weight: 'bold' },
-            { type: 'text', text: truncatedUserId, size: 'sm', color: '#0f172a', margin: 'xs', weight: 'bold', wrap: true },
+            { type: 'text', text: '✨ ผูกบัญชีอัตโนมัติง่ายๆ ใน 1 วินาที:', size: 'xs', color: '#1d4ed8', weight: 'bold' },
+            { type: 'text', text: 'เพียงพิมพ์ "เลขบัตรประชาชน 13 หลัก" ส่งเข้ามาในแชทนี้ได้เลยครับ!', size: 'sm', color: '#1e40af', margin: 'xs', weight: 'bold', wrap: true },
+            { type: 'text', text: '(เช่น พิมพ์ 1270400015079 ส่งมาในแชท)', size: 'xs', color: '#4b5563', margin: 'xs' },
           ],
         },
         {
-          type: 'text',
-          text: '💡 นำ ID นี้ระบุในโปรไฟล์ผู้ใช้งานของระบบ เพื่อรับการแจ้งเตือนและติดตามสถานะการยืม-คืนอุปกรณ์',
-          size: 'xs',
-          color: '#64748b',
-          wrap: true,
-          margin: 'md',
+          type: 'box',
+          layout: 'vertical',
+          backgroundColor: '#f8fafc',
+          cornerRadius: '8px',
+          paddingAll: '12px',
+          margin: 'sm',
+          contents: [
+            { type: 'text', text: 'LINE User ID ประจำตัวของคุณ:', size: 'xxs', color: '#64748b' },
+            { type: 'text', text: truncatedUserId, size: 'xs', color: '#0f172a', weight: 'bold', wrap: true },
+          ],
         },
       ],
     },
@@ -61,7 +146,7 @@ async function handleAskId(replyToken, userId) {
       contents: [{ type: 'text', text: SYSTEM_NAME, size: 'xxs', color: '#94a3b8', align: 'center' }],
     },
   };
-  await replyLineFlex(replyToken, '🆔 LINE User ID ของคุณ', flexContent);
+  await replyLineFlex(replyToken, '🆔 ผูกบัญชี LINE อัตโนมัติ', flexContent);
 }
 
 function simpleErrorBubble(headerColor, headerText, bodyText) {
@@ -791,6 +876,10 @@ module.exports = async function handler(req, res) {
       // 1. ขอไอดี
       if (msgLower === 'ขอไอดี' || msgLower === 'id' || msgLower === 'user id') {
         await handleAskId(replyToken, userId);
+      }
+      // 1.5 ผูกบัญชีอัตโนมัติด้วยเลขบัตรประชาชน 13 หลัก (ไม่ต้องคัดลอก LINE User ID)
+      else if (/\d{13}/.test(userMessage)) {
+        await handleAutoBind13Digit(replyToken, userId, userMessage);
       }
       // 2. แจ้งคืนอุปกรณ์
       else if (msgLower.indexOf('คืน br-') !== -1 || msgLower.indexOf('แจ้งคืน br-') !== -1) {
