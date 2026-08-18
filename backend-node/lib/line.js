@@ -115,6 +115,14 @@ async function sendBorrowingFlex(data, status, targetId) {
       height: 'sm',
       action: { type: 'message', label: '⏳ ขอขยายเวลาคืน', text: 'ขอขยายเวลา ' + String(data['รหัส'] || '') },
     });
+  } else if (status === 'คืนเสร็จสิ้น') {
+    footerButtons.unshift({
+      type: 'button',
+      style: 'primary',
+      color: '#f59e0b',
+      height: 'sm',
+      action: { type: 'uri', label: '⭐ ประเมินความพึงพอใจการยืม', uri: 'https://vmes.web.app/#borrowing' },
+    });
   }
 
   const flex = {
@@ -573,6 +581,15 @@ async function sendServiceRequestFlex(data, status, targetId) {
       paddingAll: '16px',
       backgroundColor: '#f1f5f9',
       contents: [
+        isApproved
+          ? {
+              type: 'button',
+              style: 'primary',
+              color: '#f59e0b',
+              height: 'sm',
+              action: { type: 'uri', label: '⭐ ประเมินความพึงพอใจการบริการ', uri: 'https://vmes.web.app/#serviceRequests' },
+            }
+          : null,
         {
           type: 'button',
           style: 'primary',
@@ -581,7 +598,7 @@ async function sendServiceRequestFlex(data, status, targetId) {
           action: { type: 'uri', label: '🔍 ติดตามคำขอในระบบ (vmes.web.app)', uri: 'https://vmes.web.app/#serviceRequests' },
         },
         { type: 'text', text: '⏱ ' + nowStr() + ' | ' + SYSTEM_NAME, size: 'xxs', color: '#94a3b8', align: 'center', margin: 'sm' },
-      ],
+      ].filter(Boolean),
     },
   };
 
