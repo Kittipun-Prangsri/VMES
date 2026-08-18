@@ -1323,16 +1323,16 @@ tr:hover td {
         <p style="font-size: 11px; opacity: 0.85; margin-top: 2px;">ระบบบริหารจัดการยานพาหนะและอุปกรณ์</p>
       </div>
       <nav class="sidebar-menu">
-        <div class="menu-section">หน้าหลัก</div>
+        <div class="menu-section" id="secMain">หน้าหลัก</div>
         <div class="menu-item active" data-page="dashboard"><span class="menu-icon">📊</span>แดชบอร์ดรวม</div>
 
-        <div class="menu-section" style="color:#38bdf8; font-weight:700; display:flex; align-items:center; gap:4px;">⭐ ระบบอุปกรณ์ (งานหลัก)</div>
+        <div class="menu-section" id="secEquipment" style="color:#38bdf8; font-weight:700; display:flex; align-items:center; gap:4px;">⭐ ระบบอุปกรณ์ (งานหลัก)</div>
         <div class="menu-item featured" data-page="borrowing"><span class="menu-icon">📦</span>ระบบยืม-คืนอุปกรณ์ <span class="menu-badge" id="badgeBorrow"></span></div>
         <div class="menu-item featured" data-page="equipment"><span class="menu-icon">💻</span>คลังอุปกรณ์ทั้งหมด</div>
         <div class="menu-item featured" data-page="fieldSurvey"><span class="menu-icon">🔎</span>สำรวจภาคสนาม</div>
         <div class="menu-item featured" data-page="qrBatch"><span class="menu-icon">🖨️</span>พิมพ์ป้าย QR แบบชุด</div>
 
-        <div class="menu-section">ยานพาหนะ</div>
+        <div class="menu-section" id="secVehicles">ยานพาหนะ</div>
         <div class="menu-item" data-page="vehicles"><span class="menu-icon">🚗</span>ข้อมูลรถทั้งหมด</div>
         <div class="menu-item" data-page="usage"><span class="menu-icon">📋</span>บันทึกการใช้รถ</div>
         <div class="menu-item" data-page="booking"><span class="menu-icon">📅</span>จองรถล่วงหน้า</div>
@@ -1340,12 +1340,12 @@ tr:hover td {
         <div class="menu-item" data-page="fuel"><span class="menu-icon">⛽</span>การใช้น้ำมัน</div>
         <div class="menu-item" data-page="inspection"><span class="menu-icon">🔍</span>ตรวจสภาพรถ</div>
 
-        <div class="menu-section">บุคลากร</div>
+        <div class="menu-section" id="secUsers">บุคลากร</div>
         <div class="menu-item" data-page="drivers"><span class="menu-icon">👨‍✈️</span>พนักงานขับรถ</div>
         <div class="menu-item" data-page="users"><span class="menu-icon">👥</span>ผู้ใช้งานระบบ</div>
         <div class="menu-item" data-page="departments"><span class="menu-icon">🏢</span>หน่วยงาน</div>
 
-        <div class="menu-section" style="color:#a855f7; font-weight:700; display:flex; align-items:center; gap:4px;">🌐 บริการไอที &amp; VPN</div>
+        <div class="menu-section" id="secIt" style="color:#a855f7; font-weight:700; display:flex; align-items:center; gap:4px;">🌐 บริการไอที &amp; VPN</div>
         <div class="menu-item featured" data-page="serviceRequests"><span class="menu-icon">📝</span>ขอใช้บริการ HOSxP/VPN</div>
         <div class="menu-item featured" data-page="wifiQr"><span class="menu-icon">📶</span>สร้าง &amp; คลัง WiFi QR</div>
 
@@ -1655,8 +1655,50 @@ tr:hover td {
       } catch (e) {
         console.error('Failed to parse SYSTEM_ROLES:', e);
       }
-      return roles || ['superadmin', 'admin', 'manager', 'user', 'ผู้ใช้งานเฉพาะตัวเอง', 'พนักงานขับรถ'];
+      return roles || ['superadmin', 'admin', 'manager', 'user', 'ผู้ใช้งานเฉพาะตัวเอง', 'พนักงานขับรถ', 'พนักงานใหม่'];
     }
+
+    function isNewEmployeeLocked(user) {
+      if (!user) return false;
+      const role = String(user.role || '').toLowerCase();
+      if (role === 'admin' || role === 'superadmin' || role === 'manager' || user.role === 'พนักงานขับรถ') {
+        return false;
+      }
+      
+      const isExplicitNew = user.role === 'new_employee' || user.role === 'พนักงานใหม่' || user.isNewEmployee === true;
+      
+      let monthsOfWork = 99;
+      const startStr = user.startDate || user['วันเริ่มงาน'] || user.createdDate || user.createdAt;
+      if (startStr) {
+        const startDate = new Date(startStr);
+        if (!isNaN(startDate.getTime())) {
+          const diffDays = Math.ceil(Math.abs(new Date() - startDate) / (1000 * 60 * 60 * 24));
+          monthsOfWork = diffDays / 30;
+        }
+      }
+
+      let hasApprovedAccount = user.hasAccounts === true || user.hasAccount === true;
+      if (!hasApprovedAccount && window.DATA && Array.isArray(window.DATA.serviceRequests)) {
+        const cleanUserCard = String(user.idCard || user['เลขบัตรประชาชน'] || '').replace(/['\s-]/g, '');
+        const cleanUserName = String(user.name || user['ชื่อ-นามสกุล'] || '').trim();
+
+        const matchedReq = window.DATA.serviceRequests.find(r => {
+          const cardMatch = cleanUserCard && String(r.idCard || '').replace(/['\s-]/g, '') === cleanUserCard;
+          const nameMatch = cleanUserName && String(r.nameTh || '').trim() === cleanUserName;
+          return (cardMatch || nameMatch) && (r.status === 'อนุมัติ');
+        });
+        if (matchedReq) hasApprovedAccount = true;
+      }
+
+      if (hasApprovedAccount) return false; // Approved HOSxP/VPN account unlocks full access
+      if (monthsOfWork >= 3) return false; // Tenure >= 3 months (90 days) unlocks full access
+
+      if (isExplicitNew) return true; // Locked to HOSxP/VPN service request
+      if (user.role === 'user' && user.isNewUser) return true;
+
+      return false;
+    }
+    window.isNewEmployeeLocked = isNewEmployeeLocked;
 
     function applyPermissions() {
       // Get role permissions configuration
@@ -1679,7 +1721,8 @@ tr:hover td {
           "manager": { "dashboard": true, "vehicles": true, "usage": true, "booking": true, "maintenance": true, "fuel": true, "inspection": true, "equipment": true, "borrowing": true, "drivers": true, "users": true, "departments": true, "reports": true, "notifications": true, "audit": false, "settings": false },
           "user": defaultUserPerm,
           "ผู้ใช้งานเฉพาะตัวเอง": defaultUserPerm,
-          "พนักงานขับรถ": defaultUserPerm
+          "พนักงานขับรถ": defaultUserPerm,
+          "พนักงานใหม่": { "serviceRequests": true }
         };
       }
 
@@ -1694,8 +1737,33 @@ tr:hover td {
         m.classList.remove('disabled');
         m.style.display = '';
       });
-      if (sectionReports) sectionReports.style.display = '';
+      ['secMain', 'secEquipment', 'secVehicles', 'secUsers', 'secIt', 'sectionReports'].forEach(secId => {
+        const el = $(secId);
+        if (el) el.style.display = '';
+      });
       if (btnLine) btnLine.style.display = '';
+
+      // Check New Employee Restriction (Shows only serviceRequests if locked)
+      if (isNewEmployeeLocked(CURRENT_USER)) {
+        ['secMain', 'secEquipment', 'secVehicles', 'secUsers', 'sectionReports'].forEach(secId => {
+          const el = $(secId);
+          if (el) el.style.display = 'none';
+        });
+
+        document.querySelectorAll('.menu-item').forEach(m => {
+          if (m.dataset.page !== 'serviceRequests') {
+            m.style.display = 'none';
+          } else {
+            m.style.display = '';
+            m.classList.remove('disabled');
+          }
+        });
+
+        if (CURRENT_PAGE !== 'serviceRequests') {
+          navigate('serviceRequests');
+        }
+        return;
+      }
 
       // Get permissions for current role (fallback to user if not found)
       const rolePerm = perm[role] || perm["user"] || { "dashboard": true };
@@ -2001,6 +2069,11 @@ tr:hover td {
       if (!DATA || !Array.isArray(DATA.vehicles)) { showSetupScreen('ยังไม่มีข้อมูล กรุณาติดตั้งระบบก่อน'); return; }
       
       // Access control
+      if (isNewEmployeeLocked(CURRENT_USER) && page !== 'serviceRequests') {
+        toast('สิทธิ์พนักงานใหม่: อนุญาตเฉพาะขอใช้บริการ HOSxP/VPN เท่านั้น (จะเปิดเมนูอื่นเมื่ออนุมัติรหัส/อายุงานครบ 3-6 เดือน)', 'warning');
+        page = 'serviceRequests';
+      }
+
       const targetMenu = document.querySelector(`.menu-item[data-page="${page}"]`);
       if (targetMenu && targetMenu.classList.contains('disabled')) {
         toast('คุณไม่มีสิทธิ์เข้าถึงหน้านี้', 'error');
@@ -7046,6 +7119,21 @@ tr:hover td {
       const isStaff = canManageEquipment() || isAdmin();
       const content = $('content');
 
+      let newEmployeeNotice = '';
+      if (isNewEmployeeLocked(CURRENT_USER)) {
+        newEmployeeNotice = `
+        <div style="background:linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%); border:1px solid #93c5fd; border-radius:16px; padding:16px 20px; margin-bottom:20px; color:#1e40af; display:flex; align-items:center; gap:14px; box-shadow:0 4px 12px rgba(59,130,246,0.12);">
+          <div style="font-size:32px;">🆕</div>
+          <div>
+            <div style="font-weight:700; font-size:16px; margin-bottom:2px;">สิทธิ์การใช้งานสำหรับพนักงานใหม่ (โรงพยาบาลคลองหาด)</div>
+            <div style="font-size:13px; opacity:0.95; line-height:1.5;">
+              ยินดีต้อนรับพนักงานใหม่! ระบบเปิดสิทธิ์ให้ยื่นแบบฟอร์มขอใช้งาน HOSxP, Internet และ VPN เพื่อออกรหัสเข้าใช้งานก่อน<br>
+              <strong>🔓 เงื่อนไขปลดล็อกเมนูทั้งหมด:</strong> เมื่อคำขอของคุณได้รับการ <u>"อนุมัติ"</u> ออกรหัสแล้ว หรือมีอายุงานเกิน 3-6 เดือน ระบบจะเปิดใช้งานเมนูอื่นๆ ทั้งหมดให้อัตโนมัติครับ
+            </div>
+          </div>
+        </div>`;
+      }
+
       let tabNav = `
       <div class="tabs" style="margin-bottom:20px;">
         <div class="tab ${SERVICE_REQUEST_TAB === 'form' ? 'active' : ''}" onclick="switchServiceTab('form')">📝 ยื่นคำขอใหม่</div>
@@ -7151,7 +7239,7 @@ tr:hover td {
         </div>`;
       }
 
-      content.innerHTML = tabNav + bodyHtml;
+      content.innerHTML = newEmployeeNotice + tabNav + bodyHtml;
 
       if (SERVICE_REQUEST_TAB === 'admin') {
         loadAdminServiceRequests();
