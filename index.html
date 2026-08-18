@@ -1561,10 +1561,16 @@ tr:hover td {
       const appEl = document.getElementById('app');
       if (appEl) appEl.classList.add('active');
       
-      updateUserHeader();
-      applyPermissions();
-      navigate('serviceRequests');
-      toast('เข้าสู่ระบบในฐานะพนักงานใหม่: ยื่นแบบฟอร์มขอใช้บริการ HOSxP/VPN', 'info');
+      const nameEl = document.getElementById('userName');
+      if (nameEl) nameEl.textContent = CURRENT_USER.name;
+      const roleEl = document.getElementById('userRole');
+      if (roleEl) roleEl.textContent = CURRENT_USER.role;
+      const avatarEl = document.getElementById('userAvatar');
+      if (avatarEl) avatarEl.textContent = '🆕';
+
+      if (typeof applyPermissions === 'function') applyPermissions();
+      if (typeof navigate === 'function') navigate('serviceRequests');
+      if (typeof toast === 'function') toast('เข้าสู่ระบบในฐานะพนักงานใหม่: ยื่นแบบฟอร์มขอใช้บริการ HOSxP/VPN', 'info');
     }
     window.loginAsNewEmployeeGuest = loginAsNewEmployeeGuest;
 
