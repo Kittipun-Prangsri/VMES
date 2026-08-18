@@ -29,12 +29,13 @@ async function saveEquipment(data, adminCode) {
   }
 }
 
-async function deleteEquipment(code, adminCode) {
+async function deleteEquipment(code, adminCode, reason) {
   if (!verifyAdmin(adminCode)) return { success: false, message: 'ไม่มีสิทธิ์ดำเนินการ' };
   try {
     const docId = String(code);
+    const item = await getDoc(SHEETS.EQUIPMENT, docId);
     await deleteDoc(SHEETS.EQUIPMENT, docId);
-    await logAudit('ลบอุปกรณ์', 'admin', docId);
+    await logAudit('ลบอุปกรณ์', 'admin', docId + (item ? ' (' + (item['ชื่ออุปกรณ์'] || '') + ')' : '') + (reason ? ' | เหตุผล: ' + reason : ''));
     return { success: true };
   } catch (err) {
     return { success: false, message: err.message };

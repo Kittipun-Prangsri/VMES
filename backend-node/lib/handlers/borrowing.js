@@ -156,7 +156,7 @@ async function markEquipmentDamaged(equipId, equipName, note) {
   }
 }
 
-async function updateBorrowingStatus(code, newStatus, receiver, user, condition, conditionNote) {
+async function updateBorrowingStatus(code, newStatus, receiver, user, condition, conditionNote, reason) {
   try {
     const usersList = await getUsers();
     const foundUser = usersList.find(
@@ -174,6 +174,10 @@ async function updateBorrowingStatus(code, newStatus, receiver, user, condition,
 
     item['สถานะ'] = newStatus;
     if (receiver) item['ผู้รับเรื่อง'] = receiver;
+    if (reason) {
+      item['เหตุผลยกเลิก'] = reason;
+      item['หมายเหตุ'] = (item['หมายเหตุ'] ? item['หมายเหตุ'] + ' | ' : '') + 'เหตุผล: ' + reason;
+    }
     if (newStatus === 'คืนเสร็จสิ้น') {
       item['วันที่คืนจริง'] = todayStr();
       if (condition) item['สภาพอุปกรณ์ตอนคืน'] = condition;
@@ -283,9 +287,11 @@ async function getBorrowingByCode(code) {
   }
 }
 
-async function deleteBorrowing(code, adminCode) {
+async function deleteBorrowing(code, adminCode, reason) {
   if (!verifyAdmin(adminCode)) return { success: false, message: 'ต้องเป็น Admin' };
+  const item = await getDoc(SHEETS.BORROWING, String(code));
   await deleteDoc(SHEETS.BORROWING, String(code));
+  await logAudit('ลบรายการยืมอุปกรณ์', adminCode, 'รหัส: ' + code + (reason ? ' | เหตุผล: ' + reason : '') + (item ? ' (' + item['ผู้ขอยืม'] + ')' : ''));
   return { success: true };
 }
 

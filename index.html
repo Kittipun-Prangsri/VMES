@@ -2668,9 +2668,11 @@ tr:hover td {
 
     function delVehicle(row, plate) {
       if (!requireAdmin()) { toast('ต้องเป็น Admin', 'error'); return; }
-      if (!confirm('ลบรถ ' + plate + ' ?')) return;
+      const reason = prompt('กรุณาระบุเหตุผลในการลบรถ ' + plate + ':');
+      if (reason === null) return;
+      if (!reason.trim()) { toast('กรุณาระบุเหตุผลในการลบข้อมูล', 'warning'); return; }
       showLoading(true);
-      callApi('deleteVehicle', row, '11192').then(r => { showLoading(false); if (r.success) { toast('ลบสำเร็จ'); refreshData(); } else toast(r.message, 'error'); });
+      callApi('deleteVehicle', row, '11192', reason.trim()).then(r => { showLoading(false); if (r.success) { toast('ลบสำเร็จ'); refreshData(); } else toast(r.message, 'error'); });
     }
 
     // ============== USAGE ==============
@@ -3254,9 +3256,11 @@ tr:hover td {
 
     function delEquip(row, name) {
       if (!canManageEquipment()) return;
-      if (!confirm('ลบอุปกรณ์ ' + (name || '') + ' ?')) return;
+      const reason = prompt('กรุณาระบุเหตุผลในการลบอุปกรณ์ ' + (name || '') + ':');
+      if (reason === null) return;
+      if (!reason.trim()) { toast('กรุณาระบุเหตุผลในการลบข้อมูล', 'warning'); return; }
       showLoading(true);
-      callApi('deleteEquipment', row, ADMIN_PASS)
+      callApi('deleteEquipment', row, ADMIN_PASS, reason.trim())
         .then(r => {
           showLoading(false);
           if (r.success) {
@@ -4285,10 +4289,32 @@ tr:hover td {
         return;
       }
       const b = DATA.borrowing.find(x => x._row === row || x._row === +row || String(x['รหัส']) === String(row) || String(x.id) === String(row));
-      if (!confirm(`เปลี่ยนสถานะ "${b['ชื่ออุปกรณ์']}" เป็น "${newStatus}"?\n(ระบบจะส่ง LINE แจ้งเตือนอัตโนมัติ)`)) return;
+      
+      let cancelReason = '';
+      if (newStatus === 'ยกเลิก') {
+        const inputReason = prompt(`กรุณาระบุเหตุผลในการยกเลิกคำขอยืมอุปกรณ์ "${b ? b['ชื่ออุปกรณ์'] : ''}":`);
+        if (inputReason === null) return;
+        if (!inputReason.trim()) { toast('กรุณาระบุเหตุผลในการยกเลิกคำขอ', 'warning'); return; }
+        cancelReason = inputReason.trim();
+      } else {
+        if (!confirm(`เปลี่ยนสถานะ "${b ? b['ชื่ออุปกรณ์'] : ''}" เป็น "${newStatus}"?\n(ระบบจะส่ง LINE แจ้งเตือนอัตโนมัติ)`)) return;
+      }
+
       showLoading(true);
-      callApi('updateBorrowingStatus', row, newStatus, CURRENT_USER.name, CURRENT_USER.name).then(r => { showLoading(false); if (r.success) { toast('อัพเดท+แจ้ง LINE สำเร็จ'); refreshData(); } else toast(r.message, 'error'); });
+      callApi('updateBorrowingStatus', row, newStatus, CURRENT_USER.name, CURRENT_USER.name, '', '', cancelReason).then(r => { showLoading(false); if (r.success) { toast('อัปเดต+แจ้ง LINE สำเร็จ'); refreshData(); } else toast(r.message, 'error'); });
     }
+
+    function delBorrow(row) {
+      if (!requireAdmin()) return;
+      const b = DATA.borrowing ? DATA.borrowing.find(x => x['รหัส'] === row || x._row === row || String(x.id) === String(row)) : null;
+      const bName = b ? b['ชื่ออุปกรณ์'] : '';
+      const reason = prompt('กรุณาระบุเหตุผลในการลบรายการยืม ' + (bName || '') + ':');
+      if (reason === null) return;
+      if (!reason.trim()) { toast('กรุณาระบุเหตุผลในการลบข้อมูล', 'warning'); return; }
+      showLoading(true);
+      callApi('deleteBorrowing', row, '11192', reason.trim()).then(r => { showLoading(false); if (r.success) { toast('ลบสำเร็จ'); refreshData(); } else toast(r.message, 'error'); });
+    }
+    window.delBorrow = delBorrow;
 
     function viewBorrow(row) {
       const b = DATA.borrowing.find(x => x._row === row || x._row === +row || String(x['รหัส']) === String(row) || String(x.id) === String(row));
@@ -4810,8 +4836,13 @@ tr:hover td {
 
     function delUser(row) {
       if (!requireAdmin()) return;
-      if (!confirm('ลบผู้ใช้?')) return;
-      callApi('deleteUser', row, '11192').then(r => { if (r.success) { toast('ลบสำเร็จ'); refreshData(); } });
+      const u = DATA.users ? DATA.users.find(x => x['รหัส'] === row || x._row === row) : null;
+      const uName = u ? u['ชื่อ-นามสกุล'] : '';
+      const reason = prompt('กรุณาระบุเหตุผลในการลบผู้ใช้งาน ' + (uName || '') + ':');
+      if (reason === null) return;
+      if (!reason.trim()) { toast('กรุณาระบุเหตุผลในการลบข้อมูล', 'warning'); return; }
+      showLoading(true);
+      callApi('deleteUser', row, '11192', reason.trim()).then(r => { showLoading(false); if (r.success) { toast('ลบสำเร็จ'); refreshData(); } else toast(r.message, 'error'); });
     }
 
     function runTestUserLine() {
@@ -6246,8 +6277,13 @@ tr:hover td {
 
     function delDriver(row) {
       if (!requireAdmin()) return;
-      if (!confirm('ลบพนักงานขับรถ?')) return;
-      callApi('deleteDriver', row, '11192').then(r => { if (r.success) { toast('ลบสำเร็จ'); refreshData(); } });
+      const d = DATA.drivers ? DATA.drivers.find(x => x['รหัส'] === row || x._row === row) : null;
+      const dName = d ? d['ชื่อ-นามสกุล'] : '';
+      const reason = prompt('กรุณาระบุเหตุผลในการลบพนักงานขับรถ ' + (dName || '') + ':');
+      if (reason === null) return;
+      if (!reason.trim()) { toast('กรุณาระบุเหตุผลในการลบข้อมูล', 'warning'); return; }
+      showLoading(true);
+      callApi('deleteDriver', row, '11192', reason.trim()).then(r => { showLoading(false); if (r.success) { toast('ลบสำเร็จ'); refreshData(); } else toast(r.message, 'error'); });
     }
 
     // ============== BOOKING ==============
@@ -6517,9 +6553,11 @@ tr:hover td {
 
     function delDept(row, name) {
       if (!requireAdmin()) return;
-      if (!confirm('ลบหน่วยงาน ' + (name || '') + ' ?')) return;
+      const reason = prompt('กรุณาระบุเหตุผลในการลบหน่วยงาน ' + (name || '') + ':');
+      if (reason === null) return;
+      if (!reason.trim()) { toast('กรุณาระบุเหตุผลในการลบข้อมูล', 'warning'); return; }
       showLoading(true);
-      callApi('deleteDepartment', row, '11192')
+      callApi('deleteDepartment', row, '11192', reason.trim())
         .then(r => {
           showLoading(false);
           if (r.success) {
@@ -7730,6 +7768,12 @@ tr:hover td {
     function submitServiceApproval(docId, reqType) {
       const status = $('mod_sr_status').value;
       const remark = $('mod_sr_remark').value.trim() || '-';
+      
+      if ((status === 'ไม่อนุมัติ' || status === 'ยกเลิก') && (!remark || remark === '-')) {
+        toast('กรุณาระบุเหตุผลการไม่อนุมัติ / ยกเลิกคำขอ', 'warning');
+        return;
+      }
+
       const updateData = { id: docId, status, remark };
 
       if (reqType === 'VPN') {

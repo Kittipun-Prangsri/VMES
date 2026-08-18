@@ -24,12 +24,12 @@ async function saveVehicle(data, adminCode) {
   }
 }
 
-async function deleteVehicle(code, adminCode) {
+async function deleteVehicle(code, adminCode, reason) {
   if (!verifyAdmin(adminCode)) return { success: false, message: 'ต้องเป็น Admin เท่านั้น' };
   try {
     const docId = String(code);
     await deleteDoc(SHEETS.VEHICLES, docId);
-    await logAudit('ลบรถ', 'admin', docId);
+    await logAudit('ลบรถ', 'admin', docId + (reason ? ' | เหตุผล: ' + reason : ''));
     return { success: true };
   } catch (err) {
     return { success: false, message: err.message };

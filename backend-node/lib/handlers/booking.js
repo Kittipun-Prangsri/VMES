@@ -31,9 +31,11 @@ async function approveBooking(code, approver) {
   return { success: true };
 }
 
-async function deleteBooking(code, adminCode) {
+async function deleteBooking(code, adminCode, reason) {
   if (!verifyAdmin(adminCode)) return { success: false, message: 'ต้องเป็น Admin' };
+  const item = await getDoc(SHEETS.BOOKING, String(code));
   await deleteDoc(SHEETS.BOOKING, String(code));
+  await logAudit('ลบการจองรถ', adminCode, 'รหัส: ' + code + (reason ? ' | เหตุผล: ' + reason : '') + (item ? ' (' + item['ทะเบียน'] + ')' : ''));
   return { success: true };
 }
 

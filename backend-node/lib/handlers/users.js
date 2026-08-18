@@ -61,11 +61,13 @@ async function saveUser(data, adminCode) {
   }
 }
 
-async function deleteUser(code, adminCode) {
+async function deleteUser(code, adminCode, reason) {
   if (!verifyAdmin(adminCode)) return { success: false, message: 'ต้องเป็น Admin' };
   const docId = String(code);
+  const userObj = await getDoc(SHEETS.USERS, docId);
   await deleteDoc(SHEETS.USERS, docId);
   await deleteDoc('userCredentials', docId);
+  await logAudit('ลบผู้ใช้งาน', adminCode, 'รหัส: ' + docId + (userObj ? ' (' + userObj['ชื่อ-นามสกุล'] + ')' : '') + (reason ? ' | เหตุผล: ' + reason : ''));
   return { success: true };
 }
 

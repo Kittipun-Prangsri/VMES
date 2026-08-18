@@ -18,9 +18,13 @@ async function saveDriver(data, adminCode) {
   return { success: true };
 }
 
-async function deleteDriver(code, adminCode) {
+const { logAudit } = require('../util');
+
+async function deleteDriver(code, adminCode, reason) {
   if (!verifyAdmin(adminCode)) return { success: false, message: 'ต้องเป็น Admin' };
-  await deleteDoc(SHEETS.DRIVERS, String(code));
+  const docId = String(code);
+  await deleteDoc(SHEETS.DRIVERS, docId);
+  await logAudit('ลบพนักงานขับรถ', adminCode, 'รหัส: ' + docId + (reason ? ' | เหตุผล: ' + reason : ''));
   return { success: true };
 }
 
