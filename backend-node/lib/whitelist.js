@@ -38,6 +38,7 @@ const {
   getWifiQrLogs,
   createWifiQrLog,
 } = require('./handlers/serviceRequests');
+const { saveSatisfactionRating, getSatisfactionRatings } = require('./handlers/ratings');
 
 const API_WHITELIST = {
   // Auth / Bootstrap
@@ -131,6 +132,10 @@ const API_WHITELIST = {
   updateServiceRequestStatus,
   getWifiQrLogs,
   createWifiQrLog,
+
+  // Satisfaction Ratings
+  saveSatisfactionRating,
+  getSatisfactionRatings,
 };
 
 module.exports = { API_WHITELIST };

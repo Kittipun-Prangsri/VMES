@@ -1372,6 +1372,7 @@ tr:hover td {
         </div>
         <button class="btn btn-warning btn-sm" id="btnGlobalScanQr" onclick="openGlobalQrScannerModal()" title="สแกน QR Code">📷 สแกน QR</button>
         <button class="btn btn-info btn-sm" id="btnLine" onclick="openBindLineModal()" title="ผูกบัญชี LINE กับเลขบัตรประชาชน 13 หลัก">📲 ผูก LINE 13 หลัก</button>
+        <button class="btn btn-warning btn-sm" id="btnRating" onclick="openSatisfactionModal('system', '', 'ประเมินความพึงพอใจการใช้งานระบบ')" title="ประเมินความพึงพอใจ ⭐">⭐ ประเมิน</button>
         <div class="user-chip" onclick="openUserProfileModal()" style="cursor: pointer;" title="คลิกเพื่อจัดการโปรไฟล์และเปลี่ยนรหัสผ่าน">
           <div class="avatar" id="userAvatar">A</div>
           <div class="info">
@@ -1978,6 +1979,96 @@ tr:hover td {
         });
     }
     window.submitBindLineByCitizenId = submitBindLineByCitizenId;
+
+    let SELECTED_RATING_SCORE = 5;
+
+    function openSatisfactionModal(category = 'system', refId = '', title = 'แบบประเมินความพึงพอใจ') {
+      SELECTED_RATING_SCORE = 5;
+
+      const modalBody = `
+      <div style="text-align:center; padding:10px 0;">
+        <div style="font-size:44px; margin-bottom:6px;">⭐</div>
+        <h3 style="margin:0; font-size:18px; font-weight:700; color:var(--gray-900);">${esc(title)}</h3>
+        <p style="font-size:13px; color:var(--gray-500); margin-top:4px;">โปรดให้คะแนนและแสดงความคิดเห็นเพื่อนำไปปรับปรุงการให้บริการ</p>
+      </div>
+
+      <div style="display:flex; justify-content:center; gap:8px; margin:16px 0; font-size:36px; cursor:pointer;" id="star_rating_wrap">
+        <span onclick="selectRatingStar(1)" data-star="1">⭐</span>
+        <span onclick="selectRatingStar(2)" data-star="2">⭐</span>
+        <span onclick="selectRatingStar(3)" data-star="3">⭐</span>
+        <span onclick="selectRatingStar(4)" data-star="4">⭐</span>
+        <span onclick="selectRatingStar(5)" data-star="5">⭐</span>
+      </div>
+      <div style="text-align:center; font-weight:700; font-size:15px; color:var(--primary); margin-bottom:16px;" id="star_rating_label">
+        ⭐⭐⭐⭐⭐ 5 ดาว: ดีเยี่ยม (Very Satisfied)
+      </div>
+
+      <div class="field full">
+        <label>ความคิดเห็นและข้อเสนอแนะเพิ่มเติม (ถ้ามี)</label>
+        <textarea id="rat_comment" rows="3" placeholder="ระบุสิ่งที่ประทับใจ หรือสิ่งที่ต้องการให้ระบบ/เจ้าหน้าที่ปรับปรุงพัฒนา..."></textarea>
+      </div>
+      `;
+
+      openModal('⭐ ประเมินความพึงพอใจการใช้งาน', modalBody, () => submitSatisfactionRating(category, refId), true);
+      setTimeout(() => selectRatingStar(5), 50);
+    }
+    window.openSatisfactionModal = openSatisfactionModal;
+
+    function selectRatingStar(score) {
+      SELECTED_RATING_SCORE = score;
+      const wrap = $('star_rating_wrap');
+      const label = $('star_rating_label');
+      const labelsMap = {
+        5: '⭐⭐⭐⭐⭐ 5 ดาว: ดีเยี่ยม (Very Satisfied)',
+        4: '⭐⭐⭐⭐ 4 ดาว: ดี (Satisfied)',
+        3: '⭐⭐⭐ 3 ดาว: ปานกลาง (Neutral)',
+        2: '⭐⭐ 2 ดาว: พอใช้ (Unsatisfied)',
+        1: '⭐ 1 ดาว: ควรปรับปรุง (Very Unsatisfied)'
+      };
+
+      if (wrap) {
+        const stars = wrap.querySelectorAll('span');
+        stars.forEach((s, idx) => {
+          s.style.opacity = (idx + 1) <= score ? '1' : '0.25';
+          s.style.transform = (idx + 1) <= score ? 'scale(1.15)' : 'scale(0.9)';
+          s.style.transition = 'all 0.15s ease';
+        });
+      }
+      if (label) {
+        label.textContent = labelsMap[score] || `${score} ดาว`;
+      }
+    }
+    window.selectRatingStar = selectRatingStar;
+
+    function submitSatisfactionRating(category, refId) {
+      const comment = $('rat_comment') ? $('rat_comment').value.trim() : '';
+      const userName = (CURRENT_USER && CURRENT_USER.name) || 'ผู้ใช้งานระบบ';
+      const dept = (CURRENT_USER && CURRENT_USER.dept) || '-';
+
+      showLoading(true);
+      callApi('saveSatisfactionRating', {
+        category,
+        refId,
+        rating: SELECTED_RATING_SCORE,
+        comment,
+        userName,
+        dept
+      }, userName)
+        .then(r => {
+          showLoading(false);
+          if (r.success) {
+            toast(r.message || 'บันทึกการประเมินความพึงพอใจสำเร็จ ขอบคุณครับ!');
+            closeModal();
+          } else {
+            toast(r.message || 'บันทึกการประเมินไม่สำเร็จ', 'error');
+          }
+        })
+        .catch(err => {
+          showLoading(false);
+          toast('ข้อผิดพลาด: ' + err.message, 'error');
+        });
+    }
+    window.submitSatisfactionRating = submitSatisfactionRating;
 
     function openChangePasswordModal() {
       if (!CURRENT_USER) return;
@@ -6500,8 +6591,78 @@ tr:hover td {
                 </tr>
               `).join('')}</tbody>
             </table></div></div>
-          </div>
+          <div id="satisfaction_reports_box"></div>
         `;
+
+            callApi('getSatisfactionRatings').then(ratRes => {
+              const ratBox = $('satisfaction_reports_box');
+              if (!ratBox) return;
+              if (ratRes.success && ratRes.stats) {
+                const st = ratRes.stats;
+                const rows = ratRes.data || [];
+                let rowsHtml = '';
+                if (rows.length === 0) {
+                  rowsHtml = '<tr><td colspan="5" style="text-align:center; color:var(--gray-400); padding:20px;">ยังไม่มีรายการประเมินความพึงพอใจ</td></tr>';
+                } else {
+                  rows.slice(0, 10).forEach(r => {
+                    const starsStr = '⭐'.repeat(r.rating || 5);
+                    rowsHtml += `
+                    <tr>
+                      <td data-label="วันเวลา">${esc(r.createdAt || '-')}</td>
+                      <td data-label="ผู้ประเมิน"><strong>${esc(r.userName || '-')}</strong> (${esc(r.dept || '-')})</td>
+                      <td data-label="หมวด">${esc(r.category || 'ระบบ')}</td>
+                      <td data-label="คะแนน">${starsStr} (${r.rating} ดาว)</td>
+                      <td data-label="ความคิดเห็น">${esc(r.comment || '-')}</td>
+                    </tr>`;
+                  });
+                }
+
+                ratBox.innerHTML = `
+                <div class="card" style="border-radius:20px; margin-top:24px;">
+                  <div class="card-header" style="background:linear-gradient(135deg,#f59e0b,#d97706); color:#fff; padding:18px 24px; border-radius:20px 20px 0 0; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                    <div>
+                      <div style="font-size:18px; font-weight:700;">⭐ สรุปผลการประเมินความพึงพอใจการใช้งาน (HA / Quality Report)</div>
+                      <div style="font-size:12px; opacity:0.9; margin-top:2px;">คะแนนประเมินความพึงพอใจและข้อเสนอแนะจากบุคลากรโรงพยาบาล</div>
+                    </div>
+                    <div style="font-size:22px; font-weight:800; background:rgba(255,255,255,0.22); padding:6px 16px; border-radius:14px; backdrop-filter:blur(6px);">
+                      ⭐ ${st.average} / 5.00
+                    </div>
+                  </div>
+                  <div class="card-body" style="padding:20px;">
+                    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:16px; margin-bottom:20px;">
+                      <div style="background:#fef3c7; border:1px solid #fde68a; border-radius:14px; padding:16px; text-align:center;">
+                        <div style="font-size:12px; color:#b45309; font-weight:600;">คะแนนประเมินเฉลี่ย</div>
+                        <div style="font-size:28px; font-weight:800; color:#92400e; margin-top:4px;">⭐ ${st.average}</div>
+                      </div>
+                      <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:14px; padding:16px; text-align:center;">
+                        <div style="font-size:12px; color:#1d4ed8; font-weight:600;">จำนวนผู้ร่วมประเมินทั้งหมด</div>
+                        <div style="font-size:28px; font-weight:800; color:#1e40af; margin-top:4px;">${st.total} ครั้ง</div>
+                      </div>
+                      <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:14px; padding:16px; text-align:center;">
+                        <div style="font-size:12px; color:#15803d; font-weight:600;">คะแนน 5 ดาว (ดีเยี่ยม)</div>
+                        <div style="font-size:28px; font-weight:800; color:#166534; margin-top:4px;">${st.distribution[5] || 0} ครั้ง</div>
+                      </div>
+                    </div>
+
+                    <div style="font-size:15px; font-weight:700; color:var(--gray-900); margin-bottom:10px;">💬 รายการข้อคิดเห็นและข้อเสนอแนะล่าสุด</div>
+                    <div class="table-wrap">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>วันเวลา</th>
+                            <th>ผู้ประเมิน (หน่วยงาน)</th>
+                            <th>หมวดบริการ</th>
+                            <th>คะแนน</th>
+                            <th>ความคิดเห็น / ข้อเสนอแนะ</th>
+                          </tr>
+                        </thead>
+                        <tbody>${rowsHtml}</tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>`;
+              }
+            });
           })
           .catch(err => {
             showLoading(false);

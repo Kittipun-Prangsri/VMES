@@ -42,6 +42,7 @@ const SHEETS = {
   USER_CREDENTIALS: 'userCredentials',
   SERVICE_REQUESTS: 'serviceRequests',
   WIFI_QR_LOGS: 'wifiQrLogs',
+  SATISFACTION_RATINGS: 'satisfactionRatings',
 };
 
 // alias เผื่อโค้ดอื่นอยากอ้างชื่อ "collection" แทน "sheet" (ความหมายเดียวกันในระบบใหม่)
