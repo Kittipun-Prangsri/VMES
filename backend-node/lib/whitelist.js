@@ -39,8 +39,13 @@ const {
   createWifiQrLog,
 } = require('./handlers/serviceRequests');
 const { saveSatisfactionRating, getSatisfactionRatings } = require('./handlers/ratings');
+const { saveAttendanceRecord, getAttendanceLogs, saveAttendanceConfig } = require('./handlers/attendance');
 
 const API_WHITELIST = {
+  // Attendance
+  saveAttendanceRecord,
+  getAttendanceLogs,
+  saveAttendanceConfig,
   // Auth / Bootstrap
   login,
   getBootstrapInfo,
