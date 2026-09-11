@@ -3086,7 +3086,10 @@ tr:hover td {
         borrowing: '📦 ระบบยืม-คืนอุปกรณ์', users: '👥 ผู้ใช้งานระบบ', drivers: '👨‍✈️ พนักงานขับรถ',
         booking: '📅 จองรถล่วงหน้า', inspection: '🔍 ตรวจสภาพรถ', notifications: '🔔 ประวัติแจ้งเตือน',
         audit: '📜 ประวัติระบบ', settings: '⚙️ ตั้งค่าระบบ', departments: '🏢 หน่วยงาน', reports: '📈 รายงานสรุป',
-        serviceRequests: '📝 ขอใช้บริการ HOSxP/VPN', wifiQr: '📶 สร้าง & คลัง WiFi QR'
+        serviceRequests: '📝 ขอใช้บริการ HOSxP/VPN', wifiQr: '📶 สร้าง & คลัง WiFi QR',
+        attendanceCheckin: '📍 เช็คอินเข้า-ออกงาน (GPS & Face Scan)',
+        attendanceHistory: '📊 ประวัติการลงเวลาปฏิบัติงาน',
+        attendanceSettings: '⚙️ ตั้งค่าพิกัด & รัศมี (Geofence)'
       };
       $('pageTitle').textContent = titles[page] || page;
       if (window.innerWidth < 768) $('sidebar').classList.remove('show');
@@ -3197,6 +3200,9 @@ tr:hover td {
       if (page === 'reports') return renderReports();
       if (page === 'serviceRequests') return renderServiceRequests();
       if (page === 'wifiQr') return renderWifiQr();
+      if (page === 'attendanceCheckin') return renderAttendanceCheckin();
+      if (page === 'attendanceHistory') return renderAttendanceHistory();
+      if (page === 'attendanceSettings') return renderAttendanceSettings();
       c.innerHTML = '<div class="card"><div class="card-body">กำลังพัฒนา...</div></div>';
     }
 

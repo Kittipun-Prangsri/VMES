@@ -5,7 +5,7 @@
 const { getStorage } = require('firebase-admin/storage');
 const { app } = require('./firestore');
 
-const bucket = getStorage(app).bucket();
+const bucket = app ? getStorage(app).bucket() : null;
 
 async function uploadBase64Image(base64Data, destPath, contentType) {
   const buffer = Buffer.from(base64Data, 'base64');

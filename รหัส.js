@@ -163,6 +163,7 @@ const API_WHITELIST = {
   // Equipment
   saveEquipment: saveEquipment,
   deleteEquipment: deleteEquipment,
+  uploadEquipmentPhoto: uploadEquipmentPhoto,
 
   // Borrowing
   saveBorrowing: saveBorrowing,
@@ -1688,7 +1689,7 @@ function saveEquipment(data, adminCode) {
     delete data._row;
     firestoreSetDoc_(SHEETS.EQUIPMENT, data['รหัส'], data);
     logAudit_(isNew ? 'เพิ่มอุปกรณ์ใหม่' : 'แก้ไขข้อมูลอุปกรณ์', 'admin', data['ชื่ออุปกรณ์']);
-    return { success: true };
+    return { success: true, code: data['รหัส'] };
   } catch (err) {
     return { success: false, message: err.message };
   }
@@ -1701,6 +1702,56 @@ function deleteEquipment(code, adminCode) {
     firestoreDeleteDoc_(SHEETS.EQUIPMENT, docId);
     logAudit_('ลบอุปกรณ์', 'admin', docId);
     return { success: true };
+  } catch (err) {
+    return { success: false, message: err.message };
+  }
+}
+
+function uploadBase64Storage_(base64Data, destPath, contentType) {
+  try {
+    const projectId = getFirebaseProjectId();
+    if (!projectId) return null;
+    const bucket = `${projectId}.firebasestorage.app`;
+    const url = `https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(bucket)}/o?uploadType=media&name=${encodeURIComponent(destPath)}`;
+    const bytes = Utilities.base64Decode(base64Data);
+    const options = {
+      method: 'post',
+      contentType: contentType || 'image/jpeg',
+      headers: firestoreAuthHeaders_(),
+      payload: bytes,
+      muteHttpExceptions: true
+    };
+    const res = UrlFetchApp.fetch(url, options);
+    const code = res.getResponseCode();
+    if (code >= 200 && code < 300) {
+      return `https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(bucket)}/o/${encodeURIComponent(destPath)}?alt=media`;
+    } else {
+      Logger.log(`uploadBase64Storage_ error: ${code} ${res.getContentText()}`);
+      return null;
+    }
+  } catch (err) {
+    Logger.log(`uploadBase64Storage_ exception: ` + err.message);
+    return null;
+  }
+}
+
+function uploadEquipmentPhoto(code, base64Data, contentType, adminCode) {
+  if (!verifyAdmin(adminCode)) return { success: false, message: 'ไม่มีสิทธิ์ดำเนินการ' };
+  try {
+    const docId = String(code || '').trim();
+    if (!docId) return { success: false, message: 'ไม่พบรหัสอุปกรณ์' };
+    const existing = firestoreGetDoc_(SHEETS.EQUIPMENT, docId);
+    if (!existing) return { success: false, message: 'ไม่พบข้อมูลอุปกรณ์นี้แล้ว' };
+
+    const ext = (contentType || 'image/jpeg').split('/')[1] || 'jpg';
+    const destPath = `equipment-photos/${docId}-${Date.now()}.${ext}`;
+    const url = uploadBase64Storage_(base64Data, destPath, contentType);
+    if (!url) return { success: false, message: 'อัปโหลดไปยัง Firebase Storage ไม่สำเร็จ' };
+
+    const updated = Object.assign({}, existing, { 'รูปภาพ': url });
+    delete updated._row;
+    firestoreSetDoc_(SHEETS.EQUIPMENT, docId, updated);
+    return { success: true, url: url };
   } catch (err) {
     return { success: false, message: err.message };
   }

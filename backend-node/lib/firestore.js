@@ -8,16 +8,18 @@ const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 // กัน initializeApp ถูกเรียกซ้ำเมื่อ module ถูก require หลายครั้งข้าม warm invocation ของ Vercel
 const app = getApps().length
   ? getApp()
-  : initializeApp({
+  : process.env.FIREBASE_PROJECT_ID
+  ? initializeApp({
       credential: cert({
         projectId: process.env.FIREBASE_PROJECT_ID,
         clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
         privateKey: (process.env.FIREBASE_PRIVATE_KEY || '').replace(/\\n/g, '\n'),
       }),
       storageBucket: process.env.FIREBASE_STORAGE_BUCKET || 'phan-thong.firebasestorage.app',
-    });
+    })
+  : null;
 
-const db = getFirestore(app);
+const db = app ? getFirestore(app) : null;
 
 // ชื่อ collection ภาษาอังกฤษตรงตามข้อมูลจริงที่มีอยู่แล้วใน Firestore (ยืนยันแล้ว) —
 // ไม่มีการแปลชื่อไทย->อังกฤษอีกต่อไป (ต่างจาก SHEET_TO_FIRESTORE_COLLECTION เดิม) เพราะ
