@@ -7,6 +7,6 @@
     "build": "node -e \"const fs = require('fs'); if (fs.existsSync('index.html')) { fs.copyFileSync('index.html', 'public/index.html'); console.log('✅ Synchronized index.html to public/index.html'); } console.log('🎉 Build completed successfully!');\"",
     "start": "npx serve public",
     "deploy": "npx -y firebase-tools@latest deploy --only hosting",
-    "test": "node tests/test-node-line-flex.js"
+    "test": "NODE_PATH=backend-node/node_modules node tests/test-node-line-flex.js"
   }
 }
