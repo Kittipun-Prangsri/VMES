@@ -1,0 +1,40 @@
+[debug] [2026-09-14T14:19:00.327Z] ----------------------------------------------------------------------
+[debug] [2026-09-14T14:19:00.331Z] Command:       /Users/kittipun/.nvm/versions/node/v24.14.1/bin/node /Users/kittipun/.nvm/versions/node/v24.14.1/bin/firebase deploy --only hosting
+[debug] [2026-09-14T14:19:00.332Z] CLI Version:   15.29.0
+[debug] [2026-09-14T14:19:00.332Z] Platform:      darwin
+[debug] [2026-09-14T14:19:00.332Z] Node Version:  v24.14.1
+[debug] [2026-09-14T14:19:00.332Z] Detected Agent: unknown
+[debug] [2026-09-14T14:19:00.332Z] Time:          Mon Sep 14 2026 21:19:00 GMT+0700 (Indochina Time)
+[debug] [2026-09-14T14:19:00.332Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-09-14T14:19:00.359Z] >>> [apiv2][query] GET https://firebase-public.firebaseio.com/cli.json [none]
+[debug] [2026-09-14T14:19:03.237Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-09-14T14:19:03.242Z] > authorizing via signed-in user (itklonghad02@gmail.com)
+[debug] [2026-09-14T14:19:03.242Z] [iam] checking project phan-thong for permissions ["firebase.projects.get","firebasehosting.sites.update"]
+[debug] [2026-09-14T14:19:03.243Z] Checked if tokens are valid: false, expires at: 1789053102670
+[debug] [2026-09-14T14:19:03.244Z] Checked if tokens are valid: false, expires at: 1789053102670
+[debug] [2026-09-14T14:19:03.244Z] > refreshing access token with scopes: []
+[debug] [2026-09-14T14:19:03.256Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
+[debug] [2026-09-14T14:19:03.256Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-09-14T14:19:03.502Z] <<< [apiv2][status] POST https://www.googleapis.com/oauth2/v3/token 200
+[debug] [2026-09-14T14:19:03.502Z] <<< [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-09-14T14:19:03.513Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/phan-thong:testIamPermissions [none]
+[debug] [2026-09-14T14:19:03.513Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/phan-thong:testIamPermissions  x-goog-user-project=phan-thong
+[debug] [2026-09-14T14:19:03.513Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/phan-thong:testIamPermissions {"permissions":["firebase.projects.get","firebasehosting.sites.update"]}
+[debug] [2026-09-14T14:19:03.900Z] <<< [apiv2][status] GET https://firebase-public.firebaseio.com/cli.json 200
+[debug] [2026-09-14T14:19:03.900Z] <<< [apiv2][body] GET https://firebase-public.firebaseio.com/cli.json {"cloudBuildErrorAfter":1594252800000,"cloudBuildWarnAfter":1590019200000,"defaultNode10After":1594252800000,"minVersion":"3.0.5","node8DeploysDisabledAfter":1613390400000,"node8RuntimeDisabledAfter":1615809600000,"node8WarnAfter":1600128000000}
+[debug] [2026-09-14T14:19:04.910Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/phan-thong:testIamPermissions 403
+[debug] [2026-09-14T14:19:04.910Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/phan-thong:testIamPermissions {"error":{"code":403,"message":"Caller does not have required permission to use project phan-thong. Grant the caller the roles/serviceusage.serviceUsageConsumer role, or a custom role with the serviceusage.services.use permission, by visiting https://console.developers.google.com/iam-admin/iam?project=phan-thong and then retry. Propagation of the new permission may take a few minutes.","status":"PERMISSION_DENIED","details":[{"@type":"type.googleapis.com/google.rpc.ErrorInfo","reason":"USER_PROJECT_DENIED","domain":"googleapis.com","metadata":{"consoleUrl":"https://console.developers.google.com/iam-admin/iam?project=phan-thong","containerInfo":"phan-thong","service":"cloudresourcemanager.googleapis.com","consumer":"projects/phan-thong"}},{"@type":"type.googleapis.com/google.rpc.LocalizedMessage","locale":"en-US","message":"Caller does not have required permission to use project phan-thong. Grant the caller the roles/serviceusage.serviceUsageConsumer role, or a custom role with the serviceusage.services.use permission, by visiting https://console.developers.google.com/iam-admin/iam?project=phan-thong and then retry. Propagation of the new permission may take a few minutes."},{"@type":"type.googleapis.com/google.rpc.Help","links":[{"description":"Google developer console IAM admin","url":"https://console.developers.google.com/iam-admin/iam?project=phan-thong"}]}]}}
+[debug] [2026-09-14T14:19:04.911Z] [iam] error while checking permissions, command may fail: Request to https://cloudresourcemanager.googleapis.com/v1/projects/phan-thong:testIamPermissions had HTTP Error: 403, Caller does not have required permission to use project phan-thong. Grant the caller the roles/serviceusage.serviceUsageConsumer role, or a custom role with the serviceusage.services.use permission, by visiting https://console.developers.google.com/iam-admin/iam?project=phan-thong and then retry. Propagation of the new permission may take a few minutes.
+[debug] [2026-09-14T14:19:04.912Z] Checked if tokens are valid: true, expires at: 1789399142502
+[debug] [2026-09-14T14:19:04.913Z] Checked if tokens are valid: true, expires at: 1789399142502
+[debug] [2026-09-14T14:19:04.913Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/phan-thong [none]
+[debug] [2026-09-14T14:19:05.617Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/phan-thong 403
+[debug] [2026-09-14T14:19:05.617Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/phan-thong {"error":{"code":403,"message":"The caller does not have permission","status":"PERMISSION_DENIED"}}
+[debug] [2026-09-14T14:19:05.618Z] Request to https://firebase.googleapis.com/v1beta1/projects/phan-thong had HTTP Error: 403, The caller does not have permission
+[debug] [2026-09-14T14:19:05.753Z] FirebaseError: Request to https://firebase.googleapis.com/v1beta1/projects/phan-thong had HTTP Error: 403, The caller does not have permission
+    at responseToError (/Users/kittipun/.nvm/versions/node/v24.14.1/lib/node_modules/firebase-tools/lib/responseToError.js:53:12)
+    at RetryOperation._fn (/Users/kittipun/.nvm/versions/node/v24.14.1/lib/node_modules/firebase-tools/lib/apiv2.js:415:77)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+[error] 
+[error] Error: Failed to get Firebase project phan-thong. Please make sure the project exists and your account has permission to access it.
