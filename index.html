@@ -1692,6 +1692,84 @@ tr:hover td {
   }
 }
 
+/* ===== UNIVERSAL RESPONSIVE SCALING & ADAPTIVE STYLES ===== */
+@media (max-width: 600px) {
+  .form-grid {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+  .card-body {
+    padding: 14px 12px !important;
+  }
+  .card-header {
+    padding: 14px 16px !important;
+  }
+  .tabs {
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    padding-bottom: 6px !important;
+    -webkit-overflow-scrolling: touch;
+  }
+  .tab {
+    padding: 10px 14px !important;
+    font-size: 13px !important;
+    min-height: 42px !important;
+  }
+  .field label {
+    font-size: 13px !important;
+  }
+  .field input, .field select, .field textarea {
+    font-size: 14px !important;
+    padding: 10px 12px !important;
+    min-height: 44px !important;
+  }
+  .topbar {
+    padding: 8px 12px !important;
+  }
+  .topbar .page-title {
+    font-size: 15px !important;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .stat-grid {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8px !important;
+  }
+  .stat {
+    padding: 12px !important;
+  }
+  .stat .value {
+    font-size: 18px !important;
+  }
+  .stat .label {
+    font-size: 11px !important;
+  }
+}
+
+@media (min-width: 601px) and (max-width: 1024px) {
+  .form-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 14px !important;
+  }
+  .stat-grid {
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)) !important;
+  }
+  .login-portal-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+input, select, textarea, button {
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.card {
+  width: 100%;
+  box-sizing: border-box;
+}
+
 /* ===== CUSTOM STATUS BADGES & CONDITION STYLES ===== */
 .b-gold { background: #fef3c7; color: #b45309; border: 1px solid #fde68a; }
 .b-darkred { background: #991b1b; color: #fff; }
@@ -2339,21 +2417,12 @@ tr:hover td {
     function isNewEmployeeLocked(user) {
       if (!user) return false;
       const role = String(user.role || '').toLowerCase();
-      if (role === 'admin' || role === 'superadmin' || role === 'manager' || user.role === 'พนักงานขับรถ') {
+      if (role === 'admin' || role === 'superadmin' || role === 'manager' || role === 'พนักงานขับรถ') {
         return false;
       }
       
-      const isExplicitNew = user.role === 'new_employee' || user.role === 'พนักงานใหม่' || user.isNewEmployee === true;
-      
-      let monthsOfWork = 99;
-      const startStr = user.startDate || user['วันเริ่มงาน'] || user.createdDate || user.createdAt;
-      if (startStr) {
-        const startDate = new Date(startStr);
-        if (!isNaN(startDate.getTime())) {
-          const diffDays = Math.ceil(Math.abs(new Date() - startDate) / (1000 * 60 * 60 * 24));
-          monthsOfWork = diffDays / 30;
-        }
-      }
+      const isExplicitNew = role === 'new_employee' || role === 'พนักงานใหม่' || role === 'เจ้าหน้าที่ใหม่' || user.isNewEmployee === true;
+      if (!isExplicitNew) return false;
 
       let hasApprovedAccount = user.hasAccounts === true || user.hasAccount === true;
       if (!hasApprovedAccount && window.DATA && Array.isArray(window.DATA.serviceRequests)) {
@@ -2369,12 +2438,8 @@ tr:hover td {
       }
 
       if (hasApprovedAccount) return false; // Approved HOSxP/VPN account unlocks full access
-      if (monthsOfWork >= 3) return false; // Tenure >= 3 months (90 days) unlocks full access
 
-      if (isExplicitNew) return true; // Locked to HOSxP/VPN service request
-      if (user.role === 'user' && user.isNewUser) return true;
-
-      return false;
+      return true; // Explicit new employee is locked until approved
     }
     window.isNewEmployeeLocked = isNewEmployeeLocked;
 
@@ -2546,8 +2611,11 @@ tr:hover td {
       });
       if (btnLine) btnLine.style.display = '';
 
-      // Check New Employee Restriction (Shows only serviceRequests if locked)
-      if (isNewEmployeeLocked(CURRENT_USER)) {
+      // Check New Employee Restriction (Shows ONLY serviceRequests if locked)
+      const roleStr = String(CURRENT_USER ? CURRENT_USER.role : '').toLowerCase();
+      const isExplicitNewUser = roleStr === 'พนักงานใหม่' || roleStr === 'เจ้าหน้าที่ใหม่' || roleStr === 'new_employee' || (CURRENT_USER && CURRENT_USER.isNewEmployee === true);
+
+      if (isNewEmployeeLocked(CURRENT_USER) || isExplicitNewUser) {
         document.querySelectorAll('.menu-item').forEach(m => {
           if (m.dataset.page !== 'serviceRequests') {
             m.style.display = 'none';
@@ -2557,17 +2625,34 @@ tr:hover td {
           }
         });
 
-        // Hide category groups that have no visible items
+        // Hide ALL category groups except 'it' (บริการไอที & VPN)
         document.querySelectorAll('.menu-category-group').forEach(group => {
-          const visibleItems = Array.from(group.querySelectorAll('.menu-item')).filter(m => m.style.display !== 'none');
-          group.style.display = visibleItems.length > 0 ? '' : 'none';
+          if (group.id === 'groupIt' || group.dataset.cat === 'it') {
+            group.style.display = '';
+          } else {
+            group.style.display = 'none';
+          }
         });
+
+        const btnGlobalScanQr = $('btnGlobalScanQr');
+        if (btnGlobalScanQr) btnGlobalScanQr.style.display = 'none';
 
         if (CURRENT_PAGE !== 'serviceRequests') {
           navigate('serviceRequests');
         }
         return;
       }
+
+      // Requirement 2: ซ่อนช่องทางและปุ่มแสดง QR Code สำหรับสิทธิ์เจ้าหน้าที่
+      const btnGlobalScanQr = $('btnGlobalScanQr');
+      const isStaffUser = !isAdmin();
+      if (btnGlobalScanQr) {
+        btnGlobalScanQr.style.display = isStaffUser ? 'none' : '';
+      }
+      const menuQrBatch = document.querySelector('.menu-item[data-page="qrBatch"]');
+      const menuWifiQr = document.querySelector('.menu-item[data-page="wifiQr"]');
+      if (menuQrBatch) menuQrBatch.style.display = isStaffUser ? 'none' : '';
+      if (menuWifiQr) menuWifiQr.style.display = isStaffUser ? 'none' : '';
 
       // Get permissions for current role (fallback to user if not found)
       const rolePerm = perm[role] || perm["user"] || { "dashboard": true };
@@ -3023,9 +3108,10 @@ tr:hover td {
           DATA = Object.assign(DATA, d);
           updateBadges();
 
-          // Only re-render if we are on pages that need live updates
+          // Only re-render if we are on pages that need live updates and user is not currently typing in a form
           const livePages = ['dashboard', 'borrowing', 'usage', 'booking', 'notifications', 'audit'];
-          if (livePages.includes(CURRENT_PAGE)) {
+          const isFormTab = (CURRENT_PAGE === 'serviceRequest' && typeof SERVICE_REQUEST_TAB !== 'undefined' && SERVICE_REQUEST_TAB === 'form');
+          if (livePages.includes(CURRENT_PAGE) && !isUserEditingForm() && !isFormTab) {
             renderPage(CURRENT_PAGE);
           }
         })
@@ -3065,6 +3151,12 @@ tr:hover td {
         return;
       }
       
+      if ((page === 'qrBatch' || page === 'wifiQr') && !isAdmin()) {
+        toast('สิทธิ์เจ้าหน้าที่: การจัดการและแสดง QR Code อนุญาตเฉพาะ Admin เท่านั้น', 'warning');
+        navigate('dashboard');
+        return;
+      }
+
       if (page === 'settings' && !isAdmin()) {
         toast('คุณไม่มีสิทธิ์เข้าถึงหน้านี้', 'error');
         navigate('dashboard');
@@ -3961,8 +4053,7 @@ tr:hover td {
                 <td data-label="สถานะ">${statusBadge(v['สถานะ'])}</td>
                 <td data-label="หน่วยงาน">${esc(v['หน่วยงาน'])}</td>
                 <td data-label="">
-                  <button class="btn btn-sm btn-info" onclick="showQrModal('${esc(v['ทะเบียน'])}', 'รถทะเบียน ${esc(v['ทะเบียน'])}')">🔲 QR</button>
-                  ${isAdmin() ? `<button class="btn btn-sm btn-secondary" onclick="editVehicle('${v['รหัส']}')">✏️</button> <button class="btn btn-sm btn-danger" onclick="delVehicle('${v['รหัส']}','${esc(v['ทะเบียน'])}')">🗑️</button>` : ''}
+                  ${isAdmin() ? `<button class="btn btn-sm btn-info" onclick="showQrModal('${esc(v['ทะเบียน'])}', 'รถทะเบียน ${esc(v['ทะเบียน'])}')">🔲 QR</button> <button class="btn btn-sm btn-secondary" onclick="editVehicle('${v['รหัส']}')">✏️</button> <button class="btn btn-sm btn-danger" onclick="delVehicle('${v['รหัส']}','${esc(v['ทะเบียน'])}')">🗑️</button>` : ''}
                 </td>
               </tr>`).join('') || '<tr><td colspan="9" class="empty"><span class="ico">🚗</span>ยังไม่มีข้อมูลรถ</td></tr>'}
             </tbody>
@@ -4310,9 +4401,16 @@ tr:hover td {
     }
 
     // ============== EQUIPMENT ==============
+    // ============== EQUIPMENT ==============
+    if (!window.EQUIPMENT_FILTER_STATE) {
+      window.EQUIPMENT_FILTER_STATE = { text: '', cat: '', status: '', loc: '' };
+    }
+
     function renderEquipment() {
-      let filterText = '';
-      let filterCat = '';
+      let filterText = window.EQUIPMENT_FILTER_STATE.text || '';
+      let filterCat = window.EQUIPMENT_FILTER_STATE.cat || '';
+      let filterStatus = window.EQUIPMENT_FILTER_STATE.status || '';
+      let filterLoc = window.EQUIPMENT_FILTER_STATE.loc || '';
 
       const render = () => {
         let items = DATA.equipment;
@@ -4328,10 +4426,13 @@ tr:hover td {
           );
         }
         if (filterCat) items = items.filter(e => e['หมวดหมู่'] === filterCat);
+        if (filterStatus) items = items.filter(e => e['สถานะ'] === filterStatus);
+        if (filterLoc) items = items.filter(e => (e['ที่เก็บ'] || '').trim() === filterLoc);
 
         const valAll = DATA.equipment.length;
         const valReady = DATA.equipment.filter(e => e['สถานะ'] === 'พร้อมยืม').length;
         const valBorrowed = DATA.equipment.filter(e => e['สถานะ'] === 'อยู่ระหว่างยืม').length;
+        const valStationed = DATA.equipment.filter(e => e['สถานะ'] === 'ประจำจุด').length;
         const valDamaged = DATA.equipment.filter(e => e['สถานะ'] === 'ชำรุด').length;
         const valTotalMoney = DATA.equipment.reduce((s, e) => s + (+e['มูลค่า'] || 0) * (+e['จำนวน'] || 1), 0);
 
@@ -4341,6 +4442,15 @@ tr:hover td {
           if (c) catMap[c] = (catMap[c] || 0) + 1;
         });
         const catList = Object.entries(catMap).sort((a, b) => a[0].localeCompare(b[0], 'th'));
+
+        const locMap = {};
+        DATA.equipment.forEach(e => {
+          const l = (e['ที่เก็บ'] || '').trim();
+          if (l) locMap[l] = (locMap[l] || 0) + 1;
+        });
+        const locList = Object.entries(locMap).sort((a, b) => a[0].localeCompare(b[0], 'th'));
+
+        const isFiltered = !!(filterText || filterCat || filterStatus || filterLoc);
 
         return `
     <div style="background:linear-gradient(135deg,#0f766e 0%,#0d9488 55%,#06b6d4 100%); border-radius:20px; padding:20px 24px; margin-bottom:20px; box-shadow:0 8px 32px rgba(15,118,110,0.25); position:relative; overflow:hidden; color:#fff;">
@@ -4366,25 +4476,25 @@ tr:hover td {
     </div>
 
     <div class="stat-grid" style="margin-bottom: 20px;">
-      <div class="stat s-blue">
+      <div class="stat s-blue" onclick="window._ef(filterText, filterCat, '', filterLoc)" style="cursor:pointer; transition:transform 0.15s;" title="คลิกเพื่อดูอุปกรณ์ทั้งหมด">
         <div class="icon-big">💻</div>
         <div class="label">ครุภัณฑ์ในระบบ</div>
         <div class="value">${valAll} <span style="font-size:14px;color:var(--gray-500)">รายการ</span></div>
         <div class="sub">ครอบคลุม ${catList.length} หมวดหมู่</div>
       </div>
-      <div class="stat s-green">
+      <div class="stat s-green" onclick="window._ef(filterText, filterCat, 'พร้อมยืม', filterLoc)" style="cursor:pointer; transition:transform 0.15s;" title="คลิกเพื่อกรองเฉพาะพร้อมยืม">
         <div class="icon-big">✅</div>
         <div class="label">พร้อมใช้งานในคลัง</div>
         <div class="value">${valReady} <span style="font-size:14px;color:var(--gray-500)">รายการ</span></div>
         <div class="sub">พร้อมสำหรับการยืม</div>
       </div>
-      <div class="stat s-purple">
+      <div class="stat s-purple" onclick="window._ef(filterText, filterCat, 'อยู่ระหว่างยืม', filterLoc)" style="cursor:pointer; transition:transform 0.15s;" title="คลิกเพื่อกรองเฉพาะกำลังยืม">
         <div class="icon-big">📦</div>
         <div class="label">กำลังยืมใช้งานอยู่</div>
         <div class="value">${valBorrowed} <span style="font-size:14px;color:var(--gray-500)">รายการ</span></div>
         <div class="sub">อยู่นอกคลังขณะนี้</div>
       </div>
-      <div class="stat s-red">
+      <div class="stat s-red" onclick="window._ef(filterText, filterCat, 'ชำรุด', filterLoc)" style="cursor:pointer; transition:transform 0.15s;" title="คลิกเพื่อกรองเฉพาะชำรุด">
         <div class="icon-big">⚠️</div>
         <div class="label">ชำรุด / ส่งซ่อม</div>
         <div class="value">${valDamaged} <span style="font-size:14px;color:var(--gray-500)">รายการ</span></div>
@@ -4395,23 +4505,45 @@ tr:hover td {
     <div class="card" style="margin-bottom: 20px;">
       <div class="card-body" style="padding: 16px 20px;">
         <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
-          <div style="display:flex; gap:12px; flex:1; min-width:280px; flex-wrap:wrap;">
-            <div style="flex:1.5; min-width:200px; position:relative;">
+          <div style="display:flex; gap:10px; flex:1; min-width:280px; flex-wrap:wrap; align-items:center;">
+            <div style="flex:1.5; min-width:220px; position:relative;">
               <input id="eSearchText"
                 value="${esc(filterText)}"
                 placeholder="🔍 ค้นหา รหัสครุภัณฑ์, ชื่ออุปกรณ์, ยี่ห้อ, Serial, ที่เก็บ..."
-                oninput="window._ef(this.value, filterCat)"
+                oninput="window._ef(this.value, filterCat, filterStatus, filterLoc)"
                 style="width:100%; padding:10px 14px; border-radius:10px; border:1px solid #cbd5e1; font-size:14px; outline:none; box-sizing:border-box;">
             </div>
-            <div style="flex:1; min-width:180px; max-width:240px;">
+            <div style="flex:1; min-width:160px; max-width:220px;">
               <select id="eSearchCat"
-                onchange="window._ef(filterText, this.value)"
+                onchange="window._ef(filterText, this.value, filterStatus, filterLoc)"
                 style="width:100%; padding:10px 14px; border-radius:10px; border:1px solid #cbd5e1; font-size:14px; outline:none; cursor:pointer; box-sizing:border-box;">
-                <option value="">🏷️ ทุกหมวดหมู่ (${catList.length} หมวด)</option>
+                <option value="">🏷️ ทุกหมวดหมู่ (${catList.length})</option>
                 ${catList.map(([name, count]) => `<option value="${esc(name)}" ${filterCat === name ? 'selected' : ''}>${esc(name)} (${count})</option>`).join('')}
               </select>
             </div>
-            ${filterText || filterCat ? `<button class="btn btn-sm btn-outline-danger" onclick="window._ef('','')" style="border-radius:10px;">✕ ล้างการกรอง</button>` : ''}
+            <div style="flex:1; min-width:150px; max-width:200px;">
+              <select id="eSearchStatus"
+                onchange="window._ef(filterText, filterCat, this.value, filterLoc)"
+                style="width:100%; padding:10px 14px; border-radius:10px; border:1px solid #cbd5e1; font-size:14px; outline:none; cursor:pointer; box-sizing:border-box;">
+                <option value="">📌 ทุกสถานะคลัง</option>
+                <option value="พร้อมยืม" ${filterStatus === 'พร้อมยืม' ? 'selected' : ''}>🟢 พร้อมยืม (${valReady})</option>
+                <option value="อยู่ระหว่างยืม" ${filterStatus === 'อยู่ระหว่างยืม' ? 'selected' : ''}>📦 อยู่ระหว่างยืม (${valBorrowed})</option>
+                <option value="ประจำจุด" ${filterStatus === 'ประจำจุด' ? 'selected' : ''}>🖥️ ประจำจุด (${valStationed})</option>
+                <option value="ชำรุด" ${filterStatus === 'ชำรุด' ? 'selected' : ''}>🔴 ชำรุด (${valDamaged})</option>
+              </select>
+            </div>
+            <div style="flex:1; min-width:160px; max-width:220px;">
+              <select id="eSearchLoc"
+                onchange="window._ef(filterText, filterCat, filterStatus, this.value)"
+                style="width:100%; padding:10px 14px; border-radius:10px; border:1px solid #cbd5e1; font-size:14px; outline:none; cursor:pointer; box-sizing:border-box;">
+                <option value="">📍 ทุกสถานที่จัดเก็บ (${locList.length})</option>
+                ${locList.map(([name, count]) => `<option value="${esc(name)}" ${filterLoc === name ? 'selected' : ''}>${esc(name)} (${count})</option>`).join('')}
+              </select>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span class="badge b-blue" style="font-size:12px; padding:8px 12px; border-radius:10px; font-weight:700; white-space:nowrap;">แสดง ${items.length} / ${valAll} รายการ</span>
+              ${isFiltered ? `<button class="btn btn-sm btn-outline-danger" onclick="window._ef('','','','')" style="border-radius:10px; padding:8px 12px; font-weight:600;">✕ ล้างการกรอง</button>` : ''}
+            </div>
           </div>
         </div>
       </div>
@@ -4478,7 +4610,7 @@ tr:hover td {
                 <td data-label="การจัดการ" style="text-align:center;">
                   <div style="display:inline-flex; gap:6px; justify-content:center; align-items:center;">
                     ${st !== 'ประจำจุด' ? `<button class="btn btn-sm btn-primary" onclick="quickBorrow('${esc(e['รหัส'])}','${esc(e['ชื่ออุปกรณ์'])}')" title="ยืมอุปกรณ์นี้" style="padding:4px 10px; font-weight:600;">📦 ยืม</button>` : ''}
-                    <button class="btn btn-sm btn-info" onclick="showQrModal('${esc(e['รหัส'] || e['รหัสครุภัณฑ์'])}', '${esc(e['ชื่ออุปกรณ์'])}')" title="สร้าง QR Code" style="padding:4px 8px;">🔲 QR</button>
+                    ${isAdmin() ? `<button class="btn btn-sm btn-info" onclick="showQrModal('${esc(e['รหัส'] || e['รหัสครุภัณฑ์'])}', '${esc(e['ชื่ออุปกรณ์'])}')" title="สร้าง QR Code" style="padding:4px 8px;">🔲 QR</button>` : ''}
                     ${canManageEquipment() ? `
                       <button class="btn btn-sm btn-secondary" onclick="editEquip(${equipKey})" title="แก้ไขครุภัณฑ์" style="padding:4px 8px;">✏️</button> 
                       <button class="btn btn-sm btn-danger" onclick="delEquip(${equipKey}, '${esc(e['ชื่ออุปกรณ์'])}')" title="ลบครุภัณฑ์" style="padding:4px 8px;">🗑️</button>
@@ -4492,8 +4624,8 @@ tr:hover td {
                   <div style="text-align:center; padding:50px 20px;">
                     <div style="font-size:48px; opacity:0.3; margin-bottom:12px;">🏬</div>
                     <div style="font-size:15px; font-weight:700; color:#64748b;">ไม่พบข้อมูลอุปกรณ์ตรงกับเงื่อนไข</div>
-                    <div style="font-size:13px; color:#94a3b8; margin-top:4px;">ลองเปลี่ยนคำค้นหา หรือเลือกหมวดหมู่อื่น</div>
-                    <button class="btn btn-sm btn-primary" onclick="window._ef('','')" style="margin-top:14px; border-radius:8px;">ล้างการค้นหา</button>
+                    <div style="font-size:13px; color:#94a3b8; margin-top:4px;">ลองเปลี่ยนคำค้นหา หรือเลือกหมวดหมู่/สถานะอื่น</div>
+                    <button class="btn btn-sm btn-primary" onclick="window._ef('','','','')" style="margin-top:14px; border-radius:8px;">ล้างการค้นหา</button>
                   </div>
                 </td>
               </tr>`}
@@ -4505,9 +4637,14 @@ tr:hover td {
   `;
       };
 
-      window._ef = (text, catVal) => {
+      window._ef = (text, catVal, statusVal, locVal) => {
         filterText = text !== undefined ? text : filterText;
         filterCat = catVal !== undefined ? catVal : filterCat;
+        filterStatus = statusVal !== undefined ? statusVal : filterStatus;
+        filterLoc = locVal !== undefined ? locVal : filterLoc;
+
+        window.EQUIPMENT_FILTER_STATE = { text: filterText, cat: filterCat, status: filterStatus, loc: filterLoc };
+
         $('content').innerHTML = render();
         const searchInput = document.getElementById('eSearchText');
         if (searchInput && text !== undefined) {
@@ -4518,10 +4655,16 @@ tr:hover td {
 
       try {
         if (!Object.getOwnPropertyDescriptor(window, 'filterText')) {
-          Object.defineProperty(window, 'filterText', { get: () => filterText, set: v => { filterText = v; }, configurable: true });
+          Object.defineProperty(window, 'filterText', { get: () => filterText, set: v => { filterText = v; window.EQUIPMENT_FILTER_STATE.text = v; }, configurable: true });
         }
         if (!Object.getOwnPropertyDescriptor(window, 'filterCat')) {
-          Object.defineProperty(window, 'filterCat', { get: () => filterCat, set: v => { filterCat = v; }, configurable: true });
+          Object.defineProperty(window, 'filterCat', { get: () => filterCat, set: v => { filterCat = v; window.EQUIPMENT_FILTER_STATE.cat = v; }, configurable: true });
+        }
+        if (!Object.getOwnPropertyDescriptor(window, 'filterStatus')) {
+          Object.defineProperty(window, 'filterStatus', { get: () => filterStatus, set: v => { filterStatus = v; window.EQUIPMENT_FILTER_STATE.status = v; }, configurable: true });
+        }
+        if (!Object.getOwnPropertyDescriptor(window, 'filterLoc')) {
+          Object.defineProperty(window, 'filterLoc', { get: () => filterLoc, set: v => { filterLoc = v; window.EQUIPMENT_FILTER_STATE.loc = v; window.EQUIPMENT_FILTER_STATE.loc = v; }, configurable: true });
         }
       } catch(e) {}
 
@@ -5360,20 +5503,25 @@ tr:hover td {
     function borrowActions(b) {
       const s = b['สถานะ'];
       const key = (b._row !== undefined && b._row !== null) ? b._row : `'${esc(b['รหัส'] || b.id || '')}'`;
-      let html = `<button class="btn btn-sm btn-secondary" onclick="viewBorrow(${key})">👁️</button> `;
+      let html = `<button class="btn btn-sm btn-secondary" onclick="viewBorrow(${key})" title="ดูรายละเอียด">👁️</button> `;
       
+      if (isAdmin()) {
+        html += `<button class="btn btn-sm btn-info" onclick="editBorrow(${key})" title="แก้ไขคำขอ">✏️</button> `;
+      }
+
       // Extension Request button for active borrowers
       if (['อยู่ในระหว่างการยืม', 'รับเรื่องแล้ว', 'ถึงวันครบกำหนดคืน'].includes(s)) {
         html += `<button class="btn btn-sm btn-warning" onclick="openExtensionModal(${key})">⏳ ขอขยายเวลา</button> `;
       }
 
       if (isAdmin() || isManager()) {
-        if (s === 'รอรับเรื่อง') html += `<button class="btn btn-sm btn-primary" onclick="updBorrow(${key},'รับเรื่องแล้ว')">✅ รับเรื่อง</button>`;
-        else if (s === 'รับเรื่องแล้ว') html += `<button class="btn btn-sm btn-info" onclick="updBorrow(${key},'อยู่ในระหว่างการยืม')">📤 ส่งมอบ</button>`;
-        else if (s === 'อยู่ในระหว่างการยืม' || s === 'ถึงวันครบกำหนดคืน') html += `<button class="btn btn-sm btn-warning" onclick="openReturnConditionModal(${key},'อยู่ในระหว่างการคืน')">📥 รับคืน</button>`;
-        else if (s === 'ขอขยายเวลา') html += `<button class="btn btn-sm btn-success" onclick="approveExtensionModal(${key})">👍 อนุมัติขยายเวลา</button>`;
-        else if (s === 'อยู่ในระหว่างการคืน') html += `<button class="btn btn-sm btn-success" onclick="openReturnConditionModal(${key},'คืนเสร็จสิ้น')">✔️ ยืนยันคืน</button>`;
-        if (s !== 'คืนเสร็จสิ้น' && s !== 'ยกเลิก') html += ` <button class="btn btn-sm btn-danger" onclick="updBorrow(${key},'ยกเลิก')">❌</button>`;
+        if (s === 'รอรับเรื่อง') html += `<button class="btn btn-sm btn-primary" onclick="updBorrow(${key},'รับเรื่องแล้ว')">✅ รับเรื่อง</button> `;
+        else if (s === 'รับเรื่องแล้ว') html += `<button class="btn btn-sm btn-info" onclick="updBorrow(${key},'อยู่ในระหว่างการยืม')">📤 ส่งมอบ</button> `;
+        else if (s === 'อยู่ในระหว่างการยืม' || s === 'ถึงวันครบกำหนดคืน') html += `<button class="btn btn-sm btn-warning" onclick="openReturnConditionModal(${key},'อยู่ในระหว่างการคืน')">📥 รับคืน</button> `;
+        else if (s === 'ขอขยายเวลา') html += `<button class="btn btn-sm btn-success" onclick="approveExtensionModal(${key})">👍 อนุมัติขยายเวลา</button> `;
+        else if (s === 'อยู่ในระหว่างการคืน') html += `<button class="btn btn-sm btn-success" onclick="openReturnConditionModal(${key},'คืนเสร็จสิ้น')">✔️ ยืนยันคืน</button> `;
+        if (s !== 'คืนเสร็จสิ้น' && s !== 'ยกเลิก') html += `<button class="btn btn-sm btn-outline-danger" onclick="updBorrow(${key},'ยกเลิก')" title="ยกเลิก">❌</button> `;
+        if (isAdmin()) html += `<button class="btn btn-sm btn-danger" onclick="delBorrow(${key})" title="ลบคำขอ">🗑️</button>`;
       }
       return html;
     }
@@ -5678,11 +5826,94 @@ tr:hover td {
     }
     window.delBorrow = delBorrow;
 
+    function editBorrow(row) {
+      if (!requireAdmin()) return;
+      const b = DATA.borrowing.find(x => x._row === row || x._row === +row || String(x['รหัส']) === String(row) || String(x.id) === String(row));
+      if (!b) { toast('ไม่พบรายการคำขอยืม', 'error'); return; }
+
+      const statusList = ['รอรับเรื่อง', 'รับเรื่องแล้ว', 'อยู่ในระหว่างการยืม', 'ถึงวันครบกำหนดคืน', 'ขอขยายเวลา', 'อยู่ในระหว่างการคืน', 'คืนเสร็จสิ้น', 'ยกเลิก'];
+
+      openModal('✏️ แก้ไขข้อมูลคำขอยืม ' + esc(b['รหัส']), `
+    <div class="form-grid">
+      <div class="field"><label>เลขคำขอ (Read-only)</label><input value="${esc(b['รหัส'])}" readonly style="background:#f1f5f9; font-weight:700;"></div>
+      <div class="field"><label>สถานะคำขอ *</label>
+        <select id="eb_status">
+          ${statusList.map(s => `<option value="${esc(s)}" ${b['สถานะ'] === s ? 'selected' : ''}>${esc(s)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field full"><label>อุปกรณ์ที่ขอยืม *</label>
+        <select id="eb_eq">
+          ${DATA.equipment.map(e => `<option value="${esc(e['รหัส'])}|${esc(e['ชื่ออุปกรณ์'])}" ${(b['รหัสอุปกรณ์'] === e['รหัส'] || b['ชื่ออุปกรณ์'] === e['ชื่ออุปกรณ์']) ? 'selected' : ''}>
+            ${esc(e['ชื่ออุปกรณ์'])} (${esc(e['รหัสครุภัณฑ์'] || e['รหัส'])})
+          </option>`).join('')}
+        </select>
+      </div>
+      <div class="field"><label>จำนวน</label><input id="eb_qty" type="number" value="${esc(b['จำนวน'] || 1)}" min="1"></div>
+      <div class="field"><label>ผู้ขอยืม *</label><input id="eb_user" value="${esc(b['ผู้ขอยืม'] || '')}"></div>
+      <div class="field"><label>หน่วยงาน *</label>
+        <select id="eb_dept">
+          ${DATA.departments.map(d => `<option ${d['ชื่อหน่วยงาน'] === b['หน่วยงาน'] ? 'selected' : ''}>${esc(d['ชื่อหน่วยงาน'])}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field"><label>เบอร์ติดต่อ</label><input id="eb_phone" value="${esc(b['เบอร์ติดต่อ'] || '')}"></div>
+      <div class="field"><label>วันที่ขอยืม</label><input id="eb_date" type="date" value="${esc(b['วันที่ขอยืม'] || '')}"></div>
+      <div class="field"><label>วันที่ต้องการรับ</label><input id="eb_pickup" type="date" value="${esc(b['วันที่ต้องการรับ'] || '')}"></div>
+      <div class="field"><label>วันที่ครบกำหนดคืน</label><input id="eb_due" type="date" value="${esc(b['วันที่ครบกำหนด'] || '')}"></div>
+      <div class="field full"><label>📍 สถานที่นำไปใช้งาน *</label><input id="eb_location" value="${esc(b['สถานที่ใช้งาน'] || b['สถานที่'] || '')}"></div>
+      <div class="field full"><label>วัตถุประสงค์ *</label><input id="eb_purpose" value="${esc(b['วัตถุประสงค์'] || '')}"></div>
+      <div class="field full"><label>หมายเหตุ</label><textarea id="eb_note" rows="2">${esc(b['หมายเหตุ'] || '')}</textarea></div>
+    </div>
+      `, () => {
+        const eqVal = $('eb_eq').value.split('|');
+        const updated = Object.assign({}, b, {
+          'รหัส': b['รหัส'],
+          'สถานะ': $('eb_status').value,
+          'รหัสอุปกรณ์': eqVal[0],
+          'ชื่ออุปกรณ์': eqVal[1],
+          'จำนวน': +$('eb_qty').value,
+          'ผู้ขอยืม': $('eb_user').value,
+          'หน่วยงาน': $('eb_dept').value,
+          'เบอร์ติดต่อ': $('eb_phone').value,
+          'วันที่ขอยืม': $('eb_date').value,
+          'วันที่ต้องการรับ': $('eb_pickup').value,
+          'วันที่ครบกำหนด': $('eb_due').value,
+          'สถานที่ใช้งาน': $('eb_location').value,
+          'วัตถุประสงค์': $('eb_purpose').value,
+          'หมายเหตุ': $('eb_note').value
+        });
+        if (b._row !== undefined) updated._row = b._row;
+        if (b._id !== undefined) updated._id = b._id;
+
+        if (!updated['ผู้ขอยืม'] || !updated['วัตถุประสงค์'] || !updated['สถานที่ใช้งาน']) {
+          toast('กรอกข้อมูลให้ครบถ้วน', 'warning');
+          return;
+        }
+
+        showLoading(true);
+        callApi('saveBorrowing', updated, CURRENT_USER.name).then(r => {
+          showLoading(false);
+          if (r.success) {
+            toast('บันทึกการแก้ไขสำเร็จ');
+            closeModal();
+            refreshData();
+          } else {
+            toast(r.message || 'เกิดข้อผิดพลาดในการบันทึก', 'error');
+          }
+        }).catch(err => {
+          showLoading(false);
+          toast('เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์', 'error');
+        });
+      }, true);
+    }
+    window.editBorrow = editBorrow;
+
     function viewBorrow(row) {
       const b = DATA.borrowing.find(x => x._row === row || x._row === +row || String(x['รหัส']) === String(row) || String(x.id) === String(row));
+      if (!b) return;
       const status = ['รอรับเรื่อง', 'รับเรื่องแล้ว', 'อยู่ในระหว่างการยืม', 'ถึงวันครบกำหนดคืน', 'ขอขยายเวลา', 'อยู่ในระหว่างการคืน', 'คืนเสร็จสิ้น'];
       const idx = status.indexOf(b['สถานะ']);
       const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=' + encodeURIComponent(b['รหัส']);
+      const key = (b._row !== undefined && b._row !== null) ? b._row : `'${esc(b['รหัส'] || b.id || '')}'`;
 
       openModal('📋 รายละเอียดคำขอยืม', `
     <div style="display:grid;gap:16px">
@@ -5710,6 +5941,24 @@ tr:hover td {
         ${b['เหตุผลขอขยายเวลา'] ? '<div class="full" style="grid-column:1/-1"><strong>เหตุผลขอขยายเวลา:</strong> ' + esc(b['เหตุผลขอขยายเวลา']) + '</div>' : ''}
         <div class="full" style="grid-column:1/-1"><strong>วัตถุประสงค์:</strong> ${esc(b['วัตถุประสงค์'])}</div>
         <div class="full" style="grid-column:1/-1"><strong>หมายเหตุ:</strong> ${esc(b['หมายเหตุ'] || '-')}</div>
+      </div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; justify-content:space-between; margin-top:10px; padding-top:12px; border-top:1px solid #e2e8f0;">
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          ${isAdmin() ? `
+            <button class="btn btn-sm btn-info" onclick="closeModal(); editBorrow(${key});" style="font-weight:700;">✏️ แก้ไขคำขอ</button>
+            <button class="btn btn-sm btn-danger" onclick="closeModal(); delBorrow(${key});" style="font-weight:700;">🗑️ ลบคำขอ</button>
+          ` : ''}
+        </div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          ${isAdmin() || isManager() ? `
+            ${b['สถานะ'] === 'รอรับเรื่อง' ? `<button class="btn btn-sm btn-primary" onclick="closeModal(); updBorrow(${key},'รับเรื่องแล้ว');">✅ รับเรื่อง</button>` : ''}
+            ${b['สถานะ'] === 'รับเรื่องแล้ว' ? `<button class="btn btn-sm btn-info" onclick="closeModal(); updBorrow(${key},'อยู่ในระหว่างการยืม');">📤 ส่งมอบ</button>` : ''}
+            ${(b['สถานะ'] === 'อยู่ในระหว่างการยืม' || b['สถานะ'] === 'ถึงวันครบกำหนดคืน') ? `<button class="btn btn-sm btn-warning" onclick="closeModal(); openReturnConditionModal(${key},'อยู่ในระหว่างการคืน');">📥 รับคืน</button>` : ''}
+            ${b['สถานะ'] === 'ขอขยายเวลา' ? `<button class="btn btn-sm btn-success" onclick="closeModal(); approveExtensionModal(${key});">👍 อนุมัติขยายเวลา</button>` : ''}
+            ${b['สถานะ'] === 'อยู่ในระหว่างการคืน' ? `<button class="btn btn-sm btn-success" onclick="closeModal(); openReturnConditionModal(${key},'คืนเสร็จสิ้น');">✔️ ยืนยันคืน</button>` : ''}
+            ${(b['สถานะ'] !== 'คืนเสร็จสิ้น' && b['สถานะ'] !== 'ยกเลิก') ? `<button class="btn btn-sm btn-outline-danger" onclick="closeModal(); updBorrow(${key},'ยกเลิก');">❌ ยกเลิกคำขอ</button>` : ''}
+          ` : ''}
+        </div>
       </div>
     </div>
   `, () => exportBorrowPDF(row), true);
@@ -6002,6 +6251,7 @@ tr:hover td {
           </div>
 
           <div style="display:flex; gap:8px; align-items:center;">
+            <button class="btn btn-sm btn-info" onclick="openAdminPreviewModal()" style="border-radius:10px; font-weight:700;">👁️ ดูรายชื่อ Admin (Preview)</button>
             ${isAdmin() ? `
               <button class="btn btn-sm btn-success" onclick="addUser()" style="border-radius:10px; font-weight:700;">➕ เพิ่มผู้ใช้ใหม่</button>
               <button class="btn btn-sm btn-outline" onclick="openImportUsersModal()" style="border-radius:10px;">📥 นำเข้า</button>
@@ -8479,6 +8729,21 @@ tr:hover td {
       }
     }
 
+    function isUserEditingForm() {
+      const active = document.activeElement;
+      if (active) {
+        const tag = active.tagName ? active.tagName.toUpperCase() : '';
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
+          return true;
+        }
+        if (active.isContentEditable) return true;
+      }
+      const modalOpen = document.querySelector('.modal[style*="display: block"], .modal[style*="display:flex"], div[id$="_modal"][style*="display: block"]');
+      if (modalOpen) return true;
+      return false;
+    }
+    window.isUserEditingForm = isUserEditingForm;
+
     function setupFirestoreRealtimeListeners() {
       if (!db || !USE_FIREBASE) return;
       const collections = [
@@ -8500,8 +8765,15 @@ tr:hover td {
           else if (col === 'fuelQuota') DATA.fuelQuota = items;
           else DATA[col] = items;
 
-          if (document.getElementById('content')) {
-            renderPage(CURRENT_PAGE);
+          // 🛡️ ป้องกันการ re-render หน้าโดยอัตโนมัติขณะที่ผู้ใช้กำลังพิมพ์แบบฟอร์ม หรือเปิดหน้ายื่นคำขอใหม่
+          const isEditing = isUserEditingForm();
+          const isFormTab = (CURRENT_PAGE === 'serviceRequest' && typeof SERVICE_REQUEST_TAB !== 'undefined' && SERVICE_REQUEST_TAB === 'form');
+          const livePages = ['dashboard', 'equipment', 'borrowing', 'vehicles', 'users', 'drivers', 'usage', 'maintenance', 'fuel', 'booking', 'inspection', 'notifications', 'audit', 'departments', 'serviceRequests', 'reports', 'attendanceCheckin', 'attendanceHistory', 'attendanceSettings', 'wifiQr'];
+
+          if (!isEditing && !isFormTab && document.getElementById('content')) {
+            if (livePages.includes(CURRENT_PAGE) || (CURRENT_PAGE === 'serviceRequest' && typeof SERVICE_REQUEST_TAB !== 'undefined' && SERVICE_REQUEST_TAB === 'admin')) {
+              renderPage(CURRENT_PAGE);
+            }
           }
         }, err => {
           console.error(`Firestore listener error [${col}]:`, err);
@@ -8604,6 +8876,10 @@ tr:hover td {
     }
 
     function showQrModal(code, title) {
+      if (!isAdmin()) {
+        toast('สิทธิ์เจ้าหน้าที่: การแสดง QR Code อนุญาตเฉพาะ Admin เท่านั้น', 'warning');
+        return;
+      }
       const container = $('qrCodeContainer');
       const subText = $('qrDisplaySubText');
       const codeText = $('qrDisplayCodeText');
@@ -8638,6 +8914,67 @@ tr:hover td {
     function printQrCode() {
       window.print();
     }
+
+    function openAdminPreviewModal() {
+      let adminUsers = (DATA.users || []).filter(u => {
+        const r = String(u['บทบาท'] || u.role || '').toLowerCase();
+        return r === 'superadmin' || r === 'admin' || r === 'ผู้ดูแลระบบ';
+      });
+
+      if (!adminUsers.length) {
+        adminUsers = [
+          { 'ชื่อ-นามสกุล': 'ผู้ดูแลระบบสารสนเทศ (IT Admin)', 'ตำแหน่ง': 'นักวิชาการคอมพิวเตอร์', 'หน่วยงาน': 'งานเทคโนโลยีสารสนเทศ', 'เบอร์ติดต่อ': '1119 (สายใน)', 'อีเมล': 'it@khlonghad.go.th', 'บทบาท': 'admin', 'สถานะ': 'พร้อมใช้งาน' }
+        ];
+      }
+
+      const modalBody = `
+      <div style="padding: 10px 4px;">
+        <div style="background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); color:#fff; padding: 16px 20px; border-radius: 16px; margin-bottom: 20px; box-shadow: 0 4px 14px rgba(30,64,175,0.2);">
+          <div style="display:flex; align-items:center; gap:12px;">
+            <div style="font-size:32px;">🛡️</div>
+            <div>
+              <div style="font-size:16px; font-weight:700;">รายชื่อผู้ดูแลระบบ (Admin Directory Preview)</div>
+              <div style="font-size:12px; opacity:0.9;">ข้อมูลติดต่อเจ้าหน้าที่ผู้ดูแลระบบคอมพิวเตอร์และเครือข่าย</div>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px;">
+          ${adminUsers.map(u => {
+            const nameStr = u['ชื่อ-นามสกุล'] || u.name || 'ผู้ดูแลระบบ';
+            const initial = nameStr.trim().charAt(0) || '🛡️';
+            const roleBadge = (u['บทบาท'] === 'superadmin' || u.role === 'superadmin') ? '👑 Super Admin' : '🛡️ Admin';
+            return `
+            <div style="background:#fff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 16px; box-shadow: var(--shadow-sm); transition: 0.2s;">
+              <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
+                <div style="width:46px; height:46px; border-radius:50%; background:linear-gradient(135deg, #0284c7, #2563eb); color:#fff; font-weight:700; font-size:18px; display:flex; align-items:center; justify-content:center; flex-shrink:0; box-shadow: 0 4px 10px rgba(37,99,235,0.3);">
+                  ${esc(initial)}
+                </div>
+                <div>
+                  <div style="font-weight:700; color:#0f172a; font-size:15px;">${esc(nameStr)}</div>
+                  <span class="badge b-blue" style="margin-top:2px; font-size:11px;">${roleBadge}</span>
+                </div>
+              </div>
+              <div style="font-size:13px; color:#475569; display:flex; flex-direction:column; gap:6px; background:#f8fafc; padding:10px 12px; border-radius:10px; margin-bottom:12px;">
+                <div>🏢 <strong>สังกัด:</strong> ${esc(u['หน่วยงาน'] || 'งานสารสนเทศ')}</div>
+                <div>💼 <strong>ตำแหน่ง:</strong> ${esc(u['ตำแหน่ง'] || 'นักวิชาการคอมพิวเตอร์')}</div>
+                <div>📞 <strong>เบอร์ติดต่อ:</strong> <span style="color:#2563eb; font-weight:700;">${esc(u['เบอร์ติดต่อ'] || '1119')}</span></div>
+                <div>✉️ <strong>อีเมล:</strong> ${esc(u['อีเมล'] || '-')}</div>
+              </div>
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <span class="badge b-green" style="font-size:11px;">🟢 พร้อมสแตนด์บาย</span>
+                <a href="tel:${esc(u['เบอร์ติดต่อ'] || '1119')}" class="btn btn-sm btn-outline-primary" style="border-radius:20px; padding:4px 12px; font-size:12px;">📞 โทรภายใน</a>
+              </div>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>`;
+
+      openModal('👁️ รายชื่อผู้ดูแลระบบ (Admin Preview)', modalBody, null, true);
+      const footerSave = document.getElementById('modalSave');
+      if (footerSave) footerSave.style.display = 'none';
+    }
+    window.openAdminPreviewModal = openAdminPreviewModal;
 
     // Canvas Signature Functions
     const SIG_DRAWING = {};
@@ -8816,54 +9153,166 @@ tr:hover td {
             <div style="font-size:13px; opacity:0.9; margin-top:4px;">งานเทคโนโลยีสารสนเทศ - กรอกข้อมูลเพื่อขอสิทธิ์การใช้งานระบบงานสารสนเทศ</div>
           </div>
           <div class="card-body" style="padding:24px;">
-            <form onsubmit="submitNewServiceRequest(event)">
-              <div class="form-grid">
+            <form onsubmit="submitNewServiceRequest(event)" style="display:flex; flex-direction:column; gap:20px;">
+              <!-- 📌 ส่วนที่ 1: เลือกประเภทบริการ -->
+              <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:16px; padding:18px; box-shadow:var(--shadow-sm);">
+                <div style="font-weight:700; font-size:15px; color:#0369a1; margin-bottom:14px; display:flex; align-items:center; gap:8px;">
+                  <span style="font-size:20px;">📌</span> <span>ส่วนที่ 1: เลือกประเภทบริการสารสนเทศ</span>
+                </div>
                 <div class="field full">
                   <label>ประเภทบริการที่ต้องการขอใช้ *</label>
                   <select id="sr_type" onchange="toggleVpnPurpose(this.value)">
-                    <option value="HOSXP">ขอใช้งานโปรแกรม HOSxP และ อินเตอร์เน็ต</option>
+                    <option value="HOSXP_NET">ขอใช้งานโปรแกรม HOSxP และ อินเทอร์เน็ต (Internet)</option>
+                    <option value="HOSXP">ขอใช้งานเฉพาะโปรแกรม HOSxP</option>
+                    <option value="INTERNET">ขอใช้งานเฉพาะอินเทอร์เน็ต (Internet)</option>
                     <option value="VPN">ขอใช้งานระบบ VPN (เข้าถึงข้อมูลจากภายนอก)</option>
                   </select>
                 </div>
-                <div class="field">
-                  <label>ชื่อ-นามสกุล (ภาษาไทย) *</label>
-                  <input type="text" id="sr_name_th" required placeholder="นาย/นาง/นางสาว ...">
+              </div>
+
+              <!-- 👤 ส่วนที่ 2: ข้อมูลส่วนตัวผู้ยื่นขอสิทธิ์ -->
+              <div style="background:#fff; border:1px solid #cbd5e1; border-radius:16px; padding:18px; box-shadow:var(--shadow-sm);">
+                <div style="font-weight:700; font-size:15px; color:#1e293b; margin-bottom:14px; display:flex; align-items:center; gap:8px; border-bottom:1px solid #f1f5f9; padding-bottom:10px;">
+                  <span style="font-size:20px;">👤</span> <span>ส่วนที่ 2: ข้อมูลส่วนตัวผู้ยื่นขอสิทธิ์</span>
                 </div>
-                <div class="field">
-                  <label>ชื่อ-นามสกุล (ภาษาอังกฤษตัวพิมพ์ใหญ่)</label>
-                  <input type="text" id="sr_name_en" placeholder="MR./MRS./MS. ...">
-                </div>
-                <div class="field">
-                  <label>ตำแหน่ง *</label>
-                  <input type="text" id="sr_position" required placeholder="เช่น พยาบาลวิชาชีพ, นักวิชาการคอมฯ">
-                </div>
-                <div class="field">
-                  <label>เลขบัตรประจำตัวประชาชน 13 หลัก * (ใช้สำหรับค้นหาติดตามสถานะ)</label>
-                  <input type="text" id="sr_id_card" maxlength="13" required placeholder="กรอกเฉพาะตัวเลข 13 หลัก">
-                </div>
-                <div class="field">
-                  <label>วัน เดือน ปีเกิด</label>
-                  <input type="date" id="sr_birth_date">
-                </div>
-                <div class="field">
-                  <label>เลข ว.แพทย์ / เลขใบประกอบวิชาชีพ (ถ้ามี)</label>
-                  <input type="text" id="sr_license_no" placeholder="ถ้าไม่มีให้เว้นว่าง">
-                </div>
-                <div class="field">
-                  <label>อีเมล (สำหรับรับแจ้งผลการพิจารณา)</label>
-                  <input type="email" id="sr_email" placeholder="example@email.com">
-                </div>
-                <div class="field">
-                  <label>LINE ID / เบอร์โทรติดต่อ</label>
-                  <input type="text" id="sr_line_id" placeholder="ID Line หรือ เบอร์โทรศัพท์">
-                </div>
-                <div class="field full" id="vpn_purpose_wrap" style="display:none;">
-                  <label>วัตถุประสงค์ในการขอใช้บริการ VPN *</label>
-                  <textarea id="sr_vpn_purpose" rows="2" placeholder="ระบุเหตุผลความจำเป็นในการเข้าถึงระบบจากภายนอกโรงพยาบาล"></textarea>
+                <div class="form-grid">
+                  <div class="field">
+                    <label>ชื่อ-นามสกุล (ภาษาไทย) *</label>
+                    <input type="text" id="sr_name_th" required placeholder="นาย/นาง/นางสาว ...">
+                  </div>
+                  <div class="field">
+                    <label>ชื่อ-นามสกุล (ภาษาอังกฤษตัวพิมพ์ใหญ่)</label>
+                    <input type="text" id="sr_name_en" placeholder="MR./MRS./MS. ...">
+                  </div>
+                  <div class="field">
+                    <label>ตำแหน่ง *</label>
+                    <input type="text" id="sr_position" required placeholder="เช่น พยาบาลวิชาชีพ, นักวิชาการคอมฯ">
+                  </div>
+                  <div class="field">
+                    <label>หน่วยงาน / สถานที่ปฏิบัติงาน *</label>
+                    <select id="sr_dept" required onchange="onSelectSrDept(this.value)">
+                      <option value="">-- กรุณาเลือกสถานที่ / หน่วยงาน --</option>
+                      <option value="ผู้ป่วยนอก (OPD)">ผู้ป่วยนอก (OPD)</option>
+                      <option value="ผู้ป่วยใน (IPD)">ผู้ป่วยใน (IPD)</option>
+                      <option value="อุบัติเหตุและฉุกเฉิน (ER)">อุบัติเหตุและฉุกเฉิน (ER)</option>
+                      <option value="ห้องชันสูตร (LAB)">ห้องชันสูตร (LAB)</option>
+                      <option value="งานเภสัชกรรม">งานเภสัชกรรม</option>
+                      <option value="งานเทคโนโลยีสารสนเทศ">งานเทคโนโลยีสารสนเทศ</option>
+                      <option value="งานทันตกรรม">งานทันตกรรม</option>
+                      <option value="งานรังสีวิทยา (X-Ray)">งานรังสีวิทยา (X-Ray)</option>
+                      <option value="งานกายภาพบำบัด">งานกายภาพบำบัด</option>
+                      <option value="ฝ่ายบริหาร / งานสำนักงาน">ฝ่ายบริหาร / งานสำนักงาน</option>
+                      <option value="รพ.สต. / หน่วยบริการภายนอก">รพ.สต. / หน่วยบริการภายนอก</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label>เลขบัตรประจำตัวประชาชน 13 หลัก * (ใช้สำหรับค้นหาติดตามสถานะ)</label>
+                    <input type="text" id="sr_id_card" maxlength="13" required placeholder="กรอกเฉพาะตัวเลข 13 หลัก">
+                  </div>
+                  <div class="field">
+                    <label>วัน เดือน ปีเกิด</label>
+                    <input type="date" id="sr_birth_date">
+                  </div>
+                  <div class="field">
+                    <label>เลข ว.แพทย์ / เลขใบประกอบวิชาชีพ (ถ้ามี)</label>
+                    <input type="text" id="sr_license_no" placeholder="ถ้าไม่มีให้เว้นว่าง">
+                  </div>
+                  <div class="field">
+                    <label>อีเมล (สำหรับรับแจ้งผลการพิจารณา)</label>
+                    <input type="email" id="sr_email" placeholder="example@email.com">
+                  </div>
+                  <div class="field">
+                    <label>LINE ID / เบอร์โทรติดต่อ</label>
+                    <input type="text" id="sr_line_id" placeholder="ID Line หรือ เบอร์โทรศัพท์">
+                  </div>
+
+                  <!-- 📱 แสดงภาพ QR Code จริงจากโฟลเดอร์ WIFI-QRCODE ทันทีเมื่อเลือกสถานที่ -->
+                  <div id="sr_dept_qr_box" class="field full" style="display:none; margin-top:12px; padding:18px; background:linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%); border:1.5px solid #a7f3d0; border-radius:18px; box-shadow:var(--shadow-md);">
+                    <div style="font-weight:700; font-size:16px; color:#065f46; margin-bottom:6px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;">
+                      <div style="display:flex; align-items:center; gap:8px;">
+                        <span style="font-size:20px;">📶</span>
+                        <span>รูป QR Code สำหรับสแกนใช้งาน WiFi ประจำสถานที่</span>
+                      </div>
+                      <div style="font-size:13px; font-weight:600; color:#047857; background:#d1fae5; padding:4px 12px; border-radius:20px; border:1px solid #6ee7b7;">
+                        📍 สถานที่ที่เลือก: <span id="sr_dept_name_display">-</span>
+                      </div>
+                    </div>
+                    <div style="font-size:13px; color:#047857; margin-bottom:14px; line-height:1.5;">
+                      สแกนรูปภาพ QR Code จริงจากคลังระบบ (โฟลเดอร์ WIFI-QRCODE) เพื่อเข้าใช้งานสัญญาณ WiFi ได้ทันที:
+                    </div>
+                    
+                    <!-- การ์ดแสดงรูปภาพจริง -->
+                    <div id="sr_dept_qr_gallery" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:16px;">
+                    </div>
+                  </div>
                 </div>
               </div>
-              <div style="margin-top:24px; text-align:right;">
-                <button type="submit" class="btn btn-primary btn-lg" style="min-width:200px;">
+
+              <!-- 🔑 ส่วนที่ 3: ชื่อบัญชีและรหัสผ่านที่ต้องการตั้ง -->
+              <div style="background:linear-gradient(135deg, #eff6ff 0%, #f0f9ff 100%); border:1px solid #93c5fd; border-radius:16px; padding:18px; box-shadow:var(--shadow-sm);">
+                <div style="font-weight:700; font-size:15px; color:#1e40af; margin-bottom:14px; display:flex; align-items:center; gap:8px; border-bottom:1px solid #dbeafe; padding-bottom:10px;">
+                  <span style="font-size:20px;">🔑</span> <span>ส่วนที่ 3: ชื่อบัญชีและรหัสผ่านที่ต้องการตั้ง</span>
+                </div>
+                <div class="form-grid">
+                  <div class="field">
+                    <label>ชื่อผู้ใช้งานที่ต้องการตั้ง (Username ที่ขอใช้)</label>
+                    <input type="text" id="sr_req_username" placeholder="เช่น somchai.k (ภาษาอังกฤษ/ตัวเลข)">
+                  </div>
+                  <div class="field">
+                    <label>รหัสผ่านที่ต้องการตั้ง (Password ที่ขอใช้)</label>
+                    <input type="password" id="sr_req_password" placeholder="กำหนดรหัสผ่านที่ต้องการเข้าใช้งาน">
+                  </div>
+                </div>
+              </div>
+
+              <!-- 🏥 ส่วนที่ 4: รายละเอียดสิทธิ์บริการ -->
+              <div style="background:#fff; border:1px solid #cbd5e1; border-radius:16px; padding:18px; box-shadow:var(--shadow-sm);">
+                <div style="font-weight:700; font-size:15px; color:#0f766e; margin-bottom:14px; display:flex; align-items:center; gap:8px; border-bottom:1px solid #f1f5f9; padding-bottom:10px;">
+                  <span style="font-size:20px;">📝</span> <span id="sec4_title">ส่วนที่ 4: รายละเอียดสิทธิ์ระบบและวัตถุประสงค์</span>
+                </div>
+                <div class="form-grid">
+                  <!-- ช่องลงข้อมูล HOSxP -->
+                  <div class="field full" id="hosxp_details_wrap" style="display:block;">
+                    <label style="font-weight:700; color:var(--primary); font-size:14px; margin-bottom:6px;">🏥 รายละเอียดสิทธิ์ระบบ HOSxP ที่ขอใช้งาน *</label>
+                    <div style="display:flex; flex-wrap:wrap; gap:10px; margin-bottom:10px; padding:12px; background:#f0f9ff; border:1px solid #bae6fd; border-radius:10px;">
+                      <label style="display:flex; align-items:center; gap:6px; font-size:13px; font-weight:600; cursor:pointer; color:#0369a1;">
+                        <input type="checkbox" name="sr_hosxp_perm" value="OPD (ผู้ป่วยนอก)" checked> OPD (ผู้ป่วยนอก)
+                      </label>
+                      <label style="display:flex; align-items:center; gap:6px; font-size:13px; font-weight:600; cursor:pointer; color:#0369a1;">
+                        <input type="checkbox" name="sr_hosxp_perm" value="IPD (ผู้ป่วยใน)"> IPD (ผู้ป่วยใน)
+                      </label>
+                      <label style="display:flex; align-items:center; gap:6px; font-size:13px; font-weight:600; cursor:pointer; color:#0369a1;">
+                        <input type="checkbox" name="sr_hosxp_perm" value="ห้องยา/เภสัช"> ห้องยา/เภสัชกรรม
+                      </label>
+                      <label style="display:flex; align-items:center; gap:6px; font-size:13px; font-weight:600; cursor:pointer; color:#0369a1;">
+                        <input type="checkbox" name="sr_hosxp_perm" value="การเงิน/สิทธิรักษา"> การเงิน/สิทธิรักษา
+                      </label>
+                      <label style="display:flex; align-items:center; gap:6px; font-size:13px; font-weight:600; cursor:pointer; color:#0369a1;">
+                        <input type="checkbox" name="sr_hosxp_perm" value="ER/แล็บ/รังสี"> ER/แล็บ/รังสี
+                      </label>
+                      <label style="display:flex; align-items:center; gap:6px; font-size:13px; font-weight:600; cursor:pointer; color:#0369a1;">
+                        <input type="checkbox" name="sr_hosxp_perm" value="อื่นๆ"> อื่นๆ
+                      </label>
+                    </div>
+                    <textarea id="sr_hosxp_details" rows="2" placeholder="ระบุเหตุผล ความจำเป็น หรือสิทธิ์เฉพาะที่ต้องการใช้งานใน HOSxP เพิ่มเติม..."></textarea>
+                  </div>
+
+                  <!-- ช่องลงข้อมูล Internet -->
+                  <div class="field full" id="internet_details_wrap" style="display:block;">
+                    <label style="font-weight:700; color:#0284c7; font-size:14px; margin-bottom:6px;">🌐 รายละเอียดการขอใช้อินเทอร์เน็ต (Internet / Wi-Fi) *</label>
+                    <textarea id="sr_internet_details" rows="2" placeholder="ระบุวัตถุประสงค์การใช้อินเทอร์เน็ต แผนกที่ใช้งาน หรือรหัสเครื่อง/Mac Address (ถ้ามี)..."></textarea>
+                  </div>
+
+                  <!-- ช่องลงข้อมูล VPN -->
+                  <div class="field full" id="vpn_purpose_wrap" style="display:none;">
+                    <label style="font-weight:700; color:#7c3aed; font-size:14px; margin-bottom:6px;">🔒 วัตถุประสงค์ในการขอใช้บริการ VPN *</label>
+                    <textarea id="sr_vpn_purpose" rows="2" placeholder="ระบุเหตุผลความจำเป็นในการเข้าถึงระบบจากภายนอกโรงพยาบาล"></textarea>
+                  </div>
+                </div>
+              </div>
+
+              <div style="margin-top:10px; text-align:right;">
+                <button type="submit" class="btn btn-primary btn-lg" style="min-width:220px; font-size:16px;">
                   🚀 ส่งคำขอใช้บริการ
                 </button>
               </div>
@@ -8893,10 +9342,14 @@ tr:hover td {
               <div style="font-size:18px; font-weight:700; color:var(--gray-900);">🛡️ ตารางรายการคำขอใช้บริการสารสนเทศทั้งหมด</div>
               <div style="font-size:13px; color:var(--gray-500); margin-top:2px;">รายการขอใช้บริการ HOSxP, Internet และ VPN</div>
             </div>
-            <button class="btn btn-secondary btn-sm" onclick="loadAdminServiceRequests()">🔄 โหลดข้อมูลใหม่</button>
+            <div style="display:flex; gap:8px;">
+              <button class="btn btn-warning btn-sm" onclick="doTestMikrotikConn()">🛰️ ทดสอบเชื่อมต่อ MikroTik API</button>
+              <button class="btn btn-secondary btn-sm" onclick="loadAdminServiceRequests()">🔄 โหลดข้อมูลใหม่</button>
+            </div>
           </div>
           <div class="card-body" style="padding:20px;">
             <div id="admin_sr_stats" class="stat-grid" style="margin-bottom:20px;"></div>
+            <div id="admin_sr_funnel_filter"></div>
             <div id="admin_sr_table" class="table-wrap">
               <div style="text-align:center; padding:40px; color:var(--gray-400);"><span class="spin"></span> กำลังโหลดข้อมูล...</div>
             </div>
@@ -8906,17 +9359,88 @@ tr:hover td {
 
       content.innerHTML = newEmployeeNotice + tabNav + bodyHtml;
 
-      if (SERVICE_REQUEST_TAB === 'admin') {
+      if (SERVICE_REQUEST_TAB === 'form') {
+        setTimeout(() => {
+          const sel = $('sr_type');
+          if (sel) toggleVpnPurpose(sel.value);
+        }, 50);
+      } else if (SERVICE_REQUEST_TAB === 'admin') {
         loadAdminServiceRequests();
       }
     }
     window.renderServiceRequests = renderServiceRequests;
 
     function toggleVpnPurpose(val) {
-      const wrap = $('vpn_purpose_wrap');
-      if (wrap) wrap.style.display = val === 'VPN' ? 'block' : 'none';
+      const vpnWrap = $('vpn_purpose_wrap');
+      const hosxpWrap = $('hosxp_details_wrap');
+      const netWrap = $('internet_details_wrap');
+      const sec4Title = $('sec4_title');
+
+      const isHosxp = (val === 'HOSXP_NET' || val === 'HOSXP');
+      const isNet = (val === 'HOSXP_NET' || val === 'INTERNET');
+      const isVpn = (val === 'VPN');
+
+      if (vpnWrap) vpnWrap.style.display = isVpn ? 'block' : 'none';
+      if (hosxpWrap) hosxpWrap.style.display = isHosxp ? 'block' : 'none';
+      if (netWrap) netWrap.style.display = isNet ? 'block' : 'none';
+
+      if (sec4Title) {
+        if (val === 'HOSXP_NET') {
+          sec4Title.textContent = 'ส่วนที่ 4: รายละเอียดสิทธิ์ HOSxP และ อินเทอร์เน็ต';
+        } else if (val === 'HOSXP') {
+          sec4Title.textContent = 'ส่วนที่ 4: รายละเอียดสิทธิ์ระบบ HOSxP';
+        } else if (val === 'INTERNET') {
+          sec4Title.textContent = 'ส่วนที่ 4: รายละเอียดการขอใช้อินเทอร์เน็ต (Internet)';
+        } else if (val === 'VPN') {
+          sec4Title.textContent = 'ส่วนที่ 4: วัตถุประสงค์ในการขอใช้บริการ VPN';
+        }
+      }
     }
     window.toggleVpnPurpose = toggleVpnPurpose;
+
+    function onSelectSrDept(val) {
+      const qrBox = $('sr_dept_qr_box');
+      const nameDisplay = $('sr_dept_name_display');
+      const gallery = $('sr_dept_qr_gallery');
+      if (!qrBox) return;
+
+      if (!val || val.trim() === '') {
+        qrBox.style.display = 'none';
+        return;
+      }
+
+      if (nameDisplay) nameDisplay.textContent = val;
+      qrBox.style.display = 'block';
+
+      // รายการรูปภาพจริงจากโฟลเดอร์ WIFI-QRCODE
+      const wifiImages = [
+        { name: 'KH-WiFi6', file: './WIFI-QRCODE/KH-WiFi6.png', desc: 'WiFi หลักประจำโรงพยาบาล (ครอบคลุมทั่วไป)', isPrimary: !val.includes('IPD') && !val.includes('ผู้ป่วยใน') },
+        { name: 'KH-WiFi6G', file: './WIFI-QRCODE/KH-WiFi6G.png', desc: 'WiFi ความเร็วสูง (Guest / เจ้าหน้าที่)', isPrimary: false },
+        { name: 'IPD_WiFi', file: './WIFI-QRCODE/IPD_WiFi.png', desc: 'WiFi สำหรับผู้ป่วยใน (IPD Wards)', isPrimary: val.includes('IPD') || val.includes('ผู้ป่วยใน') }
+      ];
+
+      // เรียงรูปหลักของแผนกขึ้นก่อน
+      wifiImages.sort((a, b) => (b.isPrimary ? 1 : 0) - (a.isPrimary ? 1 : 0));
+
+      if (gallery) {
+        gallery.innerHTML = wifiImages.map(img => `
+          <div style="background:#fff; border:${img.isPrimary ? '2px solid #10b981' : '1px solid #cbd5e1'}; border-radius:16px; padding:16px; text-align:center; box-shadow:var(--shadow-xs); transition:transform 0.2s, box-shadow 0.2s; position:relative;">
+            ${img.isPrimary ? '<div style="position:absolute; top:-10px; right:12px; background:#10b981; color:#fff; font-size:11px; font-weight:700; padding:2px 10px; border-radius:12px; box-shadow:0 2px 4px rgba(16,185,129,0.3);">⭐ แนะนำสำหรับจุดนี้</div>' : ''}
+            <a href="${img.file}" target="_blank" title="คลิกเปิดดูรูปภาพจริงขนาดใหญ่" style="display:inline-block; text-decoration:none; width:100%;">
+              <img src="${img.file}" alt="${img.name}" style="width:100%; max-width:180px; height:180px; border-radius:12px; border:1px solid #e2e8f0; box-shadow:0 2px 8px rgba(0,0,0,0.06); object-fit:contain; background:#fff; padding:6px;">
+            </a>
+            <div style="font-weight:700; font-size:15px; color:#065f46; margin-top:10px; display:flex; align-items:center; justify-content:center; gap:6px;">
+              <span>📶</span> <span>${img.name}</span>
+            </div>
+            <div style="font-size:12px; color:#64748b; margin-top:4px; line-height:1.3;">${img.desc}</div>
+            <div style="margin-top:12px;">
+              <a href="${img.file}" target="_blank" class="btn btn-sm" style="background:#047857; color:#fff; font-size:12px; font-weight:600; text-decoration:none; padding:6px 14px; border-radius:8px; display:inline-flex; align-items:center; gap:4px;">🔍 เปิดรูปภาพเต็ม</a>
+            </div>
+          </div>
+        `).join('');
+      }
+    }
+    window.onSelectSrDept = onSelectSrDept;
 
     function submitNewServiceRequest(e) {
       e.preventDefault();
@@ -8924,22 +9448,45 @@ tr:hover td {
       const nameTh = $('sr_name_th').value.trim();
       const nameEn = $('sr_name_en').value.trim();
       const position = $('sr_position').value.trim();
+      const department = $('sr_dept') ? $('sr_dept').value.trim() : '';
       const idCard = $('sr_id_card').value.trim();
+      const accessCode = $('sr_access_code') ? $('sr_access_code').value.trim() : '';
+      const reqUsername = $('sr_req_username') ? $('sr_req_username').value.trim() : '';
+      const reqPassword = $('sr_req_password') ? $('sr_req_password').value.trim() : '';
       const birthDate = $('sr_birth_date').value;
       const licenseNo = $('sr_license_no').value.trim();
       const email = $('sr_email').value.trim();
       const lineId = $('sr_line_id').value.trim();
-      const vpnPurpose = type === 'VPN' ? $('sr_vpn_purpose').value.trim() : '-';
 
-      if (!nameTh || !position || !idCard) {
+      // Collect HOSxP checked permissions & details
+      const checkedPerms = Array.from(document.querySelectorAll('input[name="sr_hosxp_perm"]:checked')).map(cb => cb.value);
+      const hosxpText = $('sr_hosxp_details') ? $('sr_hosxp_details').value.trim() : '';
+      let hosxpDetails = '-';
+      if (type === 'HOSXP_NET' || type === 'HOSXP') {
+        const permStr = checkedPerms.length ? 'สิทธิ์: ' + checkedPerms.join(', ') : '';
+        hosxpDetails = [permStr, hosxpText].filter(Boolean).join(' | ') || 'ขอใช้สิทธิ์ทั่วไป';
+      }
+
+      // Collect Internet details
+      let internetDetails = '-';
+      if (type === 'HOSXP_NET' || type === 'INTERNET') {
+        internetDetails = $('sr_internet_details') ? $('sr_internet_details').value.trim() : '';
+        if (!internetDetails) internetDetails = 'ขอใช้งาน Internet ประจำหน่วยงาน';
+      }
+
+      const vpnPurpose = type === 'VPN' ? ($('sr_vpn_purpose') ? $('sr_vpn_purpose').value.trim() : '-') : '-';
+
+      if (!nameTh || !position || !department || !idCard) {
         toast('กรุณากรอกข้อมูลที่จำเป็น (*) ให้ครบถ้วน', 'warning');
         return;
       }
 
       showLoading(true);
       callApi('createServiceRequest', {
-        requestType: type, nameTh, nameEn, position, idCard,
-        birthDate, licenseNo, email, lineId, vpnPurpose
+        requestType: type, nameTh, nameEn, position, department, idCard, accessCode,
+        reqUsername, reqPassword,
+        birthDate, licenseNo, email, lineId, vpnPurpose,
+        hosxpDetails, internetDetails
       })
       .then(r => {
         showLoading(false);
@@ -9010,6 +9557,9 @@ tr:hover td {
     }
     window.doTrackServiceRequest = doTrackServiceRequest;
 
+    let ADMIN_SR_CACHE = [];
+    let SR_FILTER_STATE = { search: '', status: 'ALL', type: 'ALL', dept: 'ALL' };
+
     function loadAdminServiceRequests() {
       const tableDiv = $('admin_sr_table');
       const statsDiv = $('admin_sr_stats');
@@ -9020,56 +9570,20 @@ tr:hover td {
             if (tableDiv) tableDiv.innerHTML = `<div style="color:var(--danger); padding:20px;">${esc(r.message)}</div>`;
             return;
           }
-          const data = r.data || [];
+          ADMIN_SR_CACHE = r.data || [];
           const stats = r.stats || {};
 
           if (statsDiv) {
             statsDiv.innerHTML = `
-              <div class="stat"><div class="label">คำขอทั้งหมด</div><div class="value">${stats.total}</div></div>
-              <div class="stat"><div class="label">รอพิจารณา</div><div class="value" style="color:var(--warning);">${stats.pending}</div></div>
-              <div class="stat"><div class="label">อนุมัติแล้ว</div><div class="value" style="color:var(--success);">${stats.approved}</div></div>
-              <div class="stat"><div class="label">ไม่อนุมัติ</div><div class="value" style="color:var(--danger);">${stats.rejected}</div></div>
+              <div class="stat" style="cursor:pointer;" onclick="setSrStatusFilter('ALL')"><div class="label">คำขอทั้งหมด</div><div class="value">${stats.total}</div></div>
+              <div class="stat" style="cursor:pointer;" onclick="setSrStatusFilter('รอพิจารณา')"><div class="label">⏳ รอพิจารณา</div><div class="value" style="color:var(--warning);">${stats.pending}</div></div>
+              <div class="stat" style="cursor:pointer;" onclick="setSrStatusFilter('อนุมัติ')"><div class="label">✅ อนุมัติแล้ว</div><div class="value" style="color:var(--success);">${stats.approved}</div></div>
+              <div class="stat" style="cursor:pointer;" onclick="setSrStatusFilter('ไม่อนุมัติ')"><div class="label">❌ ไม่อนุมัติ</div><div class="value" style="color:var(--danger);">${stats.rejected}</div></div>
             `;
           }
 
-          if (tableDiv) {
-            if (data.length === 0) {
-              tableDiv.innerHTML = '<div style="text-align:center; padding:40px; color:var(--gray-400);">ยังไม่มีรายการคำขอในระบบ</div>';
-              return;
-            }
-            let html = `
-            <table>
-              <thead>
-                <tr>
-                  <th>วันที่ยื่น</th>
-                  <th>ประเภท</th>
-                  <th>ชื่อ-นามสกุล</th>
-                  <th>ตำแหน่ง</th>
-                  <th>เลขบัตรประชาชน</th>
-                  <th>ติดต่อ</th>
-                  <th>สถานะ</th>
-                  <th>จัดการ</th>
-                </tr>
-              </thead>
-              <tbody>`;
-            data.forEach(item => {
-              html += `
-              <tr>
-                <td data-label="วันที่ยื่น">${esc(item.createdAt)}</td>
-                <td data-label="ประเภท"><strong>${esc(item.requestType)}</strong></td>
-                <td data-label="ชื่อ-นามสกุล">${esc(item.nameTh)}</td>
-                <td data-label="ตำแหน่ง">${esc(item.position)}</td>
-                <td data-label="เลขบัตร">${esc(item.idCard)}</td>
-                <td data-label="ติดต่อ">${esc(item.email || item.lineId || '-')}</td>
-                <td data-label="สถานะ">${statusBadge(item.status)}</td>
-                <td data-label="จัดการ">
-                  <button class="btn btn-sm btn-primary" onclick="openApproveServiceModal('${esc(item.id)}')">⚙️ ตรวจสอบ / อนุมัติ</button>
-                </td>
-              </tr>`;
-            });
-            html += '</tbody></table>';
-            tableDiv.innerHTML = html;
-          }
+          renderSrFunnelFilterBar();
+          applySrFunnelFilter();
         })
         .catch(err => {
           if (tableDiv) tableDiv.innerHTML = `<div style="color:var(--danger); padding:20px;">ผิดพลาด: ${esc(err.message)}</div>`;
@@ -9077,22 +9591,179 @@ tr:hover td {
     }
     window.loadAdminServiceRequests = loadAdminServiceRequests;
 
+    function renderSrFunnelFilterBar() {
+      const container = $('admin_sr_funnel_filter');
+      if (!container) return;
+
+      const depts = Array.from(new Set(ADMIN_SR_CACHE.map(x => x.department).filter(Boolean))).sort();
+      const deptOptions = depts.map(d => `<option value="${esc(d)}" ${SR_FILTER_STATE.dept === d ? 'selected' : ''}>${esc(d)}</option>`).join('');
+
+      container.innerHTML = `
+      <div style="background:linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%); border:1px solid #cbd5e1; border-radius:16px; padding:16px; margin-bottom:20px; box-shadow:var(--shadow-xs);">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:12px; border-bottom:1px solid #e2e8f0; padding-bottom:10px;">
+          <div style="font-weight:700; font-size:15px; color:#1e293b; display:flex; align-items:center; gap:8px;">
+            <span style="font-size:18px;">🔻</span> <span>ตัวกรองข้อมูลแบบกรวย (Funnel Filter)</span>
+            <span id="sr_funnel_count_badge" style="font-size:12px; background:#0284c7; color:#fff; padding:3px 10px; border-radius:12px; font-weight:600;">แสดง 0 รายการ</span>
+          </div>
+          <button class="btn btn-secondary btn-sm" onclick="resetSrFunnelFilter()" style="font-size:12px; padding:5px 12px; border-radius:8px;">🔄 ล้างตัวกรอง</button>
+        </div>
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:12px;">
+          <div class="field" style="margin:0;">
+            <label style="font-size:12px; font-weight:700; color:#475569; margin-bottom:4px; display:block;">🔍 ค้นหาคำคีย์เวิร์ด</label>
+            <input type="text" id="sr_flt_search" placeholder="ชื่อ, ตำแหน่ง, เลขบัตร..." value="${esc(SR_FILTER_STATE.search)}" oninput="onSrFilterChange()" style="padding:8px 12px; font-size:13px; border-radius:10px; border:1px solid #cbd5e1; background:#fff;">
+          </div>
+          <div class="field" style="margin:0;">
+            <label style="font-size:12px; font-weight:700; color:#475569; margin-bottom:4px; display:block;">🔻 กรวยกรองสถานะ</label>
+            <select id="sr_flt_status" onchange="onSrFilterChange()" style="padding:8px 12px; font-size:13px; border-radius:10px; border:1px solid #cbd5e1; background:#fff;">
+              <option value="ALL" ${SR_FILTER_STATE.status === 'ALL' ? 'selected' : ''}>-- ทุกสถานะ --</option>
+              <option value="รอพิจารณา" ${SR_FILTER_STATE.status === 'รอพิจารณา' ? 'selected' : ''}>⏳ รอพิจารณา</option>
+              <option value="อนุมัติ" ${SR_FILTER_STATE.status === 'อนุมัติ' ? 'selected' : ''}>✅ อนุมัติแล้ว</option>
+              <option value="ไม่อนุมัติ" ${SR_FILTER_STATE.status === 'ไม่อนุมัติ' ? 'selected' : ''}>❌ ไม่อนุมัติ</option>
+            </select>
+          </div>
+          <div class="field" style="margin:0;">
+            <label style="font-size:12px; font-weight:700; color:#475569; margin-bottom:4px; display:block;">🔻 กรวยกรองประเภทบริการ</label>
+            <select id="sr_flt_type" onchange="onSrFilterChange()" style="padding:8px 12px; font-size:13px; border-radius:10px; border:1px solid #cbd5e1; background:#fff;">
+              <option value="ALL" ${SR_FILTER_STATE.type === 'ALL' ? 'selected' : ''}>-- ทุกประเภทบริการ --</option>
+              <option value="HOSXP_NET" ${SR_FILTER_STATE.type === 'HOSXP_NET' ? 'selected' : ''}>HOSxP + Internet</option>
+              <option value="HOSXP" ${SR_FILTER_STATE.type === 'HOSXP' ? 'selected' : ''}>เฉพาะ HOSxP</option>
+              <option value="INTERNET" ${SR_FILTER_STATE.type === 'INTERNET' ? 'selected' : ''}>เฉพาะ Internet</option>
+              <option value="VPN" ${SR_FILTER_STATE.type === 'VPN' ? 'selected' : ''}>เฉพาะ VPN</option>
+            </select>
+          </div>
+          <div class="field" style="margin:0;">
+            <label style="font-size:12px; font-weight:700; color:#475569; margin-bottom:4px; display:block;">🔻 กรวยกรองหน่วยงาน</label>
+            <select id="sr_flt_dept" onchange="onSrFilterChange()" style="padding:8px 12px; font-size:13px; border-radius:10px; border:1px solid #cbd5e1; background:#fff;">
+              <option value="ALL" ${SR_FILTER_STATE.dept === 'ALL' ? 'selected' : ''}>-- ทุกสถานที่/หน่วยงาน --</option>
+              ${deptOptions}
+            </select>
+          </div>
+        </div>
+      </div>`;
+    }
+
+    function onSrFilterChange() {
+      SR_FILTER_STATE.search = $('sr_flt_search') ? $('sr_flt_search').value.trim().toLowerCase() : '';
+      SR_FILTER_STATE.status = $('sr_flt_status') ? $('sr_flt_status').value : 'ALL';
+      SR_FILTER_STATE.type = $('sr_flt_type') ? $('sr_flt_type').value : 'ALL';
+      SR_FILTER_STATE.dept = $('sr_flt_dept') ? $('sr_flt_dept').value : 'ALL';
+      applySrFunnelFilter();
+    }
+
+    function setSrStatusFilter(st) {
+      SR_FILTER_STATE.status = st;
+      const el = $('sr_flt_status');
+      if (el) el.value = st;
+      applySrFunnelFilter();
+    }
+
+    function resetSrFunnelFilter() {
+      SR_FILTER_STATE = { search: '', status: 'ALL', type: 'ALL', dept: 'ALL' };
+      renderSrFunnelFilterBar();
+      applySrFunnelFilter();
+    }
+
+    function applySrFunnelFilter() {
+      const tableDiv = $('admin_sr_table');
+      const badge = $('sr_funnel_count_badge');
+      if (!tableDiv) return;
+
+      const q = SR_FILTER_STATE.search;
+      const st = SR_FILTER_STATE.status;
+      const tp = SR_FILTER_STATE.type;
+      const dp = SR_FILTER_STATE.dept;
+
+      const filtered = ADMIN_SR_CACHE.filter(item => {
+        if (q) {
+          const haystack = [
+            item.nameTh, item.nameEn, item.position, item.idCard,
+            item.email, item.lineId, item.department, item.reqUsername, item.requestType
+          ].filter(Boolean).join(' ').toLowerCase();
+          if (!haystack.includes(q)) return false;
+        }
+
+        if (st !== 'ALL') {
+          if (!item.status || !item.status.includes(st)) return false;
+        }
+
+        if (tp !== 'ALL') {
+          if (!item.requestType || item.requestType.toUpperCase() !== tp.toUpperCase()) return false;
+        }
+
+        if (dp !== 'ALL') {
+          if (!item.department || item.department !== dp) return false;
+        }
+
+        return true;
+      });
+
+      if (badge) {
+        badge.textContent = `แสดง ${filtered.length} จาก ${ADMIN_SR_CACHE.length} รายการ`;
+      }
+
+      if (filtered.length === 0) {
+        tableDiv.innerHTML = '<div style="text-align:center; padding:40px; color:var(--gray-400);">ไม่พบรายการที่ตรงกับเงื่อนไขการกรอง</div>';
+        return;
+      }
+
+      let html = `
+      <table>
+        <thead>
+          <tr>
+            <th>วันที่ยื่น</th>
+            <th>ประเภท</th>
+            <th>ชื่อ-นามสกุล</th>
+            <th>ตำแหน่ง</th>
+            <th>หน่วยงาน</th>
+            <th>เลขบัตรประชาชน</th>
+            <th>สถานะ</th>
+            <th>จัดการ</th>
+          </tr>
+        </thead>
+        <tbody>`;
+
+      filtered.forEach(item => {
+        html += `
+        <tr>
+          <td data-label="วันที่ยื่น">${esc(item.createdAt)}</td>
+          <td data-label="ประเภท"><strong>${esc(item.requestType)}</strong></td>
+          <td data-label="ชื่อ-นามสกุล">${esc(item.nameTh)}</td>
+          <td data-label="ตำแหน่ง">${esc(item.position)}</td>
+          <td data-label="หน่วยงาน"><span style="color:#0284c7; font-weight:600;">${esc(item.department || '-')}</span></td>
+          <td data-label="เลขบัตร">${esc(item.idCard)}</td>
+          <td data-label="สถานะ">${statusBadge(item.status)}</td>
+          <td data-label="จัดการ">
+            <button class="btn btn-sm btn-primary" onclick="openApproveServiceModal('${esc(item.id || item._id || item._row || item.docId || '')}')">⚙️ ตรวจสอบ / อนุมัติ</button>
+          </td>
+        </tr>`;
+      });
+      html += '</tbody></table>';
+      tableDiv.innerHTML = html;
+    }
+
     function openApproveServiceModal(docId) {
+      const targetId = String(docId || '').trim();
       showLoading(true);
       callApi('getServiceRequests', ADMIN_PASS)
         .then(r => {
           showLoading(false);
           if (!r.success) { toast(r.message, 'error'); return; }
-          const item = (r.data || []).find(x => x.id === docId);
+          const item = (r.data || []).find(x => String(x.id || x._id || x._row || x.docId || '').trim() === targetId);
           if (!item) { toast('ไม่พบรายการคำขอ', 'error'); return; }
+
+          const defaultUser = item.reqUsername && item.reqUsername !== '-' ? item.reqUsername : '';
+          const defaultPass = item.reqPassword && item.reqPassword !== '-' ? item.reqPassword : '';
 
           const modalBody = `
           <div style="display:flex; flex-direction:column; gap:14px;">
             <div style="background:#f8fafc; padding:14px; border-radius:12px; border:1px solid #e2e8f0; font-size:14px; line-height:1.6;">
               <div><strong>ผู้ขอใช้บริการ:</strong> ${esc(item.nameTh)} (${esc(item.position)})</div>
-              <div><strong>ประเภทคำขอ:</strong> ${esc(item.requestType)} | <strong>เลขบัตรประชาชน:</strong> ${esc(item.idCard)}</div>
+              <div><strong>ประเภทคำขอ:</strong> ${esc(item.requestType)} | <strong>เลขบัตรประชาชน:</strong> ${esc(item.idCard)}${item.accessCode && item.accessCode !== '-' ? ` | <strong>รหัสขอใช้งาน:</strong> ${esc(item.accessCode)}` : ''}</div>
               <div><strong>ติดต่อ:</strong> ${esc(item.email || item.lineId || '-')}</div>
-              ${item.requestType === 'VPN' ? `<div><strong>วัตถุประสงค์ VPN:</strong> ${esc(item.vpnPurpose || '-')}</div>` : ''}
+              ${item.reqUsername && item.reqUsername !== '-' ? `<div style="color:#166534; font-weight:600; margin-top:4px;">🔑 <strong>Username ขอตั้ง:</strong> ${esc(item.reqUsername)} | <strong>Password ขอตั้ง:</strong> ${esc(item.reqPassword)}</div>` : ''}
+              ${item.hosxpDetails && item.hosxpDetails !== '-' ? `<div style="color:#0369a1; margin-top:4px;">🏥 <strong>สิทธิ์/รายละเอียด HOSxP:</strong> ${esc(item.hosxpDetails)}</div>` : ''}
+              ${item.internetDetails && item.internetDetails !== '-' ? `<div style="color:#0284c7; margin-top:4px;">🌐 <strong>รายละเอียด Internet:</strong> ${esc(item.internetDetails)}</div>` : ''}
+              ${item.requestType === 'VPN' ? `<div style="color:#7c3aed; margin-top:4px;">🔒 <strong>วัตถุประสงค์ VPN:</strong> ${esc(item.vpnPurpose || '-')}</div>` : ''}
             </div>
 
             <div class="field">
@@ -9106,14 +9777,14 @@ tr:hover td {
 
             ${item.requestType === 'VPN' ? `
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-              <div class="field"><label>VPN Username</label><input type="text" id="mod_vpn_user" value="${esc(item.vpnUser !== '-' ? item.vpnUser : '')}" placeholder="กำหนด VPN User"></div>
-              <div class="field"><label>VPN Password</label><input type="text" id="mod_vpn_pass" value="${esc(item.vpnPass !== '-' ? item.vpnPass : '')}" placeholder="กำหนด VPN Pass"></div>
+              <div class="field"><label>VPN Username</label><input type="text" id="mod_vpn_user" value="${esc(item.vpnUser !== '-' ? item.vpnUser : defaultUser)}" placeholder="กำหนด VPN User"></div>
+              <div class="field"><label>VPN Password</label><input type="text" id="mod_vpn_pass" value="${esc(item.vpnPass !== '-' ? item.vpnPass : defaultPass)}" placeholder="กำหนด VPN Pass"></div>
             </div>` : `
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-              <div class="field"><label>HOSxP Username</label><input type="text" id="mod_hosxp_user" value="${esc(item.hosxpUser !== '-' ? item.hosxpUser : '')}" placeholder="กำหนด HOSxP User"></div>
-              <div class="field"><label>HOSxP Password</label><input type="text" id="mod_hosxp_pass" value="${esc(item.hosxpPass !== '-' ? item.hosxpPass : '')}" placeholder="กำหนด HOSxP Pass"></div>
-              <div class="field"><label>Internet Username</label><input type="text" id="mod_internet_user" value="${esc(item.internetUser !== '-' ? item.internetUser : '')}" placeholder="กำหนด Internet User"></div>
-              <div class="field"><label>Internet Password</label><input type="text" id="mod_internet_pass" value="${esc(item.internetPass !== '-' ? item.internetPass : '')}" placeholder="กำหนด Internet Pass"></div>
+              <div class="field"><label>HOSxP Username</label><input type="text" id="mod_hosxp_user" value="${esc(item.hosxpUser !== '-' ? item.hosxpUser : defaultUser)}" placeholder="กำหนด HOSxP User"></div>
+              <div class="field"><label>HOSxP Password</label><input type="text" id="mod_hosxp_pass" value="${esc(item.hosxpPass !== '-' ? item.hosxpPass : defaultPass)}" placeholder="กำหนด HOSxP Pass"></div>
+              <div class="field"><label>Internet Username</label><input type="text" id="mod_internet_user" value="${esc(item.internetUser !== '-' ? item.internetUser : defaultUser)}" placeholder="กำหนด Internet User"></div>
+              <div class="field"><label>Internet Password</label><input type="text" id="mod_internet_pass" value="${esc(item.internetPass !== '-' ? item.internetPass : defaultPass)}" placeholder="กำหนด Internet Pass"></div>
             </div>`}
 
             <div class="field full">
@@ -9167,6 +9838,28 @@ tr:hover td {
         });
     }
     window.submitServiceApproval = submitServiceApproval;
+
+    function doTestMikrotikConn() {
+      showLoading(true);
+      callApi('updateServiceRequestStatus', { action: 'testMikrotik' }, ADMIN_PASS)
+        .then(r => {
+          showLoading(false);
+          if (r.success) {
+            let detailsStr = '';
+            if (r.details) {
+              detailsStr = ` (รุ่น: ${r.details.model || '-'}, Version: ${r.details.version || '-'}, CPU: ${r.details.cpuLoad || '-'})`;
+            }
+            toast(r.message + detailsStr, 'success');
+          } else {
+            toast(r.message || 'ไม่สามารถเชื่อมต่อ MikroTik ได้', 'warning');
+          }
+        })
+        .catch(err => {
+          showLoading(false);
+          toast('ผิดพลาด: ' + err.message, 'error');
+        });
+    }
+    window.doTestMikrotikConn = doTestMikrotikConn;
 
     // ============== WIFI QR GENERATOR & LOG GALLERY ==============
     function renderWifiQr() {

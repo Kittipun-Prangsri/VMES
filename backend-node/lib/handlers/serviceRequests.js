@@ -5,6 +5,7 @@ const { SHEETS, setDoc, listDocs, getDoc } = require('../firestore');
 const { newId, nowStr, todayStr, logAudit } = require('../util');
 const { verifyAdmin } = require('../auth');
 const { sendServiceRequestFlex, sendTelegramServiceNotify } = require('../line');
+const { createOrUpdateHotspotUser, testMikrotikConnection } = require('../mikrotik');
 
 /**
  * ดึงรายการคำขอใช้บริการทั้งหมด (สำหรับ Admin / Manager)
@@ -89,13 +90,19 @@ async function createServiceRequest(formData) {
       nameTh: String(formData.nameTh || '').trim(),
       nameEn: String(formData.nameEn || '').trim().toUpperCase(),
       position: String(formData.position || '').trim(),
+      department: String(formData.department || '-').trim(),
       idCard: String(formData.idCard || '').trim(),
+      accessCode: String(formData.accessCode || '-').trim(),
+      reqUsername: String(formData.reqUsername || '-').trim(),
+      reqPassword: String(formData.reqPassword || '-').trim(),
       birthDate: String(formData.birthDate || '').trim(),
       licenseNo: String(formData.licenseNo || '-').trim(),
       email: String(formData.email || '').trim(),
       lineId: String(formData.lineId || '').trim(),
       telegramId: String(formData.telegramId || '').trim(),
       vpnPurpose: String(formData.vpnPurpose || '-').trim(),
+      hosxpDetails: String(formData.hosxpDetails || '-').trim(),
+      internetDetails: String(formData.internetDetails || '-').trim(),
       status: 'รอพิจารณา',
       hosxpUser: '-',
       hosxpPass: '-',
@@ -133,6 +140,9 @@ async function updateServiceRequestStatus(updateData, adminCode) {
   if (!verifyAdmin(adminCode)) {
     return { success: false, message: 'ต้องเป็น Admin หรือผู้จัดการเท่านั้น' };
   }
+  if (updateData && (updateData.action === 'testMikrotik' || updateData.testMikrotik)) {
+    return await testMikrotikConnection();
+  }
   try {
     const docId = String(updateData.id || updateData.docId || '').trim();
     if (!docId) return { success: false, message: 'ไม่พบรหัสเอกสารคำขอ' };
@@ -147,6 +157,7 @@ async function updateServiceRequestStatus(updateData, adminCode) {
       updatedAt: nowStr(),
     };
 
+    let mikrotikNote = '';
     if (updateData.status === 'อนุมัติ') {
       if (updateData.hosxpUser) updated.hosxpUser = updateData.hosxpUser;
       if (updateData.hosxpPass) updated.hosxpPass = updateData.hosxpPass;
@@ -154,22 +165,44 @@ async function updateServiceRequestStatus(updateData, adminCode) {
       if (updateData.internetPass) updated.internetPass = updateData.internetPass;
       if (updateData.vpnUser) updated.vpnUser = updateData.vpnUser;
       if (updateData.vpnPass) updated.vpnPass = updateData.vpnPass;
+
+      // 🛰️ สั่งสร้างบัญชีผู้ใช้บน MikroTik RouterOS อัตโนมัติ (Automated API)
+      const targetUser = (updated.internetUser && updated.internetUser !== '-') ? updated.internetUser : ((updated.reqUsername && updated.reqUsername !== '-') ? updated.reqUsername : updated.hosxpUser);
+      const targetPass = (updated.internetPass && updated.internetPass !== '-') ? updated.internetPass : ((updated.reqPassword && updated.reqPassword !== '-') ? updated.reqPassword : updated.hosxpPass);
+
+      if (targetUser && targetUser !== '-' && targetPass && targetPass !== '-') {
+        const comment = `[${docId}] ${updated.nameTh || ''} | ${updated.department || ''} | ID: ${updated.idCard || ''}`;
+        try {
+          const mkRes = await createOrUpdateHotspotUser({
+            name: targetUser,
+            password: targetPass,
+            profile: 'default',
+            comment: comment,
+          });
+          if (mkRes && mkRes.message) {
+            mikrotikNote = ` (${mkRes.message})`;
+          }
+        } catch (mkErr) {
+          console.error('MikroTik API trigger error:', mkErr);
+          mikrotikNote = ` (⚠️ MikroTik API: ${mkErr.message})`;
+        }
+      }
     }
 
     await setDoc(SHEETS.SERVICE_REQUESTS, docId, updated);
-    await logAudit('อัปเดตคำขอ IT', 'admin', `รหัส: ${docId}, สถานะ: ${updated.status}`);
+    await logAudit('อัปเดตคำขอ IT', 'admin', `รหัส: ${docId}, สถานะ: ${updated.status}${mikrotikNote}`);
 
     // แจ้งเตือนผลการอนุมัติผ่าน LINE Flex & Telegram
     try {
       await sendServiceRequestFlex(updated, updated.status);
       const tgStatusIcon = updated.status === 'อนุมัติ' ? '✅' : (updated.status === 'ไม่อนุมัติ' ? '❌' : '⏳');
-      const tgMsg = `${tgStatusIcon} <b>อัปเดตสถานะคำขอ IT!</b>\n👤 <b>ผู้ขอ:</b> ${updated.nameTh}\n📌 <b>ประเภท:</b> ${updated.requestType}\n📊 <b>สถานะ:</b> ${updated.status}${updated.remark && updated.remark !== '-' ? '\n📝 <b>หมายเหตุ:</b> ' + updated.remark : ''}`;
+      const tgMsg = `${tgStatusIcon} <b>อัปเดตสถานะคำขอ IT!</b>\n👤 <b>ผู้ขอ:</b> ${updated.nameTh}\n📌 <b>ประเภท:</b> ${updated.requestType}\n📊 <b>สถานะ:</b> ${updated.status}${mikrotikNote}${updated.remark && updated.remark !== '-' ? '\n📝 <b>หมายเหตุ:</b> ' + updated.remark : ''}`;
       await sendTelegramServiceNotify(tgMsg);
     } catch (e) {
       console.error('Notification status error:', e);
     }
 
-    return { success: true, message: `อัปเดตสถานะเป็น "${updated.status}" เรียบร้อยแล้ว` };
+    return { success: true, message: `อัปเดตสถานะเป็น "${updated.status}" เรียบร้อยแล้ว${mikrotikNote}` };
   } catch (err) {
     return { success: false, message: err.message };
   }
@@ -217,4 +250,5 @@ module.exports = {
   updateServiceRequestStatus,
   getWifiQrLogs,
   createWifiQrLog,
+  testMikrotikConnection,
 };
