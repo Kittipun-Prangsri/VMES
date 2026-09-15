@@ -143,7 +143,7 @@ async function runTests() {
   assert.equal(res.statusCode, 200);
   assert.equal(capturedReplies.length, 1);
   assert.equal(capturedReplies[0].body.messages[0].type, 'flex');
-  assert.match(capturedReplies[0].body.messages[0].altText, /LINE User ID/);
+  assert.match(capturedReplies[0].body.messages[0].altText, /ผูกบัญชี LINE/);
   assert.equal(capturedReplies[0].body.messages[0].contents.type, 'bubble');
   console.log('  ✅ Test 1: Command "ขอไอดี" -> Valid Flex Reply');
 

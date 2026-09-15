@@ -1,13 +1,4 @@
-// ============== IMPORT / EXTERNAL DATA APIS ==============
-// พอร์ตจาก รหัส.js L2612-3027 (fetchGoogleSheetData, importUsers, importEquipment,
-// importVehicles, importDrivers)
-//
-// fetchGoogleSheetData เดิมใช้ SpreadsheetApp.openByUrl/openById (สิทธิ์ของบัญชี Apps
-// Script ที่รัน) — ใน Node ไม่มี SpreadsheetApp จึงเรียก Google Sheets REST API v4
-// ตรงๆ โดย auth ด้วย Service Account เดียวกับที่ใช้กับ Firestore (ต้องแชร์สิทธิ์อ่าน
-// สเปรดชีตต้นทางให้กับอีเมล service account นั้นด้วยเอง)
-
-const { JWT } = require('google-auth-library');
+// ============== IMPORT DATA APIS (FIRESTORE BATCH) ==============
 const { SHEETS, setDoc, getDoc } = require('../firestore');
 const { newId, todayStr, logAudit } = require('../util');
 const { verifyAdmin } = require('../auth');
@@ -17,88 +8,10 @@ const { getVehicles } = require('./vehicles');
 const { getDrivers } = require('./drivers');
 const { getSystemSettings } = require('./settings');
 
-let _sheetsJwtClient = null;
-function getSheetsJwtClient() {
-  if (!_sheetsJwtClient) {
-    _sheetsJwtClient = new JWT({
-      email: process.env.FIREBASE_CLIENT_EMAIL,
-      key: (process.env.FIREBASE_PRIVATE_KEY || '').replace(/\\n/g, '\n'),
-      scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
-    });
-  }
-  return _sheetsJwtClient;
+async function fetchGoogleSheetData() {
+  return { success: false, message: 'Google Sheets direct API integration deprecated. Please import via CSV/Excel file directly into Firebase.' };
 }
 
-// รองรับทั้ง URL เต็มของ Google Sheets และ spreadsheet ID เปล่าๆ (เหมือนพฤติกรรมเดิม
-// ที่แยกเป็น openByUrl เมื่อ url มี "docs.google.com/spreadsheets" กับ openById เมื่อไม่มี)
-function extractSpreadsheetId(url) {
-  const str = String(url || '').trim();
-  if (str.indexOf('docs.google.com/spreadsheets') !== -1) {
-    const m = str.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
-    if (m) return m[1];
-  }
-  return str;
-}
-
-async function fetchGoogleSheetData(url, sheetName, adminCode) {
-  if (!verifyAdmin(adminCode)) return { success: false, message: 'ต้องเป็น Admin เท่านั้น' };
-  try {
-    const spreadsheetId = extractSpreadsheetId(url);
-    if (!spreadsheetId) return { success: false, message: 'ไม่พบ Spreadsheet ID จาก URL ที่ระบุ' };
-
-    const client = getSheetsJwtClient();
-    const { token } = await client.getAccessToken();
-
-    // ถ้าไม่ระบุชื่อชีต ให้ดึงข้อมูล metadata มาหาชื่อชีตแรกก่อน (เทียบเท่า ss.getSheets()[0])
-    let targetSheetName = sheetName;
-    if (!targetSheetName) {
-      const metaRes = await fetch(
-        `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}?fields=sheets.properties.title`,
-        { headers: { Authorization: 'Bearer ' + token } }
-      );
-      if (!metaRes.ok) {
-        const errBody = await metaRes.text();
-        return { success: false, message: 'ไม่สามารถอ่าน Google Sheet ได้: ' + errBody.substring(0, 300) };
-      }
-      const meta = await metaRes.json();
-      const firstSheet = meta.sheets && meta.sheets[0] && meta.sheets[0].properties && meta.sheets[0].properties.title;
-      if (!firstSheet) return { success: false, message: 'ไม่พบแผ่นงานตามที่ระบุ' };
-      targetSheetName = firstSheet;
-    }
-
-    const valuesRes = await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}/values/${encodeURIComponent(
-        targetSheetName
-      )}`,
-      { headers: { Authorization: 'Bearer ' + token } }
-    );
-    if (!valuesRes.ok) {
-      const errBody = await valuesRes.text();
-      return { success: false, message: 'ไม่สามารถอ่าน Google Sheet ได้: ' + errBody.substring(0, 300) };
-    }
-    const valuesJson = await valuesRes.json();
-    const rawData = valuesJson.values || [];
-
-    if (rawData.length < 2) {
-      return { success: false, message: 'ชีตนี้ไม่มีข้อมูลสำหรับนำเข้า' };
-    }
-
-    const headers = rawData[0].map((h) => String(h || '').trim());
-    const dataObjects = rawData.slice(1).map((row) => {
-      const obj = {};
-      headers.forEach((h, idx) => {
-        if (h) {
-          obj[h] = row[idx] !== null && row[idx] !== undefined ? String(row[idx]).trim() : '';
-        }
-      });
-      return obj;
-    });
-
-    return { success: true, data: dataObjects, headers: headers };
-  } catch (err) {
-    return { success: false, message: 'ไม่สามารถอ่าน Google Sheet ได้: ' + err.message };
-  }
-}
 
 async function importUsers(usersList, adminCode, duplicateHandling) {
   if (!verifyAdmin(adminCode)) return { success: false, message: 'ต้องเป็น Admin เท่านั้น' };
