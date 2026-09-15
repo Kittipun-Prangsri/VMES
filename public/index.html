@@ -20,8 +20,6 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
   <style>
 :root {
   --primary: #1e40af;
@@ -3033,16 +3031,17 @@ input, select, textarea, button {
     // ============== LOAD DATA ==============
     function loadAll() {
       showLoading(true);
-      callApi('getBootstrapInfo')
-        .then(d => {
+      Promise.all([callApi('getBootstrapInfo'), fetchAllCollectionsData()])
+        .then(([d]) => {
           showLoading(false);
           // Guard: server returned nothing
           if (!d || typeof d !== 'object') {
             showSetupScreen('เซิร์ฟเวอร์ไม่ตอบสนอง — กรุณารัน setupSystem');
             return;
           }
-          // Merge lean bootstrap fields only — collection arrays (DATA.vehicles etc.)
-          // are populated separately/continuously by setupFirestoreRealtimeListeners()
+          // Merge lean bootstrap fields — collection arrays (DATA.vehicles etc.)
+          // ถูก merge เข้า DATA ไปแล้วโดย fetchAllCollectionsData() ด้านบน (poll ผ่าน
+          // backend RPC แทนการเปิด Firestore listener ตรงจาก client)
           DATA.logo = d.logo || '';
           DATA.settings = d.settings || {};
           // Check setup status
@@ -3100,8 +3099,8 @@ input, select, textarea, button {
       const live = $('liveIndicator');
       if (live) live.style.opacity = '0.5';
 
-      callApi('getBootstrapInfo')
-        .then(d => {
+      Promise.all([callApi('getBootstrapInfo'), fetchAllCollectionsData()])
+        .then(([d]) => {
           if (live) live.style.opacity = '1';
           if (!d || typeof d !== 'object') return;
 
@@ -3109,10 +3108,12 @@ input, select, textarea, button {
           updateBadges();
 
           // Only re-render if we are on pages that need live updates and user is not currently typing in a form
-          const livePages = ['dashboard', 'borrowing', 'usage', 'booking', 'notifications', 'audit'];
           const isFormTab = (CURRENT_PAGE === 'serviceRequest' && typeof SERVICE_REQUEST_TAB !== 'undefined' && SERVICE_REQUEST_TAB === 'form');
-          if (livePages.includes(CURRENT_PAGE) && !isUserEditingForm() && !isFormTab) {
-            renderPage(CURRENT_PAGE);
+          const livePages = ['dashboard', 'equipment', 'borrowing', 'vehicles', 'users', 'drivers', 'usage', 'maintenance', 'fuel', 'booking', 'inspection', 'notifications', 'audit', 'departments', 'serviceRequests', 'reports', 'attendanceCheckin', 'attendanceHistory', 'attendanceSettings', 'wifiQr'];
+          if (!isUserEditingForm() && !isFormTab) {
+            if (livePages.includes(CURRENT_PAGE) || (CURRENT_PAGE === 'serviceRequest' && typeof SERVICE_REQUEST_TAB !== 'undefined' && SERVICE_REQUEST_TAB === 'admin')) {
+              renderPage(CURRENT_PAGE);
+            }
           }
         })
         .catch(() => { if (live) live.style.opacity = '1'; });
@@ -5313,7 +5314,7 @@ input, select, textarea, button {
           </style>
         </head><body>
           <div class="qr-grid">${labelsHtml}</div>
-          <script>window.onload = function(){ setTimeout(function(){ window.print(); }, 300); };<\/script>
+          \x3Cscript>window.onload = function(){ setTimeout(function(){ window.print(); }, 300); };\x3C/script>
         </body></html>`);
         printWin.document.close();
       };
@@ -8691,43 +8692,39 @@ input, select, textarea, button {
     window.runOverdueCheck = runOverdueCheck;
     window.exportSheet = exportSheet;
 
-    // ============== FIREBASE SERVICE ADAPTOR & MIGRATION TOOL ==============
-    const firebaseConfig = {
-      apiKey: "AIzaSyBzhr85eBAXSnbvNZpsFeGXV2ZpN8Iqhfg",
-      authDomain: "phan-thong.firebaseapp.com",
-      projectId: "phan-thong",
-      storageBucket: "phan-thong.firebasestorage.app",
-      messagingSenderId: "602718364766",
-      appId: "1:602718364766:web:82b9d401a8b4834a5f40cf",
-      measurementId: "G-PB8XC93405"
-    };
-
-    let db = null;
-    let USE_FIREBASE = false;
-
-    function initFirebase() {
-      try {
-        if (typeof firebase !== 'undefined' && firebaseConfig.projectId && firebaseConfig.projectId !== 'YOUR_PROJECT_ID') {
-          if (!firebase.apps.length) {
-            firebase.initializeApp(firebaseConfig);
-          }
-          db = firebase.firestore();
-          USE_FIREBASE = true;
-          console.log('Firebase Cloud Firestore Initialized Successfully');
-
-          db.enablePersistence().catch(err => {
-            console.log('Firestore persistence notice:', err.code);
-          });
-
-          setupFirestoreRealtimeListeners();
-        } else {
-          console.log('Firebase Cloud Firestore client initialized.');
-        }
-      } catch (err) {
-        console.error('Firebase Initialization Error:', err);
-        USE_FIREBASE = false;
-      }
+    // ============== COLLECTION DATA POLLING ==============
+    // เดิมหน้านี้เปิด Firestore onSnapshot listener ตรงจาก client 16 ตัวพร้อมกัน
+    // (อ่านทุกเอกสารทุก collection ซ้ำทุกครั้งที่เปิดแท็บ/มีการเขียนที่ไหนก็ตาม จากทุก
+    // ผู้ใช้ทุกแท็บ) ซึ่งเป็นสาเหตุหลักที่ชนโควต้า 50,000 reads/วันของ Spark plan —
+    // เปลี่ยนมาดึงผ่าน backend RPC getAllData() แบบ poll ทุก 30 วิแทน (ดู
+    // startAutoRefresh/silentRefresh) โดย backend มี in-memory cache 30 วิต่อ
+    // collection อยู่แล้ว (backend-node/lib/firestore.js) ทำให้อ่านจริงจาก Firestore
+    // สูงสุดแค่ 1 ครั้ง/collection ทุก 30 วิ ไม่ว่าจะมีกี่แท็บ/ผู้ใช้เปิดพร้อมกัน แลกกับการ
+    // อัปเดตหน้าจอที่ช้าลงจาก "ทันที" เป็น "ภายใน 30 วิ"
+    function fetchAllCollectionsData() {
+      return callApi('getAllData')
+        .then(d => {
+          if (!d || typeof d !== 'object') return;
+          DATA.vehicles = d.vehicles || [];
+          DATA.usage = d.usage || [];
+          DATA.maintenance = d.maintenance || [];
+          DATA.fuel = d.fuel || [];
+          DATA.fuelQuota = d.fuelQuota || [];
+          DATA.equipment = d.equipment || [];
+          DATA.categories = d.equipmentCategory || [];
+          DATA.borrowing = d.borrowing || [];
+          DATA.users = d.users || [];
+          DATA.drivers = d.drivers || [];
+          DATA.booking = d.booking || [];
+          DATA.inspection = d.inspection || [];
+          DATA.notifications = d.notifications || [];
+          DATA.audit = d.audit || [];
+          DATA.departments = d.departments || [];
+          DATA.attendance = d.attendance || [];
+        })
+        .catch(err => console.error('fetchAllCollectionsData error:', err));
     }
+    window.fetchAllCollectionsData = fetchAllCollectionsData;
 
     function isUserEditingForm() {
       const active = document.activeElement;
@@ -8743,45 +8740,6 @@ input, select, textarea, button {
       return false;
     }
     window.isUserEditingForm = isUserEditingForm;
-
-    function setupFirestoreRealtimeListeners() {
-      if (!db || !USE_FIREBASE) return;
-      const collections = [
-        'vehicles', 'usage', 'maintenance', 'fuel', 'fuelQuota',
-        'equipment', 'equipmentCategory', 'borrowing', 'users', 'drivers',
-        'booking', 'inspection', 'notifications', 'audit', 'departments', 'attendance'
-      ];
-
-      collections.forEach(col => {
-        db.collection(col).onSnapshot(snapshot => {
-          const items = [];
-          snapshot.forEach(doc => {
-            const data = doc.data();
-            data._id = doc.id;
-            items.push(data);
-          });
-          
-          if (col === 'equipmentCategory') DATA.categories = items;
-          else if (col === 'fuelQuota') DATA.fuelQuota = items;
-          else DATA[col] = items;
-
-          // 🛡️ ป้องกันการ re-render หน้าโดยอัตโนมัติขณะที่ผู้ใช้กำลังพิมพ์แบบฟอร์ม หรือเปิดหน้ายื่นคำขอใหม่
-          const isEditing = isUserEditingForm();
-          const isFormTab = (CURRENT_PAGE === 'serviceRequest' && typeof SERVICE_REQUEST_TAB !== 'undefined' && SERVICE_REQUEST_TAB === 'form');
-          const livePages = ['dashboard', 'equipment', 'borrowing', 'vehicles', 'users', 'drivers', 'usage', 'maintenance', 'fuel', 'booking', 'inspection', 'notifications', 'audit', 'departments', 'serviceRequests', 'reports', 'attendanceCheckin', 'attendanceHistory', 'attendanceSettings', 'wifiQr'];
-
-          if (!isEditing && !isFormTab && document.getElementById('content')) {
-            if (livePages.includes(CURRENT_PAGE) || (CURRENT_PAGE === 'serviceRequest' && typeof SERVICE_REQUEST_TAB !== 'undefined' && SERVICE_REQUEST_TAB === 'admin')) {
-              renderPage(CURRENT_PAGE);
-            }
-          }
-        }, err => {
-          console.error(`Firestore listener error [${col}]:`, err);
-        });
-      });
-    }
-
-    window.initFirebase = initFirebase;
     window.switchSettingTab = switchSettingTab;
     window.addSystemRole = addSystemRole;
     window.deleteSystemRole = deleteSystemRole;
@@ -9100,10 +9058,6 @@ input, select, textarea, button {
         const remEl = $('rememberMe');
         if (remEl) remEl.checked = true;
       }
-
-      // 5. Initialize Firebase Cloud Firestore
-      console.log('Initializing Firebase Cloud Firestore...');
-      initFirebase();
 
       console.log('initApp() complete.');
     }
@@ -9520,6 +9474,7 @@ input, select, textarea, button {
         .then(r => {
           if (!resDiv) return;
           if (r.success && r.data && r.data.length > 0) {
+            window.TRACKED_SR_CACHE = r.data || [];
             let html = '<div style="display:flex; flex-direction:column; gap:16px;">';
             r.data.forEach(item => {
               html += `
@@ -9543,6 +9498,9 @@ input, select, textarea, button {
                     <div>- Internet User: <strong>${esc(item.internetUser)}</strong> | Password: <strong>${esc(item.internetPass)}</strong></div>
                   `}
                 </div>` : ''}
+                <div style="margin-top:12px; display:flex; justify-content:flex-end;">
+                  <button class="btn btn-sm btn-secondary" onclick="previewServiceRequest('${esc(item.id)}')">👁️ Preview / พิมพ์แบบฟอร์มคำขอ</button>
+                </div>
               </div>`;
             });
             html += '</div>';
@@ -9723,6 +9681,7 @@ input, select, textarea, button {
         <tbody>`;
 
       filtered.forEach(item => {
+        const itemId = esc(item.id || item._id || item._row || item.docId || '');
         html += `
         <tr>
           <td data-label="วันที่ยื่น">${esc(item.createdAt)}</td>
@@ -9733,7 +9692,10 @@ input, select, textarea, button {
           <td data-label="เลขบัตร">${esc(item.idCard)}</td>
           <td data-label="สถานะ">${statusBadge(item.status)}</td>
           <td data-label="จัดการ">
-            <button class="btn btn-sm btn-primary" onclick="openApproveServiceModal('${esc(item.id || item._id || item._row || item.docId || '')}')">⚙️ ตรวจสอบ / อนุมัติ</button>
+            <div style="display:flex; gap:6px; flex-wrap:wrap;">
+              <button class="btn btn-sm btn-info" style="background:#0284c7; color:#fff;" onclick="previewServiceRequest('${itemId}')">👁️ Preview</button>
+              <button class="btn btn-sm btn-primary" onclick="openApproveServiceModal('${itemId}')">⚙️ ตรวจสอบ / อนุมัติ</button>
+            </div>
           </td>
         </tr>`;
       });
@@ -9756,6 +9718,10 @@ input, select, textarea, button {
 
           const modalBody = `
           <div style="display:flex; flex-direction:column; gap:14px;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <span style="font-weight:700; font-size:14px; color:var(--gray-800);">📋 ข้อมูลรายละเอียดคำขอ</span>
+              <button class="btn btn-sm btn-secondary" onclick="previewServiceRequest('${esc(item.id || item._id || targetId)}')">👁️ ดู Preview เอกสารแบบเต็ม</button>
+            </div>
             <div style="background:#f8fafc; padding:14px; border-radius:12px; border:1px solid #e2e8f0; font-size:14px; line-height:1.6;">
               <div><strong>ผู้ขอใช้บริการ:</strong> ${esc(item.nameTh)} (${esc(item.position)})</div>
               <div><strong>ประเภทคำขอ:</strong> ${esc(item.requestType)} | <strong>เลขบัตรประชาชน:</strong> ${esc(item.idCard)}${item.accessCode && item.accessCode !== '-' ? ` | <strong>รหัสขอใช้งาน:</strong> ${esc(item.accessCode)}` : ''}</div>
@@ -9860,6 +9826,294 @@ input, select, textarea, button {
         });
     }
     window.doTestMikrotikConn = doTestMikrotikConn;
+
+    // ============== SERVICE REQUEST PREVIEW & PRINT FUNCTIONS ==============
+    window.TRACKED_SR_CACHE = window.TRACKED_SR_CACHE || [];
+
+    function previewServiceRequest(itemOrDocId) {
+      let item = null;
+      if (typeof itemOrDocId === 'object' && itemOrDocId !== null) {
+        item = itemOrDocId;
+      } else if (typeof itemOrDocId === 'string' || typeof itemOrDocId === 'number') {
+        const targetId = String(itemOrDocId).trim();
+        item = (ADMIN_SR_CACHE || []).find(x => String(x.id || x._id || x._row || x.docId || '').trim() === targetId)
+            || (window.TRACKED_SR_CACHE || []).find(x => String(x.id || x._id || x._row || x.docId || '').trim() === targetId);
+      }
+
+      if (!item) {
+        const targetId = String(itemOrDocId).trim();
+        showLoading(true);
+        callApi('getServiceRequests', ADMIN_PASS)
+          .then(r => {
+            showLoading(false);
+            if (r.success && r.data) {
+              ADMIN_SR_CACHE = r.data;
+              const found = r.data.find(x => String(x.id || x._id || x._row || x.docId || '').trim() === targetId);
+              if (found) renderServiceRequestPreviewModal(found);
+              else toast('ไม่พบรายการคำขอสำหรับแสดง Preview', 'error');
+            } else {
+              toast('ไม่พบรายการคำขอสำหรับแสดง Preview', 'error');
+            }
+          })
+          .catch(err => { showLoading(false); toast('ผิดพลาด: ' + err.message, 'error'); });
+        return;
+      }
+
+      renderServiceRequestPreviewModal(item);
+    }
+    window.previewServiceRequest = previewServiceRequest;
+
+    function renderServiceRequestPreviewModal(item) {
+      const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=' + encodeURIComponent(item.id || item.idCard || '');
+      const typeLabelMap = {
+        'HOSXP_NET': 'ขอใช้งานโปรแกรม HOSxP และ อินเทอร์เน็ต (Internet)',
+        'HOSXP': 'ขอใช้งานเฉพาะโปรแกรม HOSxP',
+        'INTERNET': 'ขอใช้งานเฉพาะอินเทอร์เน็ต (Internet)',
+        'VPN': 'ขอใช้งานระบบเชื่อมต่อเครือข่ายระยะไกล (VPN)'
+      };
+      const reqTypeLabel = typeLabelMap[item.requestType] || item.requestType || 'ขอใช้บริการสารสนเทศ';
+
+      const modalBody = `
+      <div style="background:#f8fafc; padding:16px; border-radius:14px; border:1px solid #cbd5e1; margin-bottom:16px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span style="font-size:24px;">📄</span>
+          <div>
+            <div style="font-weight:700; font-size:16px; color:var(--primary-dark);">คำขอเลขที่: ${esc(item.id || '-')}</div>
+            <div style="font-size:13px; color:var(--gray-600);">วันที่ยื่น: ${esc(item.createdAt || '-')} | สถานะ: ${statusBadge(item.status)}</div>
+          </div>
+        </div>
+        <div style="display:flex; gap:8px;">
+          <button class="btn btn-secondary btn-sm" onclick="exportServiceRequestPDF('${esc(item.id || item._id || '')}')">🖨️ พิมพ์ / ดาวน์โหลด PDF</button>
+          ${ADMIN_PASS ? `<button class="btn btn-primary btn-sm" onclick="openApproveServiceModal('${esc(item.id || item._id || '')}')">⚙️ พิจารณาคำขอ</button>` : ''}
+        </div>
+      </div>
+
+      <!-- PDF / Document Sheet Preview -->
+      <div id="sr_pdf_preview_area" style="background:#fff; border:2px solid #cbd5e1; border-radius:12px; padding:24px; box-shadow:0 4px 12px rgba(0,0,0,0.05); font-family:'Sarabun', sans-serif; color:#1e293b; line-height:1.6;">
+        <!-- Header -->
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; border-bottom:2px solid #0284c7; padding-bottom:14px; margin-bottom:16px;">
+          <div>
+            <h2 style="margin:0; font-size:18px; color:#0369a1; font-weight:800;">🏥 แบบฟอร์มขอใช้บริการระบบสารสนเทศ</h2>
+            <div style="font-size:13px; color:#475569; font-weight:600; margin-top:2px;">โรงพยาบาลคลองหาด สำนักงานสาธารณสุขจังหวัดสระแก้ว</div>
+            <div style="font-size:12px; color:#64748b; margin-top:2px;">(HOSxP, Internet Network & Virtual Private Network Access Form)</div>
+          </div>
+          <div style="text-align:right;">
+            <img src="${qrUrl}" style="width:70px; height:70px; border-radius:6px; border:1px solid #cbd5e1; padding:2px; background:#fff;">
+            <div style="font-size:10px; color:#64748b; margin-top:2px;">เลขที่: ${esc(item.id || '-')}</div>
+          </div>
+        </div>
+
+        <!-- Section 1: Requester Info -->
+        <div style="background:#f0f9ff; border:1px solid #bae6fd; border-radius:8px; padding:12px 16px; margin-bottom:14px;">
+          <div style="font-weight:700; color:#0369a1; font-size:14px; margin-bottom:6px; border-bottom:1px solid #e0f2fe; padding-bottom:4px;">
+            📌 ส่วนที่ 1: ข้อมูลผู้ขอใช้บริการ (Requester Information)
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px 16px; font-size:13px;">
+            <div><strong>ชื่อ-นามสกุล (TH):</strong> ${esc(item.nameTh || '-')}</div>
+            <div><strong>Name-Surname (EN):</strong> ${esc(item.nameEn || '-')}</div>
+            <div><strong>ตำแหน่ง (Position):</strong> ${esc(item.position || '-')}</div>
+            <div><strong>หน่วยงาน (Department):</strong> <span style="color:#0284c7; font-weight:600;">${esc(item.department || '-')}</span></div>
+            <div><strong>เลขบัตรประชาชน (ID Card):</strong> ${esc(item.idCard || '-')}</div>
+            <div><strong>รหัสพนักงาน/ขอใช้งาน:</strong> ${esc(item.accessCode || '-')}</div>
+            <div><strong>อีเมล (Email):</strong> ${esc(item.email || '-')}</div>
+            <div><strong>LINE ID / ติดต่อ:</strong> ${esc(item.lineId || '-')}</div>
+          </div>
+        </div>
+
+        <!-- Section 2: Request Details -->
+        <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:12px 16px; margin-bottom:14px;">
+          <div style="font-weight:700; color:#334155; font-size:14px; margin-bottom:6px; border-bottom:1px solid #cbd5e1; padding-bottom:4px;">
+            📝 ส่วนที่ 2: ประเภทและรายละเอียดบริการที่ขอใช้งาน (Service Details)
+          </div>
+          <div style="font-size:13px; line-height:1.7;">
+            <div><strong>ประเภทคำขอ:</strong> <span style="background:#e0f2fe; color:#0369a1; padding:2px 8px; border-radius:6px; font-weight:700;">${esc(reqTypeLabel)}</span></div>
+            ${item.hosxpDetails && item.hosxpDetails !== '-' ? `<div style="margin-top:6px;"><strong>🏥 สิทธิ์/รายละเอียด HOSxP:</strong> ${esc(item.hosxpDetails)}</div>` : ''}
+            ${item.internetDetails && item.internetDetails !== '-' ? `<div style="margin-top:6px;"><strong>🌐 รายละเอียด Internet:</strong> ${esc(item.internetDetails)}</div>` : ''}
+            ${item.requestType === 'VPN' || (item.vpnPurpose && item.vpnPurpose !== '-') ? `<div style="margin-top:6px;"><strong>🔒 วัตถุประสงค์ VPN:</strong> ${esc(item.vpnPurpose || '-')}</div>` : ''}
+            ${item.reqUsername && item.reqUsername !== '-' ? `<div style="margin-top:6px; color:#166534;"><strong>🔑 Username ที่เสนอขอตั้ง:</strong> ${esc(item.reqUsername)}</div>` : ''}
+          </div>
+        </div>
+
+        <!-- Section 3: Approval Result & Credentials -->
+        <div style="background:${item.status === 'อนุมัติ' ? '#f0fdf4' : (item.status === 'ไม่อนุมัติ' ? '#fef2f2' : '#fefce8')}; border:1px solid ${item.status === 'อนุมัติ' ? '#bbf7d0' : (item.status === 'ไม่อนุมัติ' ? '#fecaca' : '#fef08a')}; border-radius:8px; padding:12px 16px; margin-bottom:14px;">
+          <div style="font-weight:700; color:${item.status === 'อนุมัติ' ? '#166534' : (item.status === 'ไม่อนุมัติ' ? '#991b1b' : '#854d0e')}; font-size:14px; margin-bottom:6px;">
+            🛡️ ส่วนที่ 3: ผลการพิจารณาและข้อมูลบัญชีผู้ใช้งาน (Approval & Account Credentials)
+          </div>
+          <div style="font-size:13px; line-height:1.7;">
+            <div><strong>สถานะคำขอ:</strong> ${statusBadge(item.status)}</div>
+            ${item.status === 'อนุมัติ' ? `
+              <div style="margin-top:8px; padding:10px; background:#fff; border:1px solid #cbd5e1; border-radius:6px; font-family:monospace;">
+                ${item.requestType === 'VPN' ? `
+                  <div>🔒 VPN User: <strong>${esc(item.vpnUser || '-')}</strong> | Pass: <strong>${esc(item.vpnPass || '-')}</strong></div>
+                ` : `
+                  <div>🏥 HOSxP User: <strong>${esc(item.hosxpUser || '-')}</strong> | Pass: <strong>${esc(item.hosxpPass || '-')}</strong></div>
+                  <div>🌐 Internet User: <strong>${esc(item.internetUser || '-')}</strong> | Pass: <strong>${esc(item.internetPass || '-')}</strong></div>
+                `}
+              </div>
+            ` : ''}
+            ${item.remark && item.remark !== '-' ? `<div style="margin-top:6px; color:#dc2626;"><strong>หมายเหตุ:</strong> ${esc(item.remark)}</div>` : ''}
+          </div>
+        </div>
+
+        <!-- Section 4: Signatures -->
+        <div style="margin-top:24px; padding-top:16px; border-top:1px dashed #cbd5e1; display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; text-align:center; font-size:12px; color:#475569;">
+          <div>
+            <div style="height:40px;"></div>
+            <div>(ลงชื่อ)...................................................</div>
+            <div style="margin-top:4px; font-weight:600;">(${esc(item.nameTh || 'ผู้ขอใช้บริการ')})</div>
+            <div style="font-size:11px; color:#94a3b8;">ผู้ขอใช้บริการ</div>
+          </div>
+          <div>
+            <div style="height:40px;"></div>
+            <div>(ลงชื่อ)...................................................</div>
+            <div style="margin-top:4px; font-weight:600;">(...................................................)</div>
+            <div style="font-size:11px; color:#94a3b8;">หัวหน้าหน่วยงาน / ผู้พิจารณา</div>
+          </div>
+          <div>
+            <div style="height:40px;"></div>
+            <div>(ลงชื่อ)...................................................</div>
+            <div style="margin-top:4px; font-weight:600;">(เจ้าหน้าที่ศูนย์คอมพิวเตอร์)</div>
+            <div style="font-size:11px; color:#94a3b8;">ผู้ดำเนินการอนุมัติระบบ</div>
+          </div>
+        </div>
+      </div>`;
+
+      openModal('📄 ตัวอย่างแบบฟอร์มคำขอใช้บริการระบบสารสนเทศ', modalBody, null, true);
+    }
+    window.renderServiceRequestPreviewModal = renderServiceRequestPreviewModal;
+
+    function exportServiceRequestPDF(itemOrId) {
+      let item = typeof itemOrId === 'object' ? itemOrId : ((ADMIN_SR_CACHE || []).find(x => String(x.id || x._id || x.docId) === String(itemOrId)) || (window.TRACKED_SR_CACHE || []).find(x => String(x.id || x._id || x.docId) === String(itemOrId)));
+      if (!item) {
+        toast('ไม่พบข้อมูลคำขอสำหรับพิมพ์เอกสาร', 'warning');
+        return;
+      }
+
+      const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=' + encodeURIComponent(item.id || item.idCard || '');
+      const typeLabelMap = {
+        'HOSXP_NET': 'ขอใช้งานโปรแกรม HOSxP และ อินเทอร์เน็ต (Internet)',
+        'HOSXP': 'ขอใช้งานเฉพาะโปรแกรม HOSxP',
+        'INTERNET': 'ขอใช้งานเฉพาะอินเทอร์เน็ต (Internet)',
+        'VPN': 'ขอใช้งานระบบเชื่อมต่อเครือข่ายระยะไกล (VPN)'
+      };
+      const reqTypeLabel = typeLabelMap[item.requestType] || item.requestType || 'ขอใช้บริการสารสนเทศ';
+
+      const win = window.open('', '_blank');
+      if (!win) {
+        toast('กรุณายอมรับ Pop-up window ในเบราว์เซอร์เพื่อพิมพ์เอกสาร', 'warning');
+        return;
+      }
+
+      win.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <title>แบบฟอร์มคำขอใช้บริการ IT - ${esc(item.id || '')}</title>
+          <style>
+            @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700;800&display=swap');
+            body { font-family: 'Sarabun', sans-serif; background: #f8fafc; padding: 20px; color: #0f172a; margin: 0; }
+            .sheet { background: #fff; max-width: 800px; margin: 0 auto; padding: 40px; border-radius: 8px; box-shadow: 0 4px 14px rgba(0,0,0,0.1); border: 1px solid #e2e8f0; }
+            h1, h2, h3 { margin: 0; }
+            .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #0284c7; padding-bottom: 16px; margin-bottom: 20px; }
+            .box { border: 1px solid #cbd5e1; border-radius: 8px; padding: 14px 18px; margin-bottom: 16px; background: #fff; }
+            .box-title { font-weight: 700; font-size: 15px; color: #0369a1; margin-bottom: 8px; border-bottom: 1px solid #f1f5f9; padding-bottom: 4px; }
+            .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 20px; font-size: 14px; }
+            .sigs { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; text-align: center; margin-top: 40px; padding-top: 20px; border-top: 1px dashed #cbd5e1; font-size: 13px; }
+            @media print {
+              body { background: #fff; padding: 0; }
+              .sheet { box-shadow: none; border: none; max-width: 100%; padding: 20px; }
+              .no-print { display: none; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="no-print" style="max-width:800px; margin:0 auto 16px auto; text-align:right;">
+            <button onclick="window.print()" style="padding:10px 20px; background:#0284c7; color:#fff; border:none; border-radius:8px; font-weight:700; cursor:pointer; font-size:14px;">🖨️ พิมพ์เอกสาร / Save PDF</button>
+          </div>
+          <div class="sheet">
+            <div class="header">
+              <div>
+                <h1 style="font-size:20px; color:#0369a1; font-weight:800;">🏥 แบบฟอร์มขอใช้บริการระบบสารสนเทศ</h1>
+                <div style="font-size:14px; color:#475569; font-weight:600; margin-top:4px;">โรงพยาบาลคลองหาด สำนักงานสาธารณสุขจังหวัดสระแก้ว</div>
+                <div style="font-size:12px; color:#64748b; margin-top:2px;">(HOSxP, Internet Network & Virtual Private Network Access Form)</div>
+              </div>
+              <div style="text-align:right;">
+                <img src="${qrUrl}" style="width:80px; height:80px; border:1px solid #cbd5e1; border-radius:6px; padding:2px;">
+                <div style="font-size:11px; color:#64748b; margin-top:2px;">เลขที่: ${esc(item.id || '-')}</div>
+                <div style="font-size:11px; color:#64748b;">วันที่: ${esc(item.createdAt || '-')}</div>
+              </div>
+            </div>
+
+            <div class="box" style="background:#f0f9ff; border-color:#bae6fd;">
+              <div class="box-title">📌 ส่วนที่ 1: ข้อมูลผู้ขอใช้บริการ</div>
+              <div class="grid-2">
+                <div><strong>ชื่อ-นามสกุล (TH):</strong> ${esc(item.nameTh || '-')}</div>
+                <div><strong>Name-Surname (EN):</strong> ${esc(item.nameEn || '-')}</div>
+                <div><strong>ตำแหน่ง:</strong> ${esc(item.position || '-')}</div>
+                <div><strong>หน่วยงาน:</strong> ${esc(item.department || '-')}</div>
+                <div><strong>เลขบัตรประชาชน:</strong> ${esc(item.idCard || '-')}</div>
+                <div><strong>รหัสพนักงาน:</strong> ${esc(item.accessCode || '-')}</div>
+                <div><strong>อีเมล:</strong> ${esc(item.email || '-')}</div>
+                <div><strong>LINE / ติดต่อ:</strong> ${esc(item.lineId || '-')}</div>
+              </div>
+            </div>
+
+            <div class="box">
+              <div class="box-title">📝 ส่วนที่ 2: รายละเอียดบริการที่ขอใช้งาน</div>
+              <div style="font-size:14px; line-height:1.7;">
+                <div><strong>ประเภทบริการ:</strong> ${esc(reqTypeLabel)}</div>
+                ${item.hosxpDetails && item.hosxpDetails !== '-' ? `<div style="margin-top:4px;"><strong>🏥 สิทธิ์/รายละเอียด HOSxP:</strong> ${esc(item.hosxpDetails)}</div>` : ''}
+                ${item.internetDetails && item.internetDetails !== '-' ? `<div style="margin-top:4px;"><strong>🌐 รายละเอียด Internet:</strong> ${esc(item.internetDetails)}</div>` : ''}
+                ${item.vpnPurpose && item.vpnPurpose !== '-' ? `<div style="margin-top:4px;"><strong>🔒 วัตถุประสงค์ VPN:</strong> ${esc(item.vpnPurpose)}</div>` : ''}
+              </div>
+            </div>
+
+            <div class="box" style="background:${item.status === 'อนุมัติ' ? '#f0fdf4' : '#fff'}; border-color:${item.status === 'อนุมัติ' ? '#bbf7d0' : '#cbd5e1'};">
+              <div class="box-title" style="color:${item.status === 'อนุมัติ' ? '#166534' : '#0369a1'};">🛡️ ส่วนที่ 3: ผลการพิจารณาอนุมัติ</div>
+              <div style="font-size:14px; line-height:1.7;">
+                <div><strong>สถานะ:</strong> ${esc(item.status || 'รอพิจารณา')}</div>
+                ${item.status === 'อนุมัติ' ? `
+                  <div style="margin-top:8px; padding:10px; background:#fff; border:1px solid #cbd5e1; border-radius:6px; font-weight:600;">
+                    ${item.requestType === 'VPN' ? `
+                      <div>VPN User: ${esc(item.vpnUser || '-')} | Pass: ${esc(item.vpnPass || '-')}</div>
+                    ` : `
+                      <div>HOSxP User: ${esc(item.hosxpUser || '-')} | Pass: ${esc(item.hosxpPass || '-')}</div>
+                      <div>Internet User: ${esc(item.internetUser || '-')} | Pass: ${esc(item.internetPass || '-')}</div>
+                    `}
+                  </div>
+                ` : ''}
+                ${item.remark && item.remark !== '-' ? `<div style="margin-top:4px; color:#dc2626;"><strong>หมายเหตุ:</strong> ${esc(item.remark)}</div>` : ''}
+              </div>
+            </div>
+
+            <div class="sigs">
+              <div>
+                <div style="height:50px;"></div>
+                <div>(ลงชื่อ)...................................................</div>
+                <div style="margin-top:4px; font-weight:600;">(${esc(item.nameTh || 'ผู้ขอใช้บริการ')})</div>
+                <div style="font-size:11px; color:#64748b;">ผู้ขอใช้บริการ</div>
+              </div>
+              <div>
+                <div style="height:50px;"></div>
+                <div>(ลงชื่อ)...................................................</div>
+                <div style="margin-top:4px; font-weight:600;">(...................................................)</div>
+                <div style="font-size:11px; color:#64748b;">หัวหน้าหน่วยงาน / ผู้พิจารณา</div>
+              </div>
+              <div>
+                <div style="height:50px;"></div>
+                <div>(ลงชื่อ)...................................................</div>
+                <div style="margin-top:4px; font-weight:600;">(เจ้าหน้าที่ศูนย์คอมพิวเตอร์)</div>
+                <div style="font-size:11px; color:#64748b;">ผู้ดำเนินการอนุมัติระบบ</div>
+              </div>
+            </div>
+          </div>
+        </body>
+        </html>
+      `);
+      win.document.close();
+    }
+    window.exportServiceRequestPDF = exportServiceRequestPDF;
 
     // ============== WIFI QR GENERATOR & LOG GALLERY ==============
     function renderWifiQr() {

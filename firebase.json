@@ -1,4 +1,6 @@
+{
   "hosting": {
+    "site": "vmes",
     "public": "public",
     "ignore": [
       "firebase.json",

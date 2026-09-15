@@ -7,6 +7,7 @@
 // Rich Menu (createRiskRichMenuAPI, createVMESV2RichMenuAPI) ไม่รวมอยู่ในนี้โดยตั้งใจ
 
 const { login, changeUserPassword, updateUserProfile } = require('./auth');
+const { getAllData } = require('./firestore');
 const { getBootstrapInfo, saveSystemSettings } = require('./handlers/settings');
 const { saveVehicle, deleteVehicle } = require('./handlers/vehicles');
 const { saveUsage, returnVehicle } = require('./handlers/usage');
@@ -51,6 +52,7 @@ const API_WHITELIST = {
   // Auth / Bootstrap
   login,
   getBootstrapInfo,
+  getAllData,
 
   // Vehicles
   saveVehicle,
