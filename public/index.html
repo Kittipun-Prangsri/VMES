@@ -2192,6 +2192,11 @@ input, select, textarea, button {
     let QR_BATCH_STATE = { search: '', cat: '', room: '', onlyNoTag: false, onlySurveyed: false, cols: 3, selected: new Set() };
     let CHARTS = {};
     let REFRESH_TIMER = null;
+    // เก็บลายเซ็นข้อมูลรอบล่าสุดไว้เทียบตอน poll ทุก 30 วิ — ต่างจาก Firestore listener
+    // เดิมที่ยิง event เฉพาะตอนมีการเขียนข้อมูลจริง การ poll แบบ fix interval ต้องเช็คเองว่า
+    // ข้อมูลเปลี่ยนจริงไหมก่อน re-render มิเช่นนั้นหน้าที่มีตารางเยอะๆ จะกระพริบทุก 30 วิ
+    // โดยไม่จำเป็น (เห็นเหมือนหน้ารีโหลดตลอดเวลา)
+    let LAST_COLLECTIONS_SNAPSHOT = '';
     const ADMIN_PASS = '11192'; // Internal admin code for authorized actions
 
     // ============== AUTH ==============
@@ -3032,13 +3037,15 @@ input, select, textarea, button {
     function loadAll() {
       showLoading(true);
       Promise.all([callApi('getBootstrapInfo'), fetchAllCollectionsData()])
-        .then(([d]) => {
+        .then(([d, allData]) => {
           showLoading(false);
           // Guard: server returned nothing
           if (!d || typeof d !== 'object') {
             showSetupScreen('เซิร์ฟเวอร์ไม่ตอบสนอง — กรุณารัน setupSystem');
             return;
           }
+          // กันไม่ให้ silentRefresh() tick แรกหลังจากนี้ re-render ซ้ำทั้งที่ข้อมูลยังไม่ทันเปลี่ยนเลย
+          if (allData) LAST_COLLECTIONS_SNAPSHOT = JSON.stringify(allData);
           // Merge lean bootstrap fields — collection arrays (DATA.vehicles etc.)
           // ถูก merge เข้า DATA ไปแล้วโดย fetchAllCollectionsData() ด้านบน (poll ผ่าน
           // backend RPC แทนการเปิด Firestore listener ตรงจาก client)
@@ -3100,7 +3107,7 @@ input, select, textarea, button {
       if (live) live.style.opacity = '0.5';
 
       Promise.all([callApi('getBootstrapInfo'), fetchAllCollectionsData()])
-        .then(([d]) => {
+        .then(([d, allData]) => {
           if (live) live.style.opacity = '1';
           if (!d || typeof d !== 'object') return;
 
@@ -3110,11 +3117,19 @@ input, select, textarea, button {
           // Only re-render if we are on pages that need live updates and user is not currently typing in a form
           const isFormTab = (CURRENT_PAGE === 'serviceRequest' && typeof SERVICE_REQUEST_TAB !== 'undefined' && SERVICE_REQUEST_TAB === 'form');
           const livePages = ['dashboard', 'equipment', 'borrowing', 'vehicles', 'users', 'drivers', 'usage', 'maintenance', 'fuel', 'booking', 'inspection', 'notifications', 'audit', 'departments', 'serviceRequests', 'reports', 'attendanceCheckin', 'attendanceHistory', 'attendanceSettings', 'wifiQr'];
-          if (!isUserEditingForm() && !isFormTab) {
-            if (livePages.includes(CURRENT_PAGE) || (CURRENT_PAGE === 'serviceRequest' && typeof SERVICE_REQUEST_TAB !== 'undefined' && SERVICE_REQUEST_TAB === 'admin')) {
-              renderPage(CURRENT_PAGE);
-            }
+          if (isUserEditingForm() || isFormTab) return;
+          const onLivePage = livePages.includes(CURRENT_PAGE) || (CURRENT_PAGE === 'serviceRequest' && typeof SERVICE_REQUEST_TAB !== 'undefined' && SERVICE_REQUEST_TAB === 'admin');
+          if (!onLivePage) return;
+
+          // เทียบข้อมูลรอบนี้กับรอบก่อนก่อน re-render — poll ทุก 30 วิคงที่ ต่างจาก
+          // listener เดิมที่ยิงเฉพาะตอนมีการเขียนจริง ถ้าไม่เช็คตรงนี้หน้าที่มีตารางเยอะๆ
+          // จะกระพริบ/รีเซ็ต scroll ทุก 30 วิแม้ข้อมูลไม่ได้เปลี่ยนเลย
+          if (allData) {
+            const snapshot = JSON.stringify(allData);
+            if (snapshot === LAST_COLLECTIONS_SNAPSHOT) return;
+            LAST_COLLECTIONS_SNAPSHOT = snapshot;
           }
+          renderPage(CURRENT_PAGE);
         })
         .catch(() => { if (live) live.style.opacity = '1'; });
     }
@@ -8704,7 +8719,7 @@ input, select, textarea, button {
     function fetchAllCollectionsData() {
       return callApi('getAllData')
         .then(d => {
-          if (!d || typeof d !== 'object') return;
+          if (!d || typeof d !== 'object') return null;
           DATA.vehicles = d.vehicles || [];
           DATA.usage = d.usage || [];
           DATA.maintenance = d.maintenance || [];
@@ -8721,8 +8736,9 @@ input, select, textarea, button {
           DATA.audit = d.audit || [];
           DATA.departments = d.departments || [];
           DATA.attendance = d.attendance || [];
+          return d; // คืนค่าดิบไว้ให้ silentRefresh() เทียบว่าข้อมูลเปลี่ยนจริงไหมก่อน re-render
         })
-        .catch(err => console.error('fetchAllCollectionsData error:', err));
+        .catch(err => { console.error('fetchAllCollectionsData error:', err); return null; });
     }
     window.fetchAllCollectionsData = fetchAllCollectionsData;
 
