@@ -1,29 +1,31 @@
-// ============== FIREBASE FIRESTORE ENGINE (firebase-admin SDK) ==============
-// แทนที่ REST API + JWT/OAuth ของ Apps Script เดิม (firestoreSetDoc_/firestoreListDocs_ ฯลฯ)
-// firebase-admin SDK จัดการ auth/pagination/serialize ให้หมด ไม่ต้องเขียนเอง
+// ============== DATA ENGINE (Supabase/Postgres, JSONB document tables) ==============
+// เดิมไฟล์นี้ใช้ firebase-admin คุย Firestore ตรงๆ — ย้ายมาใช้ Supabase (Postgres) แทน
+// เพราะ Firestore Spark plan (free) ชนโควต้าอ่าน 50,000 reads/วันซ้ำๆ และ Blaze plan
+// ต้องผูกบัตรเครดิต ส่วน Supabase free tier ไม่มี daily read quota แบบนี้
+//
+// ยังคงชื่อไฟล์ "firestore.js" และ export signature เดิมทุกตัว (SHEETS, COLLECTION,
+// setDoc, deleteDoc, deleteField, listDocs, getDoc, getAllData) โดยตั้งใจ — ไฟล์อื่น
+// ทั้งหมด (handlers/*, whitelist.js, auth.js, line.js, util.js) เรียกผ่านฟังก์ชันกลุ่มนี้
+// เท่านั้น ไม่แตะ Firestore SDK ตรงๆ เลย จึงสลับ engine ด้านในได้โดยไม่ต้องแก้ไฟล์อื่นเลย
+//
+// แต่ละ collection แมปเป็น Postgres table เดียวกันชื่อเดียวกัน โครงสร้างแบบ JSONB
+// document store (id text primary key, data jsonb) แทนการออกแบบ relational schema ใหม่
+// ทั้งหมด — เพราะ field เดิมเป็นภาษาไทยไม่คงที่ (schemaless แบบ Firestore) การยึดโครงสร้าง
+// นี้ทำให้ handler เดิมทำงานได้ทันทีโดยไม่ต้องแก้โค้ดที่ query field ภาษาไทยตรงๆ เลย
 
-const { initializeApp, cert, getApps, getApp } = require('firebase-admin/app');
-const { getFirestore, FieldValue } = require('firebase-admin/firestore');
+const { createClient } = require('@supabase/supabase-js');
 
-// กัน initializeApp ถูกเรียกซ้ำเมื่อ module ถูก require หลายครั้งข้าม warm invocation ของ Vercel
-const app = getApps().length
-  ? getApp()
-  : process.env.FIREBASE_PROJECT_ID
-  ? initializeApp({
-      credential: cert({
-        projectId: process.env.FIREBASE_PROJECT_ID,
-        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-        privateKey: (process.env.FIREBASE_PRIVATE_KEY || '').replace(/\\n/g, '\n'),
-      }),
-      storageBucket: process.env.FIREBASE_STORAGE_BUCKET || 'phan-thong.firebasestorage.app',
-    })
-  : null;
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
 
-const db = app ? getFirestore(app) : null;
+// service_role key bypass RLS ได้เหมือน Firebase Admin SDK bypass Firestore rules เดิม
+const supabase =
+  SUPABASE_URL && SUPABASE_SERVICE_KEY
+    ? createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, { auth: { persistSession: false } })
+    : null;
 
-// ชื่อ collection ภาษาอังกฤษตรงตามข้อมูลจริงที่มีอยู่แล้วใน Firestore (ยืนยันแล้ว) —
-// ไม่มีการแปลชื่อไทย->อังกฤษอีกต่อไป (ต่างจาก SHEET_TO_FIRESTORE_COLLECTION เดิม) เพราะ
-// handler ทุกตัวเรียกชื่อ collection ภาษาอังกฤษเหล่านี้ตรงๆ อยู่แล้ว
+// ชื่อ collection/table เดิมทุกตัว (ต้องสร้าง table เหล่านี้ใน Supabase ไว้ล่วงหน้าด้วย SQL
+// setup script — ดู backend-node/supabase-schema.sql)
 const SHEETS = {
   VEHICLES: 'vehicles',
   USAGE: 'usage',
@@ -48,56 +50,71 @@ const SHEETS = {
   ATTENDANCE: 'attendance',
 };
 
-// alias เผื่อโค้ดอื่นอยากอ้างชื่อ "collection" แทน "sheet" (ความหมายเดียวกันในระบบใหม่)
 const COLLECTION = SHEETS;
 
-// In-memory cache to prevent hitting Firestore daily read quota (50,000 reads/day on Free Spark Plan)
+// in-memory cache ต่อ warm instance ของ Vercel — เดิมทำไว้กันโควต้า Firestore แต่ยังมี
+// ประโยชน์เหมือนเดิมฝั่ง Supabase คือลดจำนวน query ซ้ำๆ เมื่อมีหลาย request เข้ามาถี่ๆ
 const CACHE = {};
-const CACHE_TTL_MS = 30 * 1000; // 30 seconds cache for read operations
+const CACHE_TTL_MS = 30 * 1000;
+
+function requireClient() {
+  if (!supabase) throw new Error('ยังไม่ได้ตั้งค่า SUPABASE_URL/SUPABASE_SERVICE_KEY');
+  return supabase;
+}
 
 async function setDoc(collection, docId, data) {
-  delete CACHE[collection]; // Invalidate cache for this collection
+  delete CACHE[collection];
   const clean = { ...data };
   delete clean._row;
   const cleanDocId = String(docId || '').trim();
   if (!cleanDocId) return false;
-  await db.collection(collection).doc(cleanDocId).set(clean); // full replace โดยตั้งใจ (ไม่ merge)
+  const { error } = await requireClient()
+    .from(collection)
+    .upsert({ id: cleanDocId, data: clean, updated_at: new Date().toISOString() });
+  if (error) throw new Error(error.message);
   return true;
 }
 
 async function deleteDoc(collection, docId) {
-  delete CACHE[collection]; // Invalidate cache for this collection
+  delete CACHE[collection];
   const cleanDocId = String(docId || '').trim();
   if (!cleanDocId) return false;
-  await db.collection(collection).doc(cleanDocId).delete();
+  const { error } = await requireClient().from(collection).delete().eq('id', cleanDocId);
+  if (error) throw new Error(error.message);
   return true;
 }
 
 async function deleteField(collection, docId, fieldName) {
-  delete CACHE[collection]; // Invalidate cache for this collection
+  delete CACHE[collection];
   const cleanDocId = String(docId || '').trim();
   if (!cleanDocId) return false;
-  await db.collection(collection).doc(cleanDocId).update({ [fieldName]: FieldValue.delete() });
+  const existing = await getDoc(collection, cleanDocId);
+  if (!existing) return false;
+  const updated = { ...existing };
+  delete updated[fieldName];
+  const { error } = await requireClient()
+    .from(collection)
+    .update({ data: updated, updated_at: new Date().toISOString() })
+    .eq('id', cleanDocId);
+  if (error) throw new Error(error.message);
   return true;
 }
 
 async function listDocs(collection) {
   const now = Date.now();
-  if (CACHE[collection] && (now - CACHE[collection].timestamp < CACHE_TTL_MS)) {
+  if (CACHE[collection] && now - CACHE[collection].timestamp < CACHE_TTL_MS) {
     return CACHE[collection].data;
   }
   try {
-    const snap = await db.collection(collection).get();
-    const data = snap.docs.map((d) => d.data());
-    CACHE[collection] = { timestamp: now, data };
-    return data;
+    const { data: rows, error } = await requireClient().from(collection).select('data');
+    if (error) throw new Error(error.message);
+    const result = rows.map((r) => r.data);
+    CACHE[collection] = { timestamp: now, data: result };
+    return result;
   } catch (err) {
     console.error(`listDocs error for ${collection}:`, err.message);
     if (CACHE[collection] && CACHE[collection].data) {
-      return CACHE[collection].data; // Fallback to last cached data if quota exceeded
-    }
-    if (err.message && (err.message.includes('RESOURCE_EXHAUSTED') || err.message.includes('Quota exceeded') || err.message.includes('8'))) {
-      throw new Error('โควต้าการอ่านข้อมูล Firestore รายวันเต็ม (Quota Exceeded) กรุณาอัปเกรดเป็น Firebase Blaze Plan หรือรอการรีเซ็ตโควต้ารายวัน');
+      return CACHE[collection].data; // fallback ไปใช้ cache รอบก่อนถ้ามี
     }
     throw err;
   }
@@ -107,26 +124,30 @@ async function getDoc(collection, docId) {
   const cleanDocId = String(docId || '').trim();
   if (!cleanDocId) return null;
   try {
-    const doc = await db.collection(collection).doc(cleanDocId).get();
-    return doc.exists ? doc.data() : null;
+    const { data: row, error } = await requireClient()
+      .from(collection)
+      .select('data')
+      .eq('id', cleanDocId)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    return row ? row.data : null;
   } catch (err) {
     console.error(`getDoc error for ${collection}/${cleanDocId}:`, err.message);
-    if (err.message && (err.message.includes('RESOURCE_EXHAUSTED') || err.message.includes('Quota exceeded'))) {
-      // Return matching item from collection cache if available
-      if (CACHE[collection] && Array.isArray(CACHE[collection].data)) {
-        return CACHE[collection].data.find(x => String(x.id || x._id || x._row || x.docId || x['รหัส'] || '') === cleanDocId) || null;
-      }
+    if (CACHE[collection] && Array.isArray(CACHE[collection].data)) {
+      return (
+        CACHE[collection].data.find(
+          (x) => String(x.id || x._id || x._row || x.docId || x['รหัส'] || '') === cleanDocId
+        ) || null
+      );
     }
     throw err;
   }
 }
 
-// รวมคอลเลกชันหลักที่ frontend ต้องใช้แสดงผลทุกหน้าไว้ในเรียกเดียว แทนที่การเปิด
-// onSnapshot listener 16 ตัวตรงจาก client (อ่านเอกสารทั้งหมดซ้ำทุกครั้งที่เปิดแท็บ/
-// มีการเขียนที่ไหนก็ตาม) ซึ่งเป็นสาเหตุหลักที่ทำให้ชนโควต้า 50,000 reads/วันของ Spark
-// plan — ฝั่ง frontend เปลี่ยนมาเรียกฟังก์ชันนี้แบบ polling ทุก 30 วิแทน ร่วมกับ cache
-// ด้านบนนี้ ทำให้อ่านจริงจาก Firestore สูงสุดแค่ 1 ครั้ง/collection ทุก 30 วิ ไม่ว่าจะมี
-// กี่แท็บ/ผู้ใช้เปิดพร้อมกันก็ตาม
+// รวมคอลเลกชันหลักที่ frontend ต้องใช้แสดงผลทุกหน้าไว้ในเรียกเดียว — frontend เรียกแบบ
+// polling ทุก 30 วิ (ดู public/index.html silentRefresh/loadAll) แทนการเปิด Firestore
+// listener ตรงจาก client แบบเดิม ร่วมกับ cache ด้านบนนี้ทำให้อ่านจริงจาก DB สูงสุดแค่
+// 1 ครั้ง/collection ทุก 30 วิ ไม่ว่าจะมีกี่แท็บ/ผู้ใช้เปิดพร้อมกันก็ตาม
 async function getAllData() {
   const keys = [
     'vehicles', 'usage', 'maintenance', 'fuel', 'fuelQuota',
@@ -139,4 +160,4 @@ async function getAllData() {
   return out;
 }
 
-module.exports = { db, app, SHEETS, COLLECTION, setDoc, deleteDoc, deleteField, listDocs, getDoc, getAllData };
+module.exports = { SHEETS, COLLECTION, setDoc, deleteDoc, deleteField, listDocs, getDoc, getAllData };
