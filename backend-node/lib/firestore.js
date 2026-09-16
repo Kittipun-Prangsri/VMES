@@ -1,7 +1,9 @@
 // ============== DATA ENGINE (Supabase/Postgres, JSONB document tables) ==============
 // เดิมไฟล์นี้ใช้ firebase-admin คุย Firestore ตรงๆ — ย้ายมาใช้ Supabase (Postgres) แทน
 // เพราะ Firestore Spark plan (free) ชนโควต้าอ่าน 50,000 reads/วันซ้ำๆ และ Blaze plan
-// ต้องผูกบัตรเครดิต ส่วน Supabase free tier ไม่มี daily read quota แบบนี้
+// ต้องผูกบัตรเครดิต ส่วน Supabase free tier ไม่มี daily read quota แบบนี้ ข้อมูลทั้งหมด
+// ถูก migrate มาแล้วเมื่อ 2026-09-16 (ดู backend-node/api/migrate-to-supabase.js ที่ถูก
+// ลบทิ้งหลังใช้งานครั้งเดียวเสร็จ — ตรวจนับแถวยืนยันครบทุก collection แล้ว)
 //
 // ยังคงชื่อไฟล์ "firestore.js" และ export signature เดิมทุกตัว (SHEETS, COLLECTION,
 // setDoc, deleteDoc, deleteField, listDocs, getDoc, getAllData) โดยตั้งใจ — ไฟล์อื่น
@@ -24,8 +26,7 @@ const supabase =
     ? createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, { auth: { persistSession: false } })
     : null;
 
-// ชื่อ collection/table เดิมทุกตัว (ต้องสร้าง table เหล่านี้ใน Supabase ไว้ล่วงหน้าด้วย SQL
-// setup script — ดู backend-node/supabase-schema.sql)
+// ชื่อ collection/table เดิมทุกตัว (สร้างไว้แล้วใน Supabase ด้วย supabase-schema.sql)
 const SHEETS = {
   VEHICLES: 'vehicles',
   USAGE: 'usage',
@@ -52,8 +53,8 @@ const SHEETS = {
 
 const COLLECTION = SHEETS;
 
-// in-memory cache ต่อ warm instance ของ Vercel — เดิมทำไว้กันโควต้า Firestore แต่ยังมี
-// ประโยชน์เหมือนเดิมฝั่ง Supabase คือลดจำนวน query ซ้ำๆ เมื่อมีหลาย request เข้ามาถี่ๆ
+// in-memory cache ต่อ warm instance ของ Vercel — ลดจำนวน query ซ้ำๆ เมื่อมีหลาย request
+// เข้ามาถี่ๆ ภายใน 30 วิ (ไม่มีผลต่อ correctness เพราะ setDoc/deleteDoc ล้าง cache ทันที)
 const CACHE = {};
 const CACHE_TTL_MS = 30 * 1000;
 
@@ -145,9 +146,9 @@ async function getDoc(collection, docId) {
 }
 
 // รวมคอลเลกชันหลักที่ frontend ต้องใช้แสดงผลทุกหน้าไว้ในเรียกเดียว — frontend เรียกแบบ
-// polling ทุก 30 วิ (ดู public/index.html silentRefresh/loadAll) แทนการเปิด Firestore
-// listener ตรงจาก client แบบเดิม ร่วมกับ cache ด้านบนนี้ทำให้อ่านจริงจาก DB สูงสุดแค่
-// 1 ครั้ง/collection ทุก 30 วิ ไม่ว่าจะมีกี่แท็บ/ผู้ใช้เปิดพร้อมกันก็ตาม
+// polling ทุก 30 วิ (ดู public/index.html silentRefresh/loadAll) ร่วมกับ cache ด้านบนนี้
+// ทำให้อ่านจริงจาก DB สูงสุดแค่ 1 ครั้ง/collection ทุก 30 วิ ไม่ว่าจะมีกี่แท็บ/ผู้ใช้เปิด
+// พร้อมกันก็ตาม — และไม่มี daily quota แบบ Firestore Spark plan อีกต่อไป
 async function getAllData() {
   const keys = [
     'vehicles', 'usage', 'maintenance', 'fuel', 'fuelQuota',
