@@ -3086,13 +3086,32 @@ input, select, textarea, button {
     }
 
     function runSetupAndReload() {
-      if (!confirm('ระบบจะสร้างชีตและข้อมูลตัวอย่างทั้งหมดใน Google Sheet ที่ผูกอยู่\n(ข้อมูลเก่าในชีตเดิมจะถูกแทนที่)\n\nดำเนินการต่อ?')) return;
+      if (!confirm('ระบบจะสร้างชีตและข้อมูลตัวอย่างทั้งหมด\n\nดำเนินการต่อ?')) return;
       showLoading(true);
       callApi('setupSystem')
         .then(r => {
           showLoading(false);
           toast('ติดตั้งสำเร็จ! กำลังโหลดข้อมูล...', 'success');
           setTimeout(loadAll, 600);
+        })
+        .catch(err => {
+          showLoading(false);
+          toast('ผิดพลาด: ' + (err && err.message ? err.message : err), 'error');
+        });
+    }
+
+    function runSyncFromFirebase() {
+      if (!confirm('ต้องการสั่งดึงและซิงก์ข้อมูลทั้งหมดจาก Firebase Firestore อีกครั้งหรือไม่?')) return;
+      showLoading(true);
+      callApi('syncFromFirebase')
+        .then(r => {
+          showLoading(false);
+          if (r && r.success) {
+            toast(r.message || 'ดึงข้อมูลจาก Firebase สำเร็จ!', 'success');
+            setTimeout(refreshData, 500);
+          } else {
+            toast('ข้อผิดพลาด: ' + (r ? r.message : 'ไม่สามารถดึงข้อมูลได้'), 'error');
+          }
         })
         .catch(err => {
           showLoading(false);
@@ -4071,7 +4090,17 @@ input, select, textarea, button {
                 <td data-label="">
                   ${isAdmin() ? `<button class="btn btn-sm btn-info" onclick="showQrModal('${esc(v['ทะเบียน'])}', 'รถทะเบียน ${esc(v['ทะเบียน'])}')">🔲 QR</button> <button class="btn btn-sm btn-secondary" onclick="editVehicle('${v['รหัส']}')">✏️</button> <button class="btn btn-sm btn-danger" onclick="delVehicle('${v['รหัส']}','${esc(v['ทะเบียน'])}')">🗑️</button>` : ''}
                 </td>
-              </tr>`).join('') || '<tr><td colspan="9" class="empty"><span class="ico">🚗</span>ยังไม่มีข้อมูลรถ</td></tr>'}
+              </tr>`).join('') || `
+                <tr><td colspan="9">
+                  <div style="text-align:center; padding:36px 16px;">
+                    <div style="font-size:36px; margin-bottom:8px;">🚗</div>
+                    <div style="font-weight:700; color:#475569;">${filter ? 'ไม่พบข้อมูลยานพาหนะตรงตามเงื่อนไขที่ค้นหาบนระบบ' : 'ยังไม่มีข้อมูลยานพาหนะในระบบ'}</div>
+                    <div style="display:flex; justify-content:center; gap:10px; margin-top:12px; flex-wrap:wrap;">
+                      ${filter ? `<button class="btn btn-sm btn-secondary" onclick="window._vf('')">🔄 ล้างคำค้นหา</button>` : ''}
+                      ${isAdmin() ? `<button class="btn btn-sm btn-primary" onclick="addVehicle()">➕ เพิ่มรถใหม่</button> <button class="btn btn-sm btn-info" onclick="openImportVehiclesModal()">📥 นำเข้าข้อมูล</button>` : ''}
+                    </div>
+                  </div>
+                </td></tr>`}
             </tbody>
           </table>
         </div></div>
@@ -4637,11 +4666,23 @@ input, select, textarea, button {
             }).join('') || `
               <tr>
                 <td colspan="6">
-                  <div style="text-align:center; padding:50px 20px;">
-                    <div style="font-size:48px; opacity:0.3; margin-bottom:12px;">🏬</div>
-                    <div style="font-size:15px; font-weight:700; color:#64748b;">ไม่พบข้อมูลอุปกรณ์ตรงกับเงื่อนไข</div>
-                    <div style="font-size:13px; color:#94a3b8; margin-top:4px;">ลองเปลี่ยนคำค้นหา หรือเลือกหมวดหมู่/สถานะอื่น</div>
-                    <button class="btn btn-sm btn-primary" onclick="window._ef('','','','')" style="margin-top:14px; border-radius:8px;">ล้างการค้นหา</button>
+                  <div style="text-align:center; padding:48px 20px; background:#fafafa; border-radius:12px;">
+                    <div style="font-size:44px; margin-bottom:10px;">${isFiltered ? '🔍' : '🏬'}</div>
+                    <div style="font-size:16px; font-weight:700; color:#334155;">
+                      ${isFiltered ? 'ไม่พบข้อมูลอุปกรณ์ตามเงื่อนไขที่ค้นหาบนระบบ' : 'ยังไม่มีข้อมูลครุภัณฑ์ในระบบ'}
+                    </div>
+                    <div style="font-size:13px; color:#64748b; margin-top:4px; margin-bottom:16px;">
+                      ${isFiltered ? `คำค้นหา "${esc(filterText)}": ไม่พบรายการที่ตรงกับตัวกรอง` : 'เริ่มต้นใช้งานโดยการเพิ่มรายการอุปกรณ์ใหม่ หรือนำเข้าข้อมูลครุภัณฑ์ผ่าน Excel / Google Sheet'}
+                    </div>
+                    <div style="display:flex; justify-content:center; gap:10px; flex-wrap:wrap;">
+                      ${isFiltered ? `<button class="btn btn-sm btn-secondary" onclick="window._ef('','','','')" style="border-radius:8px;">🔄 ล้างตัวกรองค้นหา</button>` : ''}
+                      ${canManageEquipment() ? `
+                        <button class="btn btn-sm btn-primary" onclick="addEquipWithCode('${esc(filterText)}')" style="border-radius:8px;">
+                          ➕ ${isFiltered ? 'เพิ่มอุปกรณ์ใหม่ด้วยชื่อ/รหัสนี้' : 'เพิ่มอุปกรณ์ใหม่รายการแรก'}
+                        </button>
+                        ${!isFiltered ? `<button class="btn btn-sm btn-info" onclick="openImportEquipmentModal()" style="border-radius:8px;">📥 นำเข้าข้อมูล (Import Excel)</button>` : ''}
+                      ` : ''}
+                    </div>
                   </div>
                 </td>
               </tr>`}
@@ -4723,7 +4764,7 @@ input, select, textarea, button {
       <div class="field"><label>วันที่จัดซื้อ</label><input id="e_buy" type="date" value="${buyDate}"></div>
       <div class="field full">
         <label>รูปถ่ายอุปกรณ์ (ถ้ามี)</label>
-        <input type="file" id="e_photo" accept="image/*" capture="environment" onchange="window._fsPreviewPhoto(this, 'e_photo_preview')">
+        <input type="file" id="e_photo" accept="image/*" onchange="window._fsPreviewPhoto(this, 'e_photo_preview')">
         <div id="e_photo_preview" style="margin-top:8px;">${e['รูปภาพ'] ? `<img src="${esc(e['รูปภาพ'])}" style="max-width:110px; max-height:110px; border-radius:10px; border:1px solid #e2e8f0; object-fit:cover;">` : ''}</div>
       </div>
       <div class="field full"><label>หมายเหตุ</label><textarea id="e_note" rows="2">${esc(e['หมายเหตุ'] || '')}</textarea></div>
@@ -4819,22 +4860,38 @@ input, select, textarea, button {
         if (!file) { resolve(null); return; }
         const reader = new FileReader();
         reader.onload = (e) => {
+          const rawDataUrl = e.target.result;
+          // มือถือบางรุ่น (โดยเฉพาะรูปที่กล้อง iPhone บันทึกเป็น HEIC) เบราว์เซอร์ถอดรหัส
+          // ผ่าน <img>/canvas ไม่ได้ — เดิมโค้ดนี้ resolve(null) เงียบๆ ทำให้บันทึกอุปกรณ์
+          // สำเร็จแต่รูปหายไปโดยไม่มี error แจ้งผู้ใช้เลย ตอนนี้ถ้าย่อรูปไม่ได้จะส่งไฟล์
+          // ต้นฉบับขึ้นไปแทน (ไม่ย่อขนาด) ให้ Cloudinary แปลงให้แทนที่จะไม่ส่งอะไรเลย
+          const fallbackToRawFile = () => {
+            const commaIdx = rawDataUrl.indexOf(',');
+            resolve({
+              base64: commaIdx >= 0 ? rawDataUrl.slice(commaIdx + 1) : rawDataUrl,
+              contentType: file.type || 'image/jpeg',
+            });
+          };
           const img = new Image();
           img.onload = () => {
-            let w = img.width, h = img.height;
-            const max = maxDim || 1024;
-            if (w > max || h > max) {
-              if (w > h) { h = Math.round(h * max / w); w = max; }
-              else { w = Math.round(w * max / h); h = max; }
+            try {
+              let w = img.width, h = img.height;
+              const max = maxDim || 1024;
+              if (w > max || h > max) {
+                if (w > h) { h = Math.round(h * max / w); w = max; }
+                else { w = Math.round(w * max / h); h = max; }
+              }
+              const canvas = document.createElement('canvas');
+              canvas.width = w; canvas.height = h;
+              canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+              const dataUrl = canvas.toDataURL('image/jpeg', quality || 0.7);
+              resolve({ base64: dataUrl.split(',')[1], contentType: 'image/jpeg' });
+            } catch (err) {
+              fallbackToRawFile();
             }
-            const canvas = document.createElement('canvas');
-            canvas.width = w; canvas.height = h;
-            canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-            const dataUrl = canvas.toDataURL('image/jpeg', quality || 0.7);
-            resolve({ base64: dataUrl.split(',')[1], contentType: 'image/jpeg' });
           };
-          img.onerror = () => resolve(null);
-          img.src = e.target.result;
+          img.onerror = fallbackToRawFile;
+          img.src = rawDataUrl;
         };
         reader.onerror = () => resolve(null);
         reader.readAsDataURL(file);
@@ -4857,7 +4914,7 @@ input, select, textarea, button {
       return `
       <div class="field full">
         <label>รูปถ่ายอุปกรณ์ (ถ้ามี)</label>
-        <input type="file" id="${inputId}" accept="image/*" capture="environment" onchange="window._fsPreviewPhoto(this, '${previewId}')">
+        <input type="file" id="${inputId}" accept="image/*" onchange="window._fsPreviewPhoto(this, '${previewId}')">
         <div id="${previewId}" style="margin-top:8px;"></div>
       </div>`;
     }
@@ -5477,11 +5534,16 @@ input, select, textarea, button {
             }).join('') || `
               <tr>
                 <td colspan="7">
-                  <div style="text-align:center; padding:50px 20px;">
-                    <div style="font-size:48px; opacity:0.3; margin-bottom:12px;">📦</div>
-                    <div style="font-size:15px; font-weight:700; color:#64748b;">ไม่พบข้อมูลคำขอยืมอุปกรณ์ที่ตรงกับเงื่อนไข</div>
-                    <div style="font-size:13px; color:#94a3b8; margin-top:4px;">ลองค้นหาด้วยคำอื่น หรือเลือกแสดงทุกสถานะ</div>
-                    <button class="btn btn-sm btn-primary" onclick="window._bf('','')" style="margin-top:14px; border-radius:8px;">ล้างการค้นหา</button>
+                  <div style="text-align:center; padding:48px 20px; background:#fafafa; border-radius:12px;">
+                    <div style="font-size:44px; margin-bottom:10px;">🔍</div>
+                    <div style="font-size:16px; font-weight:700; color:#334155;">ไม่พบข้อมูลรายการยืมอุปกรณ์ตามเงื่อนไขที่ค้นหาบนระบบ</div>
+                    <div style="font-size:13px; color:#64748b; margin-top:4px; margin-bottom:16px;">
+                      ${filterBorrowText || filterBorrowStatus ? `คำค้นหา "${esc(filterBorrowText)}": ลองล้างตัวกรองเพื่อค้นหาอีกครั้ง` : 'ยังไม่มีรายการยืม-คืนอุปกรณ์ในระบบ'}
+                    </div>
+                    <div style="display:flex; justify-content:center; gap:10px; flex-wrap:wrap;">
+                      ${filterBorrowText || filterBorrowStatus ? `<button class="btn btn-sm btn-secondary" onclick="window._bf('','')" style="border-radius:8px;">🔄 ล้างตัวกรองค้นหา</button>` : ''}
+                      <button class="btn btn-sm btn-success" onclick="addBorrow()" style="border-radius:8px;">➕ ยื่นคำขอยืมอุปกรณ์ใหม่</button>
+                    </div>
                   </div>
                 </td>
               </tr>`}
@@ -8416,6 +8478,7 @@ input, select, textarea, button {
           <div style="margin-top:20px">
             <h4 style="margin-bottom:10px;color:var(--primary)">🛠️ การบำรุงรักษาระบบ</h4>
             <div style="display:flex;gap:10px;flex-wrap:wrap">
+              <button class="btn btn-primary" onclick="runSyncFromFirebase()">🔥 ดึงข้อมูลจาก Firebase (syncFromFirebase)</button>
               <button class="btn btn-warning" onclick="runSetupAndReload()">⚠️ รีเซ็ต+ติดตั้งใหม่ (setupSystem)</button>
               <button class="btn btn-info" onclick="runOverdueCheck()">⏰ ตรวจสอบรายการครบกำหนด</button>
               <button class="btn btn-secondary" onclick="refreshData()">🔄 รีเฟรชข้อมูล</button>
@@ -8705,7 +8768,11 @@ input, select, textarea, button {
     window.approveBk = approveBk;
     window.addInspection = addInspection;
     window.runOverdueCheck = runOverdueCheck;
+    window.runSyncFromFirebase = runSyncFromFirebase;
     window.exportSheet = exportSheet;
+    window.addEquipWithCode = addEquipWithCode;
+    window.addVehicleWithCode = addVehicleWithCode;
+    window.showNotFoundDataModal = showNotFoundDataModal;
 
     // ============== COLLECTION DATA POLLING ==============
     // เดิมหน้านี้เปิด Firestore onSnapshot listener ตรงจาก client 16 ตัวพร้อมกัน
@@ -8800,6 +8867,62 @@ input, select, textarea, button {
       if (modal) modal.classList.remove('active');
     }
 
+    function addEquipWithCode(code) {
+      if (!canManageEquipment()) return;
+      navigate('equipment');
+      setTimeout(() => {
+        openModal('💻 เพิ่มอุปกรณ์ใหม่', equipForm({ 'รหัสครุภัณฑ์': code }), () => saveEquip(), true);
+      }, 100);
+    }
+
+    function addVehicleWithCode(code) {
+      if (!requireAdmin()) return;
+      navigate('vehicles');
+      setTimeout(() => {
+        openModal('🚗 เพิ่มรถใหม่', vehicleForm({ 'ทะเบียน': code }), () => saveVehicle(), true);
+        setTimeout(() => { $('f_type').value = 'รถเก๋ง'; $('f_status').value = 'พร้อมใช้งาน'; }, 50);
+      }, 100);
+    }
+
+    function showNotFoundDataModal(code) {
+      const cleanCode = String(code || '').trim();
+      const title = '⚠️ ไม่พบข้อมูลบนระบบ';
+      const body = `
+        <div style="text-align:center; padding:16px 10px;">
+          <div style="font-size:54px; margin-bottom:12px;">⚠️</div>
+          <h3 style="font-size:17px; font-weight:700; color:#b45309; margin-bottom:8px;">ไม่พบข้อมูลสำหรับรหัส: <code style="background:#fef3c7; color:#92400e; padding:4px 10px; border-radius:8px; font-size:16px;">${esc(cleanCode)}</code> บนระบบ</h3>
+          <p style="color:#64748b; font-size:13px; line-height:1.5; margin-bottom:20px;">
+            รหัสหรือ QR Code นี้ยังไม่มีในคลังทะเบียนอุปกรณ์ ยานพาหนะ หรือรายการยืมของระบบ VMES<br>ท่านสามารถเลือกดำเนินการต่อด้วยปุ่มเมนูด้านล่างนี้:
+          </p>
+
+          <div style="display:flex; flex-direction:column; gap:10px; max-width:400px; margin:0 auto;">
+            ${canManageEquipment() ? `
+              <button class="btn btn-primary" style="padding:12px; font-weight:600; font-size:14px; display:flex; align-items:center; justify-content:center; gap:8px;" onclick="closeModal(); addEquipWithCode('${esc(cleanCode)}')">
+                🏬 <span>ลงทะเบียนเป็นครุภัณฑ์/อุปกรณ์ใหม่</span>
+              </button>
+            ` : ''}
+
+            ${isAdmin() ? `
+              <button class="btn btn-secondary" style="padding:12px; font-weight:600; font-size:14px; display:flex; align-items:center; justify-content:center; gap:8px; background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd;" onclick="closeModal(); addVehicleWithCode('${esc(cleanCode)}')">
+                🚗 <span>ลงทะเบียนเป็นยานพาหนะใหม่</span>
+              </button>
+            ` : ''}
+
+            ${canManageEquipment() ? `
+              <button class="btn btn-secondary" style="padding:12px; font-weight:600; font-size:14px; display:flex; align-items:center; justify-content:center; gap:8px; background:#f0fdf4; color:#15803d; border:1px solid #bbf7d0;" onclick="closeModal(); navigate('fieldSurvey');">
+                🔎 <span>เข้าสู่โหมดสำรวจภาคสนาม (เครื่องไม่มีป้าย)</span>
+              </button>
+            ` : ''}
+
+            <button class="btn btn-secondary" style="padding:10px; font-size:13px;" onclick="closeModal()">
+              ❌ ปิดหน้าต่าง
+            </button>
+          </div>
+        </div>
+      `;
+      openModal(title, body, null, false);
+    }
+
     function handleScannedQrCode(code) {
       const cleanCode = String(code || '').trim();
       if (!cleanCode) return;
@@ -8844,7 +8967,7 @@ input, select, textarea, button {
             navigate('borrowing');
             toast('พบคำขอยืมเลขที่: ' + r.item['รหัส']);
           } else {
-            toast('สแกน QR Code: ' + cleanCode, 'info');
+            showNotFoundDataModal(cleanCode);
           }
         });
     }
@@ -9522,7 +9645,17 @@ input, select, textarea, button {
             html += '</div>';
             resDiv.innerHTML = html;
           } else {
-            resDiv.innerHTML = `<div style="text-align:center; padding:30px; color:var(--gray-500);">${esc(r.message || 'ไม่พบข้อมูลคำขอ')}</div>`;
+            resDiv.innerHTML = `
+              <div style="text-align:center; padding:32px 16px; background:#fff1f2; border:1px solid #fecdd3; border-radius:16px; color:#9f1239;">
+                <div style="font-size:42px; margin-bottom:8px;">⚠️</div>
+                <div style="font-size:16px; font-weight:700; margin-bottom:6px;">ไม่พบข้อมูลคำขอในระบบ</div>
+                <div style="font-size:13px; color:#be123c; margin-bottom:16px;">
+                  ไม่พบรายการคำขอใช้บริการ HOSxP, Internet หรือ VPN ที่ตรงกับเลขบัตรประชาชน <strong>${esc(idCard)}</strong> บนระบบ
+                </div>
+                <button class="btn btn-primary" style="font-size:14px; padding:10px 20px;" onclick="switchServiceTab('form')">
+                  📝 ยื่นคำขอใช้บริการใหม่ทันที
+                </button>
+              </div>`;
           }
         })
         .catch(err => {

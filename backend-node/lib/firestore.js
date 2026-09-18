@@ -58,6 +58,41 @@ const COLLECTION = SHEETS;
 const CACHE = {};
 const CACHE_TTL_MS = 30 * 1000;
 
+const admin = require('firebase-admin');
+
+let _firebaseDb = null;
+function getFirebaseDb() {
+  if (!_firebaseDb) {
+    if (!admin.apps.length) {
+      if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+        try {
+          const sa = typeof process.env.FIREBASE_SERVICE_ACCOUNT === 'string'
+            ? JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)
+            : process.env.FIREBASE_SERVICE_ACCOUNT;
+          admin.initializeApp({ credential: admin.credential.cert(sa) });
+        } catch (e) {
+          admin.initializeApp({ projectId: process.env.FIREBASE_PROJECT_ID || 'phan-thong' });
+        }
+      } else if (process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PRIVATE_KEY) {
+        // ค่าจริงบน Vercel ถูกตั้งเป็น 3 ตัวแยก (ไม่ใช่ FIREBASE_SERVICE_ACCOUNT JSON ก้อนเดียว)
+        // private key ที่ paste ผ่าน Vercel dashboard มักเก็บ newline เป็น "\n" ตัวอักษรจริง
+        // ต้องแทนกลับเป็น newline จริงก่อน ไม่งั้น admin.credential.cert() parse คีย์ไม่ผ่าน
+        admin.initializeApp({
+          credential: admin.credential.cert({
+            projectId: process.env.FIREBASE_PROJECT_ID,
+            clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+            privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+          }),
+        });
+      } else {
+        admin.initializeApp({ projectId: process.env.FIREBASE_PROJECT_ID || 'phan-thong' });
+      }
+    }
+    _firebaseDb = admin.firestore();
+  }
+  return _firebaseDb;
+}
+
 function requireClient() {
   if (!supabase) throw new Error('ยังไม่ได้ตั้งค่า SUPABASE_URL/SUPABASE_SERVICE_KEY');
   return supabase;
@@ -69,20 +104,43 @@ async function setDoc(collection, docId, data) {
   delete clean._row;
   const cleanDocId = String(docId || '').trim();
   if (!cleanDocId) return false;
-  const { error } = await requireClient()
-    .from(collection)
-    .upsert({ id: cleanDocId, data: clean, updated_at: new Date().toISOString() });
-  if (error) throw new Error(error.message);
-  return true;
+
+  let sbSuccess = false;
+  if (supabase) {
+    try {
+      const { error } = await supabase
+        .from(collection)
+        .upsert({ id: cleanDocId, data: clean, updated_at: new Date().toISOString() });
+      if (!error) sbSuccess = true;
+    } catch (e) {}
+  }
+
+  try {
+    const db = getFirebaseDb();
+    await db.collection(collection).doc(cleanDocId).set(clean, { merge: true });
+    return true;
+  } catch (fbErr) {
+    if (sbSuccess) return true;
+    throw fbErr;
+  }
 }
 
 async function deleteDoc(collection, docId) {
   delete CACHE[collection];
   const cleanDocId = String(docId || '').trim();
   if (!cleanDocId) return false;
-  const { error } = await requireClient().from(collection).delete().eq('id', cleanDocId);
-  if (error) throw new Error(error.message);
-  return true;
+
+  if (supabase) {
+    try { await supabase.from(collection).delete().eq('id', cleanDocId); } catch (e) {}
+  }
+
+  try {
+    const db = getFirebaseDb();
+    await db.collection(collection).doc(cleanDocId).delete();
+    return true;
+  } catch (e) {
+    return true;
+  }
 }
 
 async function deleteField(collection, docId, fieldName) {
@@ -93,12 +151,7 @@ async function deleteField(collection, docId, fieldName) {
   if (!existing) return false;
   const updated = { ...existing };
   delete updated[fieldName];
-  const { error } = await requireClient()
-    .from(collection)
-    .update({ data: updated, updated_at: new Date().toISOString() })
-    .eq('id', cleanDocId);
-  if (error) throw new Error(error.message);
-  return true;
+  return await setDoc(collection, cleanDocId, updated);
 }
 
 async function listDocs(collection) {
@@ -106,49 +159,123 @@ async function listDocs(collection) {
   if (CACHE[collection] && now - CACHE[collection].timestamp < CACHE_TTL_MS) {
     return CACHE[collection].data;
   }
-  try {
-    const { data: rows, error } = await requireClient().from(collection).select('data');
-    if (error) throw new Error(error.message);
-    const result = rows.map((r) => r.data);
-    CACHE[collection] = { timestamp: now, data: result };
-    return result;
-  } catch (err) {
-    console.error(`listDocs error for ${collection}:`, err.message);
-    if (CACHE[collection] && CACHE[collection].data) {
-      return CACHE[collection].data; // fallback ไปใช้ cache รอบก่อนถ้ามี
+
+  // 1. Try Supabase first
+  if (supabase) {
+    try {
+      const { data: rows, error } = await supabase.from(collection).select('data');
+      if (!error && Array.isArray(rows) && rows.length > 0) {
+        const result = rows.map((r) => r.data);
+        CACHE[collection] = { timestamp: now, data: result };
+        return result;
+      }
+    } catch (err) {
+      console.log(`Supabase query for ${collection} returned error: ${err.message}`);
     }
-    throw err;
   }
+
+  // 2. Fallback to Firebase Firestore directly!
+  try {
+    const db = getFirebaseDb();
+    const snapshot = await db.collection(collection).get();
+    const result = [];
+    snapshot.forEach((doc) => {
+      const d = doc.data();
+      if (d) {
+        if (!d.id && !d._id && !d['รหัส']) d.id = doc.id;
+        result.push(d);
+      }
+    });
+    if (result.length > 0) {
+      CACHE[collection] = { timestamp: now, data: result };
+      console.log(`Pulled ${result.length} items from Firebase Firestore for collection ${collection}`);
+      return result;
+    }
+  } catch (fbErr) {
+    console.log(`Firebase Firestore query error for ${collection}:`, fbErr.message);
+  }
+
+  return (CACHE[collection] && CACHE[collection].data) || [];
 }
 
 async function getDoc(collection, docId) {
   const cleanDocId = String(docId || '').trim();
   if (!cleanDocId) return null;
-  try {
-    const { data: row, error } = await requireClient()
-      .from(collection)
-      .select('data')
-      .eq('id', cleanDocId)
-      .maybeSingle();
-    if (error) throw new Error(error.message);
-    return row ? row.data : null;
-  } catch (err) {
-    console.error(`getDoc error for ${collection}/${cleanDocId}:`, err.message);
-    if (CACHE[collection] && Array.isArray(CACHE[collection].data)) {
-      return (
-        CACHE[collection].data.find(
-          (x) => String(x.id || x._id || x._row || x.docId || x['รหัส'] || '') === cleanDocId
-        ) || null
-      );
-    }
-    throw err;
+
+  if (supabase) {
+    try {
+      const { data: row, error } = await supabase
+        .from(collection)
+        .select('data')
+        .eq('id', cleanDocId)
+        .maybeSingle();
+      if (!error && row) return row.data;
+    } catch (err) {}
   }
+
+  try {
+    const db = getFirebaseDb();
+    const docSnap = await db.collection(collection).doc(cleanDocId).get();
+    if (docSnap.exists) return docSnap.data();
+  } catch (e) {}
+
+  if (CACHE[collection] && Array.isArray(CACHE[collection].data)) {
+    return (
+      CACHE[collection].data.find(
+        (x) => String(x.id || x._id || x._row || x.docId || x['รหัส'] || '') === cleanDocId
+      ) || null
+    );
+  }
+  return null;
 }
 
-// รวมคอลเลกชันหลักที่ frontend ต้องใช้แสดงผลทุกหน้าไว้ในเรียกเดียว — frontend เรียกแบบ
-// polling ทุก 30 วิ (ดู public/index.html silentRefresh/loadAll) ร่วมกับ cache ด้านบนนี้
-// ทำให้อ่านจริงจาก DB สูงสุดแค่ 1 ครั้ง/collection ทุก 30 วิ ไม่ว่าจะมีกี่แท็บ/ผู้ใช้เปิด
-// พร้อมกันก็ตาม — และไม่มี daily quota แบบ Firestore Spark plan อีกต่อไป
+async function syncFromFirebase() {
+  const collections = Object.values(SHEETS);
+  const summary = {};
+  let totalPulled = 0;
+
+  for (const col of collections) {
+    try {
+      delete CACHE[col];
+      const db = getFirebaseDb();
+      const snapshot = await db.collection(col).get();
+      const docs = [];
+      snapshot.forEach((doc) => {
+        const d = doc.data();
+        if (d) {
+          const docId = String(d.id || d._id || d['รหัส'] || doc.id).trim();
+          docs.push({ docId, data: d });
+        }
+      });
+
+      if (docs.length > 0) {
+        summary[col] = docs.length;
+        totalPulled += docs.length;
+
+        if (supabase) {
+          for (const item of docs) {
+            try {
+              await supabase.from(col).upsert({ id: item.docId, data: item.data, updated_at: new Date().toISOString() });
+            } catch (e) {}
+          }
+        }
+        CACHE[col] = { timestamp: Date.now(), data: docs.map((x) => x.data) };
+      } else {
+        summary[col] = 0;
+      }
+    } catch (err) {
+      summary[col] = `Error: ${err.message}`;
+    }
+  }
+
+  return {
+    success: true,
+    totalPulled,
+    summary,
+    message: `ดึงข้อมูลจาก Firebase Firestore เรียบร้อยแล้ว (รวมทั้งหมด ${totalPulled} รายการ)`
+  };
+}
+
 async function getAllData() {
   const keys = [
     'vehicles', 'usage', 'maintenance', 'fuel', 'fuelQuota',
@@ -161,4 +288,4 @@ async function getAllData() {
   return out;
 }
 
-module.exports = { SHEETS, COLLECTION, setDoc, deleteDoc, deleteField, listDocs, getDoc, getAllData };
+module.exports = { SHEETS, COLLECTION, setDoc, deleteDoc, deleteField, listDocs, getDoc, getAllData, syncFromFirebase };

@@ -7,8 +7,8 @@
 // Rich Menu (createRiskRichMenuAPI, createVMESV2RichMenuAPI) ไม่รวมอยู่ในนี้โดยตั้งใจ
 
 const { login, changeUserPassword, updateUserProfile } = require('./auth');
-const { getAllData } = require('./firestore');
-const { getBootstrapInfo, saveSystemSettings } = require('./handlers/settings');
+const { getAllData, syncFromFirebase } = require('./firestore');
+const { getBootstrapInfo, saveSystemSettings, setupSystem } = require('./handlers/settings');
 const { saveVehicle, deleteVehicle } = require('./handlers/vehicles');
 const { saveUsage, returnVehicle } = require('./handlers/usage');
 const { saveMaintenance, deleteMaintenance } = require('./handlers/maintenance');
@@ -44,6 +44,8 @@ const { saveSatisfactionRating, getSatisfactionRatings } = require('./handlers/r
 const { saveAttendanceRecord, getAttendanceLogs, saveAttendanceConfig } = require('./handlers/attendance');
 
 const API_WHITELIST = {
+  syncFromFirebase,
+  setupSystem,
   testMikrotikConnection,
   // Attendance
   saveAttendanceRecord,
