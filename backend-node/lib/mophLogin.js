@@ -58,9 +58,16 @@ async function fetchJson(url, init, label) {
 async function fetchProviderProfile(code) {
   const urls = mophUrls();
 
-  const healthToken = await fetchJson(`${urls.healthId}/api/v1/token`, {
+  // moph.id.th รับการเชื่อมต่อจาก IP ในไทยเท่านั้น (จาก Vercel sin1/iad1 = connect timeout)
+  // จึงเรียก token ผ่าน relay บนเซิร์ฟเวอร์ในไทยได้ด้วย MOPH_TOKEN_RELAY_URL + MOPH_RELAY_KEY
+  const relayUrl = process.env.MOPH_TOKEN_RELAY_URL;
+  const tokenUrl = relayUrl || `${urls.healthId}/api/v1/token`;
+  const healthToken = await fetchJson(tokenUrl, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      ...(relayUrl ? { 'X-Relay-Key': process.env.MOPH_RELAY_KEY || '' } : {}),
+    },
     body: new URLSearchParams({
       grant_type: 'authorization_code',
       code,
