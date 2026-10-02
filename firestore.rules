@@ -27,13 +27,18 @@ service cloud.firestore {
     // ยกเว้น userCredentials ไว้ในตัว allow read ของ collection ทั่วไปเอง
 
     match /{collection}/{docId} {
-      allow read: if collection != 'userCredentials';
+      allow read: if collection != 'userCredentials' && collection != 'mophLinks';
       allow write: if false;
     }
 
     // เก็บรหัสผ่านผู้ใช้แยกจาก collection "users" ที่ frontend ฟัง real-time
     // อยู่ — ปิดทั้งอ่านและเขียนจากทุกคน เข้าถึงได้เฉพาะทาง backend (OAuth) เท่านั้น
     match /userCredentials/{docId} {
+      allow read, write: if false;
+    }
+
+    // provider_id ของ MOPH ID -> รหัสผู้ใช้ (backend เท่านั้น)
+    match /mophLinks/{docId} {
       allow read, write: if false;
     }
   }

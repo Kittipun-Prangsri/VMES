@@ -7,6 +7,7 @@
 // Rich Menu (createRiskRichMenuAPI, createVMESV2RichMenuAPI) ไม่รวมอยู่ในนี้โดยตั้งใจ
 
 const { login, changeUserPassword, updateUserProfile } = require('./auth');
+const { getMophSession } = require('./mophLogin');
 const { getBootstrapInfo, saveSystemSettings } = require('./handlers/settings');
 const { saveVehicle, deleteVehicle } = require('./handlers/vehicles');
 const { saveUsage, returnVehicle } = require('./handlers/usage');
@@ -48,6 +49,7 @@ const API_WHITELIST = {
   saveAttendanceConfig,
   // Auth / Bootstrap
   login,
+  getMophSession,
   getBootstrapInfo,
 
   // Vehicles

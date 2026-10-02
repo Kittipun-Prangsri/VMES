@@ -335,6 +335,51 @@ body.resizing-active {
   font-weight: 600;
 }
 
+.moph-login-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 14px 0;
+  font-size: 12px;
+  color: var(--gray-500);
+}
+
+.moph-login-divider::before,
+.moph-login-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--gray-200);
+}
+
+.moph-login-btn {
+  background: #fff;
+  color: #047857;
+  border: 2px solid #10b981;
+  font-weight: 700;
+}
+
+.moph-login-btn:hover {
+  background: #ecfdf5;
+}
+
+.moph-login-error {
+  margin-bottom: 14px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.5;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+}
+
+.moph-login-error.info {
+  background: #fffbeb;
+  border-color: #fde68a;
+  color: #92400e;
+}
+
 .login-portal-card.new-emp-card {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(240, 249, 255, 0.98) 100%);
   border: 2px solid rgba(56, 189, 248, 0.35);
@@ -1795,7 +1840,9 @@ tr:hover td {
             <h2>เจ้าหน้าที่ / ผู้เข้าใช้งานระบบ</h2>
             <p>สำหรับผู้มีชื่อผู้ใช้งานและรหัสผ่านเข้าปฏิบัติงานในระบบ</p>
           </div>
-          
+
+          <div id="loginError" class="moph-login-error" style="display:none"></div>
+
           <div class="field">
             <label>ชื่อผู้ใช้ / อีเมล</label>
             <input type="text" id="loginUser" placeholder="กรอกชื่อผู้ใช้ หรือ อีเมล">
@@ -1816,6 +1863,10 @@ tr:hover td {
           </div>
           <button class="btn btn-primary btn-block" onclick="doLogin()" id="loginBtn">
             <span>🔐 เข้าสู่ระบบ</span>
+          </button>
+          <div class="moph-login-divider"><span>หรือ</span></div>
+          <button type="button" class="btn btn-block moph-login-btn" onclick="startMophLogin()" id="mophLoginBtn">
+            <span>🏥 เข้าสู่ระบบด้วย MOPH ID</span>
           </button>
         </div>
 
@@ -2156,22 +2207,7 @@ tr:hover td {
               } catch(e){}
             }
 
-            const wrap = document.getElementById('loginWrap');
-            if (wrap) wrap.style.display = 'none';
-            const appEl = document.getElementById('app');
-            if (appEl) appEl.classList.add('active');
-            const nameEl = document.getElementById('userName');
-            if (nameEl) nameEl.textContent = r.user.name;
-            const roleEl = document.getElementById('userRole');
-            if (roleEl) roleEl.textContent = r.user.role;
-            const avatarEl = document.getElementById('userAvatar');
-            if (avatarEl) avatarEl.textContent = (r.user.name || '?')[0];
-            
-            // Apply role-based visibility
-            if (typeof applyPermissions === 'function') applyPermissions();
-            
-            if (typeof loadAll === 'function') loadAll();
-            if (typeof startAutoRefresh === 'function') startAutoRefresh();
+            enterApp(r.user);
           } else {
             const msg = (r && r.message) || 'เข้าสู่ระบบไม่สำเร็จ';
             if (typeof toast === 'function') toast(msg, 'error');
@@ -2195,6 +2231,130 @@ tr:hover td {
     }
     console.log('doLogin function defined and exposed on window.');
     window.doLogin = doLogin;
+
+    // แสดงหน้าระบบหลักสำหรับผู้ใช้ที่เข้าสู่ระบบแล้ว (ใช้ร่วมกันทั้ง login ปกติ / MOPH ID / restore session)
+    function enterApp(user) {
+      CURRENT_USER = user;
+      const wrap = document.getElementById('loginWrap');
+      if (wrap) wrap.style.display = 'none';
+      const appEl = document.getElementById('app');
+      if (appEl) appEl.classList.add('active');
+      const nameEl = document.getElementById('userName');
+      if (nameEl) nameEl.textContent = user.name;
+      const roleEl = document.getElementById('userRole');
+      if (roleEl) roleEl.textContent = user.role;
+      const avatarEl = document.getElementById('userAvatar');
+      if (avatarEl) avatarEl.textContent = (user.name || '?')[0];
+
+      // Apply role-based visibility
+      if (typeof applyPermissions === 'function') applyPermissions();
+
+      if (typeof loadAll === 'function') loadAll();
+      if (typeof startAutoRefresh === 'function') startAutoRefresh();
+    }
+
+    // ============== MOPH ID LOGIN ==============
+    // ปุ่มพาไป backend -> moph.id.th -> callback ที่ backend -> กลับมาที่นี่พร้อม #moph=<session token>
+    // หรือ ?error=<code> ถ้าเข้าสู่ระบบไม่ได้ token เป็นแค่ session ของ VMES (ไม่มี token ของ MOPH)
+    const MOPH_LOGIN_URL = API_URL.replace(/\/rpc$/, '/auth/healthid/login');
+    const MOPH_TOKEN_KEY = 'vmes_moph_token';
+    const MOPH_ERRORS = {
+      pending: ['บัญชีของคุณลงทะเบียนผ่าน MOPH ID แล้ว กรุณารอผู้ดูแลระบบอนุมัติสิทธิ์เข้าใช้งาน', 'info'],
+      suspended: ['บัญชีนี้ถูกระงับการใช้งาน กรุณาติดต่อผู้ดูแลระบบ', 'error'],
+      not_allowed: ['หน่วยบริการของคุณไม่ได้รับอนุญาตให้ใช้งานระบบนี้', 'error'],
+      login_failed: ['เข้าสู่ระบบด้วย MOPH ID ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง', 'error'],
+      session: ['เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่', 'info'],
+    };
+
+    function startMophLogin() {
+      const btn = $('mophLoginBtn');
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spin"></span> กำลังไปที่ MOPH ID...';
+      }
+      window.location.href = MOPH_LOGIN_URL;
+    }
+    window.startMophLogin = startMophLogin;
+
+    function showLoginError(code, message) {
+      const el = $('loginError');
+      if (!el) return;
+      const known = MOPH_ERRORS[code];
+      el.textContent = message || (known ? known[0] : 'เข้าสู่ระบบไม่สำเร็จ');
+      el.className = 'moph-login-error' + (known && known[1] === 'info' ? ' info' : '');
+      el.style.display = 'block';
+    }
+
+    function clearMophSession() {
+      try {
+        localStorage.removeItem(MOPH_TOKEN_KEY);
+        localStorage.removeItem('vmes_session_user');
+      } catch (e) {}
+    }
+
+    function verifyMophToken(token, onSuccess) {
+      return callApi('getMophSession', token)
+        .then(r => {
+          if (r && r.success) {
+            storageSet('vmes_session_user', JSON.stringify(r.user));
+            onSuccess(r.user);
+          } else {
+            clearMophSession();
+            if (CURRENT_USER) {
+              CURRENT_USER = null;
+              $('app').classList.remove('active');
+              $('loginWrap').style.display = 'flex';
+            }
+            showLoginError(r && r.error, r && r.message);
+          }
+        })
+        .catch(err => {
+          console.error('MOPH session check failed:', err);
+          if (!CURRENT_USER) showLoginError('login_failed', 'ไม่สามารถติดต่อเซิร์ฟเวอร์ได้');
+        });
+    }
+
+    // เรียกตอนเปิดหน้า: คืนค่า true ถ้าจัดการ session MOPH แล้ว (ไม่ต้อง restore session แบบเดิมต่อ)
+    function handleMophLoginOnLoad() {
+      const hash = new URLSearchParams(window.location.hash.slice(1));
+      const query = new URLSearchParams(window.location.search);
+      const newToken = hash.get('moph');
+      const error = query.get('error');
+      if (newToken || error) {
+        // ลบ token / error ออกจาก address bar และประวัติเบราว์เซอร์
+        history.replaceState(null, '', window.location.pathname);
+      }
+
+      if (error) {
+        clearMophSession();
+        showLoginError(error);
+        return true;
+      }
+      if (newToken) {
+        storageSet(MOPH_TOKEN_KEY, newToken);
+        showLoading(true);
+        verifyMophToken(newToken, user => {
+          showLoading(false);
+          enterApp(user);
+          toast('ยินดีต้อนรับ ' + user.name);
+        }).finally(() => showLoading(false));
+        return true;
+      }
+
+      const savedToken = storageGet(MOPH_TOKEN_KEY);
+      if (savedToken) {
+        // เข้าระบบจาก session ที่บันทึกไว้ทันที แล้วตรวจกับ server ซ้ำ (หมดอายุ/ถูกระงับ -> กลับหน้า login)
+        let cached = null;
+        try { cached = JSON.parse(storageGet('vmes_session_user') || 'null'); } catch (e) {}
+        if (cached && cached.name) enterApp(cached);
+        verifyMophToken(savedToken, user => {
+          if (!cached || !cached.name) enterApp(user);
+          else CURRENT_USER = user;
+        });
+        return true;
+      }
+      return false;
+    }
 
     function loginAsNewEmployeeGuest() {
       CURRENT_USER = {
@@ -2637,6 +2797,7 @@ tr:hover td {
       CURRENT_USER = null;
       try {
         localStorage.removeItem('vmes_session_user');
+        localStorage.removeItem(MOPH_TOKEN_KEY);
       } catch (e) {}
       $('app').classList.remove('active');
       $('loginWrap').style.display = 'flex';
@@ -5948,6 +6109,8 @@ tr:hover td {
           );
         }
         if (filterDept) items = items.filter(u => u['หน่วยงาน'] === filterDept);
+        // ผู้ที่ลงทะเบียนผ่าน MOPH ID และรออนุมัติ แสดงก่อน
+        items = items.slice().sort((a, b) => (b['สถานะ'] === 'รออนุมัติ') - (a['สถานะ'] === 'รออนุมัติ'));
 
         const deptMap = {};
         baseUsers.forEach(u => {
@@ -6155,6 +6318,7 @@ tr:hover td {
       <div class="field"><label>สถานะ</label><select id="us_status">
         <option ${u['สถานะ'] === 'ใช้งาน' ? 'selected' : ''}>ใช้งาน</option>
         <option ${u['สถานะ'] === 'ระงับ' ? 'selected' : ''}>ระงับ</option>
+        <option ${u['สถานะ'] === 'รออนุมัติ' ? 'selected' : ''}>รออนุมัติ</option>
       </select></div>
       <div class="field full">
         <label>LINE User ID (สำหรับแจ้งเตือนส่วนตัวผ่านบอท)</label>
@@ -8727,27 +8891,11 @@ tr:hover td {
 
       // 4. Pre-fill saved login credentials & check Auto Session
       console.log('Loading saved login credentials & checking auto session...');
-      const savedSession = storageGet('vmes_session_user');
+      const savedSession = handleMophLoginOnLoad() ? null : storageGet('vmes_session_user');
       if (savedSession) {
         try {
           const user = JSON.parse(savedSession);
-          if (user && user.name) {
-            CURRENT_USER = user;
-            const wrap = document.getElementById('loginWrap');
-            if (wrap) wrap.style.display = 'none';
-            const appEl = document.getElementById('app');
-            if (appEl) appEl.classList.add('active');
-            const nameEl = document.getElementById('userName');
-            if (nameEl) nameEl.textContent = user.name;
-            const roleEl = document.getElementById('userRole');
-            if (roleEl) roleEl.textContent = user.role;
-            const avatarEl = document.getElementById('userAvatar');
-            if (avatarEl) avatarEl.textContent = (user.name || '?')[0];
-
-            if (typeof applyPermissions === 'function') applyPermissions();
-            if (typeof loadAll === 'function') loadAll();
-            if (typeof startAutoRefresh === 'function') startAutoRefresh();
-          }
+          if (user && user.name) enterApp(user);
         } catch (e) {
           console.error('Auto session restore failed:', e);
         }
