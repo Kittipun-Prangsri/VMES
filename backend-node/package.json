@@ -6,6 +6,7 @@
     "node": ">=18"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.45.4",
     "firebase-admin": "^12.6.0",
     "google-auth-library": "^9.14.1"
   }

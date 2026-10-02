@@ -23,3 +23,5 @@ backend-node/.env.local
 
 # Backups
 *.bak
+.vercel
+.env*
