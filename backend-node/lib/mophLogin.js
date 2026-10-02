@@ -37,7 +37,14 @@ function healthIdLoginUrl() {
 }
 
 async function fetchJson(url, init, label) {
-  const res = await fetch(url, { ...init, signal: AbortSignal.timeout(15000) });
+  let res;
+  try {
+    res = await fetch(url, { ...init, signal: AbortSignal.timeout(15000) });
+  } catch (err) {
+    // "fetch failed" ไม่บอกอะไร — ดึงสาเหตุจริง (เช่น ECONNRESET, ETIMEDOUT, ENOTFOUND) มาแสดง
+    const cause = err.cause ? `${err.cause.code || ''} ${err.cause.message || ''}`.trim() : err.name;
+    throw new Error(`${label} network error: ${err.message} (${cause})`);
+  }
   const text = await res.text();
   let body = null;
   try { body = JSON.parse(text); } catch (e) { /* HTML error page */ }
