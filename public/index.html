@@ -3385,16 +3385,13 @@ input, select, textarea, button {
       const defaultAllowed = ['borrowing', 'dashboard', 'serviceRequests', 'attendanceCheckin', 'attendanceHistory'];
       if (defaultAllowed.includes(page)) return true;
 
-      // Check allowedPages list on user object or in DATA.users
+      // Check allowedPages on the user's record in DATA.users (matched by login code)
       let userAllowed = user.allowedPages || [];
       if (DATA && Array.isArray(DATA.users)) {
-        const dbUser = DATA.users.find(u => 
-          u && (
-            (u['เลขบัตรประชาชน'] && user['เลขบัตรประชาชน'] && u['เลขบัตรประชาชน'] === user['เลขบัตรประชาชน']) ||
-            (u['ชื่อ-นามสกุล'] && user['ชื่อ-นามสกุล'] && u['ชื่อ-นามสกุล'] === user['ชื่อ-นามสกุล']) ||
-            (u.username && user.username && u.username === user.username)
-          )
-        );
+        const dbUser = DATA.users.find(u => u && (
+          (user.code && u['รหัส'] === user.code) ||
+          (!user.code && user.username && u['ชื่อผู้ใช้'] === user.username)
+        ));
         if (dbUser && Array.isArray(dbUser.allowedPages)) {
           userAllowed = dbUser.allowedPages;
         }
@@ -3461,41 +3458,33 @@ input, select, textarea, button {
       }
 
       showLoading(true);
-      const userName = CURRENT_USER ? (CURRENT_USER['ชื่อ-นามสกุล'] || CURRENT_USER.name || CURRENT_USER.username || 'ผู้ใช้งาน') : 'ผู้ใช้งาน';
-      const idCard = CURRENT_USER ? (CURRENT_USER['เลขบัตรประชาชน'] || CURRENT_USER.idCard || '-') : '-';
-      const dept = CURRENT_USER ? (CURRENT_USER['หน่วยงาน'] || CURRENT_USER.department || '-') : '-';
-      const pos = CURRENT_USER ? (CURRENT_USER['ตำแหน่ง'] || CURRENT_USER.role || '-') : '-';
-
+      const u = CURRENT_USER || {};
       const reqData = {
         requestType: 'ขอสิทธิ์เข้าถึงเมนูระบบ VMES',
-        nameTh: userName,
-        position: pos,
-        department: dept,
-        idCard: idCard,
+        userCode: u.code || '',
+        nameTh: u.name || u.username || 'ผู้ใช้งาน',
+        position: u.role || '-',
+        department: u.dept || '-',
+        email: u.email || '',
+        lineId: u.phone || '',
         reqMenu: page,
         reqMenuTitle: pageTitle,
-        vpnPurpose: `ขอสิทธิ์เข้าถึงเมนู: ${pageTitle} | วัตถุประสงค์: ${reason}`,
-        status: 'รอพิจารณา'
+        vpnPurpose: `ขอสิทธิ์เข้าถึงเมนู: ${pageTitle} | วัตถุประสงค์: ${reason}`
       };
-
-      if (!DATA.serviceRequests) DATA.serviceRequests = [];
-      DATA.serviceRequests.unshift({
-        id: 'REQ-' + Date.now(),
-        ...reqData,
-        createdAt: new Date().toISOString().slice(0, 19).replace('T', ' ')
-      });
-      storageSet('DATA', JSON.stringify(DATA));
 
       callApi('createServiceRequest', reqData)
         .then(r => {
           showLoading(false);
-          closeModal();
-          toast(`ส่งคำขออนุมัติเข้าใช้งานเมนู "${pageTitle}" เรียบร้อยแล้ว กรุณารอ Admin อนุมัติ`, 'success');
+          if (r && r.success) {
+            closeModal();
+            toast(`ส่งคำขอเข้าใช้งานเมนู "${pageTitle}" เรียบร้อยแล้ว กรุณารอ Admin อนุมัติ`, 'success');
+          } else {
+            toast((r && r.message) || 'ส่งคำขอไม่สำเร็จ', 'error');
+          }
         })
         .catch(err => {
           showLoading(false);
-          closeModal();
-          toast(`ส่งคำขอเข้าใช้งานเมนูเรียบร้อยแล้ว (${err.message || err})`, 'info');
+          toast('ส่งคำขอไม่สำเร็จ: ' + (err && err.message ? err.message : err), 'error');
         });
     }
     window.submitRoleAccessRequest = submitRoleAccessRequest;
@@ -10317,26 +10306,7 @@ input, select, textarea, button {
         updateData.internetPass = $('mod_internet_pass') ? $('mod_internet_pass').value.trim() : '-';
       }
 
-      // Automatically add granted page to user's allowedPages array when approved
-      if (status === 'อนุมัติ' && reqType === 'ขอสิทธิ์เข้าถึงเมนูระบบ VMES' && item && item.reqMenu) {
-        if (DATA && Array.isArray(DATA.users)) {
-          const userObj = DATA.users.find(u => 
-            u && (
-              (u['เลขบัตรประชาชน'] && item.idCard && u['เลขบัตรประชาชน'] === item.idCard) ||
-              (u['ชื่อ-นามสกุล'] && item.nameTh && u['ชื่อ-นามสกุล'] === item.nameTh) ||
-              (u.username && item.reqUsername && u.username === item.reqUsername)
-            )
-          );
-          if (userObj) {
-            if (!Array.isArray(userObj.allowedPages)) userObj.allowedPages = [];
-            if (!userObj.allowedPages.includes(item.reqMenu)) {
-              userObj.allowedPages.push(item.reqMenu);
-            }
-            callApi('saveUser', userObj).catch(() => {});
-            storageSet('DATA', JSON.stringify(DATA));
-          }
-        }
-      }
+      // การเพิ่มเมนูลง allowedPages ของผู้ใช้ ทำที่ backend (updateServiceRequestStatus) เมื่ออนุมัติ
 
       showLoading(true);
       callApi('updateServiceRequestStatus', updateData, ADMIN_PASS)
