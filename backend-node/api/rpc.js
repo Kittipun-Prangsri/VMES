@@ -18,6 +18,14 @@ const PUBLIC_FUNCTIONS = new Set([
   'createWifiQrLog',
   'testMikrotikConnection',
   'setupSystem',
+  // LIFF & Public Borrowing Form functions
+  'getEquipment',
+  'getEquipmentCategories',
+  'getBorrowing',
+  'getBorrowingByCode',
+  'saveBorrowing',
+  'autoLinkLineUser',
+  'bindLineByCitizenId',
 ]);
 
 function readRawBody(req) {
