@@ -5831,12 +5831,13 @@ input, select, textarea, button {
 
       openModal('📦 คำขอยืมอุปกรณ์', `
     <div class="form-grid">
-      <div class="field full"><label>เลือกอุปกรณ์ *</label>
-        <select id="b_eq" onchange="window._updateAvail(this.value)">
+      <div class="field full"><label>เลือกอุปกรณ์ * (พิมพ์ค้นหาชื่อหรือรหัสอุปกรณ์ได้)</label>
+        <input type="text" id="b_eq_search" placeholder="🔍 พิมพ์ค้นหาอุปกรณ์ หรือ รหัสครุภัณฑ์..." class="form-input w-full px-3.5 py-2 bg-indigo-50/60 border border-indigo-200 rounded-xl text-slate-800 text-xs font-medium focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:outline-none mb-2" oninput="window._filterEquipSelect(this.value)">
+        <select id="b_eq" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-indigo-500 text-sm font-medium" onchange="window._updateAvail(this.value)">
           ${DATA.equipment.map(e => {
             const avail = getAvail(e['รหัส']);
             return `<option value="${esc(e['รหัส'])}|${esc(e['ชื่ออุปกรณ์'])}" ${eqId === e['รหัส'] ? 'selected' : ''} ${avail <= 0 ? 'disabled' : ''}>
-              ${esc(e['ชื่ออุปกรณ์'])} (คงเหลือ: ${avail} ${esc(e['หน่วยนับ'])})
+              ${esc(e['ชื่ออุปกรณ์'])} ${e['รหัส'] ? '[' + esc(e['รหัส']) + ']' : ''} (คงเหลือ: ${avail} ${esc(e['หน่วยนับ'])})
             </option>`;
           }).join('')}
         </select>
@@ -5895,6 +5896,25 @@ input, select, textarea, button {
       $('b_pickup').value = new Date().toISOString().split('T')[0];
       $('b_due').value = new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0];
       setTimeout(() => initSignatureCanvas('b_sig_canvas'), 150);
+
+      window._filterEquipSelect = (kw) => {
+        const query = String(kw || '').toLowerCase().trim();
+        const sel = $('b_eq');
+        if (!sel) return;
+        let firstValid = -1;
+        Array.from(sel.options).forEach((opt, idx) => {
+          const text = opt.textContent.toLowerCase();
+          const val = opt.value.toLowerCase();
+          const match = !query || text.includes(query) || val.includes(query);
+          opt.hidden = !match;
+          opt.style.display = match ? '' : 'none';
+          if (match && firstValid === -1 && !opt.disabled) firstValid = idx;
+        });
+        if (query && firstValid !== -1) {
+          sel.selectedIndex = firstValid;
+          window._updateAvail(sel.value);
+        }
+      };
 
       window._updateAvail = (val) => {
         const parts = val.split('|');
