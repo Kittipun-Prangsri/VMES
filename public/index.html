@@ -3263,7 +3263,7 @@ input, select, textarea, button {
             return;
           }
           updateBadges();
-          navigate(CURRENT_PAGE || 'dashboard');
+          navigate(CURRENT_PAGE || (!isAdmin() && !isManager() ? 'borrowing' : 'dashboard'));
         })
         .catch(err => {
           showLoading(false);
@@ -3375,6 +3375,131 @@ input, select, textarea, button {
       el.style.display = pending > 0 ? '' : 'none';
     }
 
+    // ============== PERMISSION HELPERS & REQUEST FLOW ==============
+    function isPageAllowedForUser(page, user) {
+      if (!user) return false;
+      const role = String(user.role || '').toLowerCase();
+      if (role === 'admin' || role === 'superadmin' || role === 'manager') return true;
+
+      // Default allowed pages for general users: borrowing equipment, dashboard, service requests, attendance
+      const defaultAllowed = ['borrowing', 'dashboard', 'serviceRequests', 'attendanceCheckin', 'attendanceHistory'];
+      if (defaultAllowed.includes(page)) return true;
+
+      // Check allowedPages list on user object or in DATA.users
+      let userAllowed = user.allowedPages || [];
+      if (DATA && Array.isArray(DATA.users)) {
+        const dbUser = DATA.users.find(u => 
+          u && (
+            (u['เลขบัตรประชาชน'] && user['เลขบัตรประชาชน'] && u['เลขบัตรประชาชน'] === user['เลขบัตรประชาชน']) ||
+            (u['ชื่อ-นามสกุล'] && user['ชื่อ-นามสกุล'] && u['ชื่อ-นามสกุล'] === user['ชื่อ-นามสกุล']) ||
+            (u.username && user.username && u.username === user.username)
+          )
+        );
+        if (dbUser && Array.isArray(dbUser.allowedPages)) {
+          userAllowed = dbUser.allowedPages;
+        }
+      }
+      return Array.isArray(userAllowed) && userAllowed.includes(page);
+    }
+    window.isPageAllowedForUser = isPageAllowedForUser;
+
+    function promptRoleAccessRequest(page) {
+      const titles = {
+        dashboard: '📊 แดชบอร์ดรวม', vehicles: '🚗 ข้อมูลรถทั้งหมด', usage: '📋 บันทึกการใช้รถ',
+        maintenance: '🔧 บันทึกบำรุงรักษา', fuel: '⛽ บันทึกการใช้น้ำมัน', equipment: '💻 คลังอุปกรณ์',
+        fieldSurvey: '🔎 สำรวจภาคสนาม', qrBatch: '🖨️ พิมพ์ป้าย QR แบบชุด',
+        borrowing: '📦 ระบบยืม-คืนอุปกรณ์', users: '👥 ผู้ใช้งานระบบ', drivers: '👨‍✈️ พนักงานขับรถ',
+        booking: '📅 จองรถล่วงหน้า', inspection: '🔍 ตรวจสภาพรถ', notifications: '🔔 ประวัติแจ้งเตือน',
+        audit: '📜 ประวัติระบบ', settings: '⚙️ ตั้งค่าระบบ', departments: '🏢 หน่วยงาน', reports: '📈 รายงานสรุป',
+        serviceRequests: '📝 ขอใช้บริการ HOSxP/VPN', wifiQr: '📶 สร้าง & คลัง WiFi QR',
+        attendanceSettings: '⚙️ ตั้งค่าพิกัด & รัศมี (Geofence)'
+      };
+      const pageTitle = titles[page] || page;
+
+      const bodyHtml = `
+      <div style="display:flex; flex-direction:column; gap:16px; padding:6px 0;">
+        <div style="background:linear-gradient(135deg, #fef3c7 0%, #fffbebe6 100%); border:1px solid #fde68a; border-radius:16px; padding:16px 18px; color:#92400e; display:flex; gap:14px; align-items:flex-start;">
+          <div style="font-size:32px; line-height:1;">🛡️</div>
+          <div style="font-size:13.5px; line-height:1.5;">
+            <div style="font-weight:700; font-size:15px; margin-bottom:4px; color:#78350f;">ต้องได้รับอนุมัติจาก Admin ก่อนเข้าใช้งาน</div>
+            ผู้ใช้งานทั่วไปส่วนใหญ่เข้ามาใช้งานเพื่อ <strong>ยืม-คืนอุปกรณ์</strong> <br>
+            หากต้องการเข้าถึงเมนู <span style="background:#fef08a; padding:2px 8px; border-radius:6px; font-weight:700; color:#854d0e;">${esc(pageTitle)}</span> กรุณาระบุวัตถุประสงค์เพื่อยื่นขอสิทธิ์ต่อ Admin
+          </div>
+        </div>
+
+        <div class="field full">
+          <label style="font-weight:700; color:#1e293b; font-size:14px; margin-bottom:6px; display:block;">
+            วัตถุประสงค์ / เหตุผลในการขอสิทธิ์เข้าถึง *
+          </label>
+          <textarea id="access_req_reason" rows="3" placeholder="ระบุเหตุผลความจำเป็น เช่น ขอเข้าใช้ข้อมูลสำหรับปฏิบัติงาน..." style="width:100%; border-radius:12px; border:2px solid #e2e8f0; padding:12px; font-size:14px; resize:vertical; outline:none; font-family:inherit;"></textarea>
+        </div>
+        <div style="font-size:12px; color:#64748b; font-style:italic;">
+          * เมื่อยื่นคำขอแล้ว ระบบจะส่งเรื่องให้ Admin และท่านสามารถติดตามผลอนุมัติในระบบได้
+        </div>
+      </div>
+      `;
+
+      openModal(`🔐 ขออนุมัติเข้าใช้งานเมนู ${esc(pageTitle)}`, bodyHtml, function() {
+        submitRoleAccessRequest(page, pageTitle);
+      });
+
+      const saveBtn = $('modalSave');
+      if (saveBtn) {
+        saveBtn.innerHTML = '📩 ส่งคำขออนุมัติให้ Admin';
+        saveBtn.className = 'btn btn-primary';
+      }
+    }
+    window.promptRoleAccessRequest = promptRoleAccessRequest;
+
+    function submitRoleAccessRequest(page, pageTitle) {
+      const reasonEl = $('access_req_reason');
+      const reason = reasonEl ? reasonEl.value.trim() : '';
+      if (!reason) {
+        toast('กรุณาระบุวัตถุประสงค์ในการขอสิทธิ์', 'warning');
+        if (reasonEl) reasonEl.focus();
+        return;
+      }
+
+      showLoading(true);
+      const userName = CURRENT_USER ? (CURRENT_USER['ชื่อ-นามสกุล'] || CURRENT_USER.name || CURRENT_USER.username || 'ผู้ใช้งาน') : 'ผู้ใช้งาน';
+      const idCard = CURRENT_USER ? (CURRENT_USER['เลขบัตรประชาชน'] || CURRENT_USER.idCard || '-') : '-';
+      const dept = CURRENT_USER ? (CURRENT_USER['หน่วยงาน'] || CURRENT_USER.department || '-') : '-';
+      const pos = CURRENT_USER ? (CURRENT_USER['ตำแหน่ง'] || CURRENT_USER.role || '-') : '-';
+
+      const reqData = {
+        requestType: 'ขอสิทธิ์เข้าถึงเมนูระบบ VMES',
+        nameTh: userName,
+        position: pos,
+        department: dept,
+        idCard: idCard,
+        reqMenu: page,
+        reqMenuTitle: pageTitle,
+        vpnPurpose: `ขอสิทธิ์เข้าถึงเมนู: ${pageTitle} | วัตถุประสงค์: ${reason}`,
+        status: 'รอพิจารณา'
+      };
+
+      if (!DATA.serviceRequests) DATA.serviceRequests = [];
+      DATA.serviceRequests.unshift({
+        id: 'REQ-' + Date.now(),
+        ...reqData,
+        createdAt: new Date().toISOString().slice(0, 19).replace('T', ' ')
+      });
+      storageSet('DATA', JSON.stringify(DATA));
+
+      callApi('createServiceRequest', reqData)
+        .then(r => {
+          showLoading(false);
+          closeModal();
+          toast(`ส่งคำขออนุมัติเข้าใช้งานเมนู "${pageTitle}" เรียบร้อยแล้ว กรุณารอ Admin อนุมัติ`, 'success');
+        })
+        .catch(err => {
+          showLoading(false);
+          closeModal();
+          toast(`ส่งคำขอเข้าใช้งานเมนูเรียบร้อยแล้ว (${err.message || err})`, 'info');
+        });
+    }
+    window.submitRoleAccessRequest = submitRoleAccessRequest;
+
     // ============== NAVIGATION ==============
 
     function navigate(page) {
@@ -3386,6 +3511,12 @@ input, select, textarea, button {
         page = 'serviceRequests';
       }
 
+      // Non-admin menu access restriction: User's primary focus is equipment borrowing
+      if (!isAdmin() && !isManager() && !isPageAllowedForUser(page, CURRENT_USER)) {
+        promptRoleAccessRequest(page);
+        return;
+      }
+
       const targetMenu = document.querySelector(`.menu-item[data-page="${page}"]`);
       if (targetMenu && targetMenu.classList.contains('disabled')) {
         toast('คุณไม่มีสิทธิ์เข้าถึงหน้านี้', 'error');
@@ -3394,18 +3525,18 @@ input, select, textarea, button {
       
       if ((page === 'qrBatch' || page === 'wifiQr') && !isAdmin()) {
         toast('สิทธิ์เจ้าหน้าที่: การจัดการและแสดง QR Code อนุญาตเฉพาะ Admin เท่านั้น', 'warning');
-        navigate('dashboard');
+        navigate(!isAdmin() && !isManager() ? 'borrowing' : 'dashboard');
         return;
       }
 
       if (page === 'settings' && !isAdmin()) {
         toast('คุณไม่มีสิทธิ์เข้าถึงหน้านี้', 'error');
-        navigate('dashboard');
+        navigate(!isAdmin() && !isManager() ? 'borrowing' : 'dashboard');
         return;
       }
       if (page === 'audit' && !isAdmin()) {
         toast('คุณไม่มีสิทธิ์เข้าถึงหน้านี้', 'error');
-        navigate('dashboard');
+        navigate(!isAdmin() && !isManager() ? 'borrowing' : 'dashboard');
         return;
       }
       
@@ -5831,12 +5962,13 @@ input, select, textarea, button {
 
       openModal('📦 คำขอยืมอุปกรณ์', `
     <div class="form-grid">
-      <div class="field full"><label>เลือกอุปกรณ์ *</label>
-        <select id="b_eq" onchange="window._updateAvail(this.value)">
+      <div class="field full"><label>เลือกอุปกรณ์ * (พิมพ์ค้นหาชื่อหรือรหัสอุปกรณ์ได้)</label>
+        <input type="text" id="b_eq_search" placeholder="🔍 พิมพ์ค้นหาอุปกรณ์ หรือ รหัสครุภัณฑ์..." class="form-input w-full px-3.5 py-2 bg-indigo-50/60 border border-indigo-200 rounded-xl text-slate-800 text-xs font-medium focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:outline-none mb-2" oninput="window._filterEquipSelect(this.value)">
+        <select id="b_eq" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-indigo-500 text-sm font-medium" onchange="window._updateAvail(this.value)">
           ${DATA.equipment.map(e => {
             const avail = getAvail(e['รหัส']);
             return `<option value="${esc(e['รหัส'])}|${esc(e['ชื่ออุปกรณ์'])}" ${eqId === e['รหัส'] ? 'selected' : ''} ${avail <= 0 ? 'disabled' : ''}>
-              ${esc(e['ชื่ออุปกรณ์'])} (คงเหลือ: ${avail} ${esc(e['หน่วยนับ'])})
+              ${esc(e['ชื่ออุปกรณ์'])} ${e['รหัส'] ? '[' + esc(e['รหัส']) + ']' : ''} (คงเหลือ: ${avail} ${esc(e['หน่วยนับ'])})
             </option>`;
           }).join('')}
         </select>
@@ -5895,6 +6027,25 @@ input, select, textarea, button {
       $('b_pickup').value = new Date().toISOString().split('T')[0];
       $('b_due').value = new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0];
       setTimeout(() => initSignatureCanvas('b_sig_canvas'), 150);
+
+      window._filterEquipSelect = (kw) => {
+        const query = String(kw || '').toLowerCase().trim();
+        const sel = $('b_eq');
+        if (!sel) return;
+        let firstValid = -1;
+        Array.from(sel.options).forEach((opt, idx) => {
+          const text = opt.textContent.toLowerCase();
+          const val = opt.value.toLowerCase();
+          const match = !query || text.includes(query) || val.includes(query);
+          opt.hidden = !match;
+          opt.style.display = match ? '' : 'none';
+          if (match && firstValid === -1 && !opt.disabled) firstValid = idx;
+        });
+        if (query && firstValid !== -1) {
+          sel.selectedIndex = firstValid;
+          window._updateAvail(sel.value);
+        }
+      };
 
       window._updateAvail = (val) => {
         const parts = val.split('|');
@@ -9953,6 +10104,7 @@ input, select, textarea, button {
               <option value="HOSXP" ${SR_FILTER_STATE.type === 'HOSXP' ? 'selected' : ''}>เฉพาะ HOSxP</option>
               <option value="INTERNET" ${SR_FILTER_STATE.type === 'INTERNET' ? 'selected' : ''}>เฉพาะ Internet</option>
               <option value="VPN" ${SR_FILTER_STATE.type === 'VPN' ? 'selected' : ''}>เฉพาะ VPN</option>
+              <option value="ขอสิทธิ์เข้าถึงเมนูระบบ VMES" ${SR_FILTER_STATE.type === 'ขอสิทธิ์เข้าถึงเมนูระบบ VMES' ? 'selected' : ''}>🔐 ขอสิทธิ์เข้าถึงเมนู</option>
             </select>
           </div>
           <div class="field" style="margin:0;">
@@ -10082,6 +10234,29 @@ input, select, textarea, button {
           const defaultUser = item.reqUsername && item.reqUsername !== '-' ? item.reqUsername : '';
           const defaultPass = item.reqPassword && item.reqPassword !== '-' ? item.reqPassword : '';
 
+          let fieldsHtml = '';
+          if (item.requestType === 'ขอสิทธิ์เข้าถึงเมนูระบบ VMES') {
+            fieldsHtml = `
+            <div style="background:#eff6ff; border:1px solid #93c5fd; padding:12px 16px; border-radius:12px; font-size:13.5px; color:#1e40af; box-shadow:var(--shadow-xs);">
+              📌 <strong>เมนูที่ขอเข้าถึง:</strong> <span style="font-weight:700; color:#0369a1;">${esc(item.reqMenuTitle || item.reqMenu || '-')}</span><br>
+              📝 <strong>วัตถุประสงค์ในการใช้งาน:</strong> ${esc(item.vpnPurpose || item.remark || '-')}
+            </div>`;
+          } else if (item.requestType === 'VPN') {
+            fieldsHtml = `
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+              <div class="field"><label>VPN Username</label><input type="text" id="mod_vpn_user" value="${esc(item.vpnUser !== '-' ? item.vpnUser : defaultUser)}" placeholder="กำหนด VPN User"></div>
+              <div class="field"><label>VPN Password</label><input type="text" id="mod_vpn_pass" value="${esc(item.vpnPass !== '-' ? item.vpnPass : defaultPass)}" placeholder="กำหนด VPN Pass"></div>
+            </div>`;
+          } else {
+            fieldsHtml = `
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+              <div class="field"><label>HOSxP Username</label><input type="text" id="mod_hosxp_user" value="${esc(item.hosxpUser !== '-' ? item.hosxpUser : defaultUser)}" placeholder="กำหนด HOSxP User"></div>
+              <div class="field"><label>HOSxP Password</label><input type="text" id="mod_hosxp_pass" value="${esc(item.hosxpPass !== '-' ? item.hosxpPass : defaultPass)}" placeholder="กำหนด HOSxP Pass"></div>
+              <div class="field"><label>Internet Username</label><input type="text" id="mod_internet_user" value="${esc(item.internetUser !== '-' ? item.internetUser : defaultUser)}" placeholder="กำหนด Internet User"></div>
+              <div class="field"><label>Internet Password</label><input type="text" id="mod_internet_pass" value="${esc(item.internetPass !== '-' ? item.internetPass : defaultPass)}" placeholder="กำหนด Internet Pass"></div>
+            </div>`;
+          }
+
           const modalBody = `
           <div style="display:flex; flex-direction:column; gap:14px;">
             <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -10107,17 +10282,7 @@ input, select, textarea, button {
               </select>
             </div>
 
-            ${item.requestType === 'VPN' ? `
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-              <div class="field"><label>VPN Username</label><input type="text" id="mod_vpn_user" value="${esc(item.vpnUser !== '-' ? item.vpnUser : defaultUser)}" placeholder="กำหนด VPN User"></div>
-              <div class="field"><label>VPN Password</label><input type="text" id="mod_vpn_pass" value="${esc(item.vpnPass !== '-' ? item.vpnPass : defaultPass)}" placeholder="กำหนด VPN Pass"></div>
-            </div>` : `
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-              <div class="field"><label>HOSxP Username</label><input type="text" id="mod_hosxp_user" value="${esc(item.hosxpUser !== '-' ? item.hosxpUser : defaultUser)}" placeholder="กำหนด HOSxP User"></div>
-              <div class="field"><label>HOSxP Password</label><input type="text" id="mod_hosxp_pass" value="${esc(item.hosxpPass !== '-' ? item.hosxpPass : defaultPass)}" placeholder="กำหนด HOSxP Pass"></div>
-              <div class="field"><label>Internet Username</label><input type="text" id="mod_internet_user" value="${esc(item.internetUser !== '-' ? item.internetUser : defaultUser)}" placeholder="กำหนด Internet User"></div>
-              <div class="field"><label>Internet Password</label><input type="text" id="mod_internet_pass" value="${esc(item.internetPass !== '-' ? item.internetPass : defaultPass)}" placeholder="กำหนด Internet Pass"></div>
-            </div>`}
+            ${fieldsHtml}
 
             <div class="field full">
               <label>หมายเหตุ / เหตุผลเพิ่มเติม</label>
@@ -10125,13 +10290,13 @@ input, select, textarea, button {
             </div>
           </div>`;
 
-          openModal('⚙️ พิจารณาคำขอใช้บริการ', modalBody, () => submitServiceApproval(docId, item.requestType));
+          openModal('⚙️ พิจารณาคำขอใช้บริการ', modalBody, () => submitServiceApproval(docId, item.requestType, item));
         })
         .catch(err => { showLoading(false); toast('ผิดพลาด: ' + err.message, 'error'); });
     }
     window.openApproveServiceModal = openApproveServiceModal;
 
-    function submitServiceApproval(docId, reqType) {
+    function submitServiceApproval(docId, reqType, item) {
       const status = $('mod_sr_status').value;
       const remark = $('mod_sr_remark').value.trim() || '-';
       
@@ -10145,11 +10310,32 @@ input, select, textarea, button {
       if (reqType === 'VPN') {
         updateData.vpnUser = $('mod_vpn_user') ? $('mod_vpn_user').value.trim() : '-';
         updateData.vpnPass = $('mod_vpn_pass') ? $('mod_vpn_pass').value.trim() : '-';
-      } else {
+      } else if (reqType !== 'ขอสิทธิ์เข้าถึงเมนูระบบ VMES') {
         updateData.hosxpUser = $('mod_hosxp_user') ? $('mod_hosxp_user').value.trim() : '-';
         updateData.hosxpPass = $('mod_hosxp_pass') ? $('mod_hosxp_pass').value.trim() : '-';
         updateData.internetUser = $('mod_internet_user') ? $('mod_internet_user').value.trim() : '-';
         updateData.internetPass = $('mod_internet_pass') ? $('mod_internet_pass').value.trim() : '-';
+      }
+
+      // Automatically add granted page to user's allowedPages array when approved
+      if (status === 'อนุมัติ' && reqType === 'ขอสิทธิ์เข้าถึงเมนูระบบ VMES' && item && item.reqMenu) {
+        if (DATA && Array.isArray(DATA.users)) {
+          const userObj = DATA.users.find(u => 
+            u && (
+              (u['เลขบัตรประชาชน'] && item.idCard && u['เลขบัตรประชาชน'] === item.idCard) ||
+              (u['ชื่อ-นามสกุล'] && item.nameTh && u['ชื่อ-นามสกุล'] === item.nameTh) ||
+              (u.username && item.reqUsername && u.username === item.reqUsername)
+            )
+          );
+          if (userObj) {
+            if (!Array.isArray(userObj.allowedPages)) userObj.allowedPages = [];
+            if (!userObj.allowedPages.includes(item.reqMenu)) {
+              userObj.allowedPages.push(item.reqMenu);
+            }
+            callApi('saveUser', userObj).catch(() => {});
+            storageSet('DATA', JSON.stringify(DATA));
+          }
+        }
       }
 
       showLoading(true);
