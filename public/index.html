@@ -2221,10 +2221,20 @@ input, select, textarea, button {
     const API_URL = 'https://vmes-backend.vercel.app/api/rpc';
 
     function callApi(fn, ...args) {
+      let token = storageGet('vmes_moph_token');
+      if (!token && typeof CURRENT_USER !== 'undefined' && CURRENT_USER && CURRENT_USER.token) token = CURRENT_USER.token;
+      if (!token) {
+        try {
+          const u = JSON.parse(storageGet('vmes_session_user') || '{}');
+          if (u && u.token) token = u.token;
+        } catch (e) {}
+      }
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = 'Bearer ' + token;
       return fetch(API_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fn, args })
+        headers: headers,
+        body: JSON.stringify({ fn, args, token: token })
       }).then(r => r.json());
     }
 
@@ -4999,7 +5009,17 @@ input, select, textarea, button {
         });
     }
 
+    function isMicEquipment(name) {
+      if (!name) return false;
+      const s = String(name).toLowerCase();
+      return s.includes('ไมค์') || s.includes('ไมโครโฟน') || s.includes('microphone') || s.includes('mic') || s.includes('เครื่องเสียง');
+    }
+    window.isMicEquipment = isMicEquipment;
+
     function quickBorrow(eqId, eqName) {
+      if (isMicEquipment(eqName)) {
+        alert('⚠️ IT ไม่ได้รับผิดชอบเรื่องเครื่องเสียงและไมค์โครโฟนโดยตรง กรุณาติดต่อ ฝ่ายดูแล');
+      }
       navigate('borrowing');
       setTimeout(() => addBorrow(eqId, eqName), 100);
     }
@@ -5807,6 +5827,9 @@ input, select, textarea, button {
         </div>
       </div>
     </div>
+    <div id="micNoticeAlert" style="display:none; margin-top:10px; padding:10px 14px; background:#fffbebf0; border:1.5px solid #f59e0b; border-radius:10px; font-size:12px; color:#b45309; font-weight:700;">
+      ⚠️ แจ้งเตือน: IT ไม่ได้รับผิดชอบเรื่องเครื่องเสียงและไมค์โครโฟนโดยตรง กรุณาติดต่อ ฝ่ายดูแล
+    </div>
     <div id="availInfo" style="margin-top:10px; font-size:12px; font-weight:600;"></div>
     <div style="margin-top:14px;padding:12px;background:#dbeafe;border-radius:10px;font-size:12px;color:var(--primary-dark)">
       📲 เมื่อบันทึกแล้วจะส่ง LINE Flex Card แจ้งเตือนทันที (สถานะ: รอรับเรื่อง)
@@ -5839,9 +5862,20 @@ input, select, textarea, button {
       setTimeout(() => initSignatureCanvas('b_sig_canvas'), 150);
 
       window._updateAvail = (val) => {
-        const id = val.split('|')[0];
+        const parts = val.split('|');
+        const id = parts[0];
+        const name = parts[1] || '';
         const avail = getAvail(id);
         const info = $('availInfo');
+        const micNotice = $('micNoticeAlert');
+
+        if (isMicEquipment(name)) {
+          if (micNotice) micNotice.style.display = 'block';
+          toast('⚠️ IT ไม่ได้รับผิดชอบเรื่องเครื่องเสียงและไมค์โครโฟนโดยตรง กรุณาติดต่อ ฝ่ายดูแล', 'warning');
+        } else {
+          if (micNotice) micNotice.style.display = 'none';
+        }
+
         if (avail <= 0) {
           info.style.color = 'var(--danger)';
           info.textContent = '❌ อุปกรณ์นี้ถูกยืมครบตามจำนวนแล้ว ไม่สามารถยืมเพิ่มได้';

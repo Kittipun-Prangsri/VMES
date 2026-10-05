@@ -5,6 +5,7 @@
 
 const { SHEETS, listDocs } = require('./firestore');
 const { hashPassword, logAudit } = require('./util');
+const { createSessionToken } = require('./session');
 
 function getAdminCode() {
   return process.env.ADMIN_CODE || '11192';
@@ -47,9 +48,12 @@ async function login(username, password) {
     });
 
     if (!user) {
-      if (verifyAdmin(cleanPassword) || cleanPassword === '123' || cleanPassword === '12345' || cleanUsername === 'admin') {
+      if (verifyAdmin(cleanPassword)) {
         await logAudit('Login Admin', 'admin', 'เข้าระบบด้วยรหัส admin');
-        return { success: true, user: { code: 'ADMIN-001', username: 'admin', name: 'ผู้ดูแลระบบ', role: 'superadmin', dept: 'IT', phone: '-', email: 'admin@vmes.local' } };
+        const adminUser = { code: 'ADMIN-001', username: 'admin', name: 'ผู้ดูแลระบบ', role: 'superadmin', dept: 'IT', phone: '-', email: 'admin@vmes.local' };
+        let token = null;
+        try { token = createSessionToken('ADMIN-001'); } catch (e) {}
+        return { success: true, user: { ...adminUser, token }, token };
       }
       return { success: false, message: 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง' };
     }
@@ -60,6 +64,8 @@ async function login(username, password) {
     }
 
     await logAudit('Login', user['ชื่อ-นามสกุล'], '');
+    let token = null;
+    try { token = createSessionToken(user['รหัส']); } catch (e) {}
     return {
       success: true,
       user: {
@@ -70,7 +76,9 @@ async function login(username, password) {
         dept: user['หน่วยงาน'],
         phone: user['เบอร์ติดต่อ'],
         email: user['อีเมล'],
+        token: token,
       },
+      token: token,
     };
   } catch (err) {
     return { success: false, message: 'ข้อผิดพลาด: ' + err.message };
