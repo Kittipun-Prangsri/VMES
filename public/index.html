@@ -655,21 +655,26 @@ body.resizing-active {
 
 .sidebar {
   width: var(--sidebar-width, 260px);
-  background: linear-gradient(180deg, #1e3a8a 0%, #1e40af 100%);
-  color: #fff;
+  background: linear-gradient(180deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+  border-right: 1px solid rgba(255, 255, 255, 0.07);
+  color: #f8fafc;
   position: fixed;
   top: 0;
   left: 0;
   height: 100vh;
   overflow-y: auto;
-  transition: width .3s, transform .3s;
+  transition: width .3s ease, transform .3s ease;
   z-index: 100;
-  scrollbar-width: none; /* Firefox */
-  -ms-overflow-style: none; /* IE/Edge */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
 }
 
 .sidebar::-webkit-scrollbar {
-  display: none; /* Chrome/Safari/Opera */
+  width: 4px;
+}
+.sidebar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
 }
 
 .sidebar.resizing {
@@ -690,11 +695,11 @@ body.resizing-active {
   left: var(--sidebar-width, 260px);
   bottom: 0;
   z-index: 101;
-  transition: background .2s, left .3s;
+  transition: background .2s, left .3s ease;
 }
 
 .resizer:hover, .resizer.resizing {
-  background: var(--accent);
+  background: #6366f1;
 }
 
 .sidebar.resizing + .resizer {
@@ -707,38 +712,42 @@ body.resizing-active {
 }
 
 .sidebar-header {
-  padding: 20px 15px;
-  border-bottom: 1px solid rgba(255, 255, 255, .1);
+  padding: 16px 14px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, .06);
   text-align: center;
 }
 
 .sidebar-header .icon {
-  font-size: 40px;
+  font-size: 38px;
   display: block;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 .sidebar-header h1 {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 700;
-  color: #fff;
+  background: linear-gradient(135deg, #ffffff 0%, #cbd5e1 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
   margin: 0;
+  letter-spacing: 0.2px;
 }
 
 .sidebar-header p {
   font-size: 11px;
-  color: rgba(255, 255, 255, .6);
-  margin-top: 4px;
+  color: #94a3b8;
+  margin-top: 3px;
+  font-weight: 400;
 }
 
 .sidebar-menu {
-  padding: 8px 0 24px;
+  padding: 6px 4px 24px;
 }
 
 /* ===== SIDEBAR SEARCH BOX & ACTIONS ===== */
 .sidebar-search-box {
-  padding: 12px 14px 10px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .sidebar-search-wrapper {
@@ -749,31 +758,31 @@ body.resizing-active {
 
 .sidebar-search-input {
   width: 100%;
-  padding: 8px 30px 8px 34px;
-  background: rgba(0, 0, 0, 0.25);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  padding: 7px 28px 7px 32px;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 10px;
-  color: #ffffff;
-  font-size: 13px;
+  color: #f8fafc;
+  font-size: 12.5px;
   outline: none;
   transition: all 0.2s ease;
 }
 
 .sidebar-search-input::placeholder {
-  color: rgba(255, 255, 255, 0.45);
+  color: #64748b;
 }
 
 .sidebar-search-input:focus {
-  background: rgba(0, 0, 0, 0.4);
-  border-color: #38bdf8;
-  box-shadow: 0 0 12px rgba(56, 189, 248, 0.25);
+  background: rgba(15, 23, 42, 0.9);
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
 }
 
 .sidebar-search-icon {
   position: absolute;
   left: 10px;
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.5);
+  font-size: 12px;
+  color: #64748b;
   pointer-events: none;
 }
 
@@ -782,8 +791,8 @@ body.resizing-active {
   right: 8px;
   background: none;
   border: none;
-  color: rgba(255, 255, 255, 0.5);
-  font-size: 14px;
+  color: #64748b;
+  font-size: 13px;
   cursor: pointer;
   padding: 2px 6px;
   display: none;
@@ -791,71 +800,75 @@ body.resizing-active {
 }
 
 .sidebar-search-clear:hover {
-  color: #ffffff;
-  background: rgba(255, 255, 255, 0.15);
+  color: #f8fafc;
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .sidebar-actions {
   display: flex;
   justify-content: space-between;
-  padding: 8px 4px 2px;
-  font-size: 11px;
+  padding: 6px 2px 2px;
+  font-size: 10.5px;
 }
 
 .sidebar-action-btn {
-  color: rgba(255, 255, 255, 0.6);
+  color: #64748b;
   cursor: pointer;
-  transition: color 0.15s;
+  transition: all 0.15s ease;
   user-select: none;
   font-weight: 500;
+  background: rgba(30, 41, 59, 0.5);
+  padding: 2px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .sidebar-action-btn:hover {
   color: #38bdf8;
-  text-decoration: underline;
+  border-color: rgba(56, 189, 248, 0.3);
+  background: rgba(56, 189, 248, 0.1);
 }
 
 /* ===== COLLAPSIBLE CATEGORIES ===== */
 .menu-category-group {
-  margin-bottom: 4px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  margin-bottom: 2px;
 }
 
 .menu-category-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 9px 14px;
+  padding: 7px 10px;
   cursor: pointer;
   user-select: none;
-  transition: background 0.2s, color 0.2s;
-  border-radius: 8px;
-  margin: 4px 8px 2px 8px;
+  transition: all 0.15s ease;
+  border-radius: 10px;
+  margin: 4px 6px 2px;
 }
 
 .menu-category-header:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .menu-category-title {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 700;
-  letter-spacing: 0.4px;
-  color: rgba(255, 255, 255, 0.85);
+  letter-spacing: 0.5px;
+  color: #94a3b8;
   text-transform: uppercase;
 }
 
 .menu-category-header .cat-icon {
-  font-size: 15px;
+  font-size: 14px;
 }
 
 .menu-category-header .cat-arrow {
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.5);
-  transition: transform 0.3s ease;
+  font-size: 9px;
+  color: #64748b;
+  transition: transform 0.25s ease;
 }
 
 .menu-category-group.collapsed .cat-arrow {
@@ -863,18 +876,19 @@ body.resizing-active {
 }
 
 .menu-category-badge {
-  font-size: 10px;
+  font-size: 9.5px;
   padding: 1px 6px;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.15);
-  color: rgba(255, 255, 255, 0.9);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #cbd5e1;
   font-weight: 600;
   margin-left: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .menu-category-content {
   overflow: hidden;
-  transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s ease;
+  transition: max-height 0.25s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease;
   max-height: 600px;
   opacity: 1;
   padding: 2px 0;
@@ -892,54 +906,79 @@ body.resizing-active {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 9px 14px 9px 18px;
-  color: rgba(255, 255, 255, 0.8);
+  padding: 7.5px 12px 7.5px 14px;
+  color: #cbd5e1;
   cursor: pointer;
-  transition: all 0.18s ease;
-  font-size: 13.5px;
-  border-left: 3px solid transparent;
-  margin: 2px 8px;
-  border-radius: 8px;
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  font-size: 13px;
+  font-weight: 500;
+  margin: 2px 6px;
+  border-radius: 10px;
+  position: relative;
 }
 
 .menu-category-content .menu-item {
-  padding-left: 24px;
+  padding-left: 14px;
+}
+
+.menu-item .menu-icon {
+  font-size: 15px;
+  min-width: 20px;
+  text-align: center;
+  display: inline-block;
+  transition: transform 0.15s ease;
 }
 
 .menu-item:hover {
-  background: rgba(255, 255, 255, 0.09);
+  background: rgba(255, 255, 255, 0.07);
   color: #ffffff;
-  transform: translateX(3px);
+  transform: translateX(2px);
+}
+
+.menu-item:hover .menu-icon {
+  transform: scale(1.15);
 }
 
 .menu-item.active {
-  background: linear-gradient(90deg, rgba(59, 130, 246, 0.35) 0%, rgba(37, 99, 235, 0.18) 100%);
+  background: linear-gradient(135deg, #4f46e5 0%, #2563eb 100%);
   color: #ffffff;
-  border-left-color: #38bdf8;
-  font-weight: 700;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  font-weight: 600;
+  box-shadow: 0 4px 14px rgba(79, 70, 229, 0.35);
 }
 
 .menu-item.featured {
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.22) 0%, rgba(6, 182, 212, 0.22) 100%);
-  border-left-color: #38bdf8;
-  border-left-width: 3px;
-  font-weight: 600;
-  color: #ffffff;
-  margin: 3px 8px;
-  border-radius: 8px;
-  box-shadow: inset 0 0 10px rgba(56, 189, 248, 0.12);
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.14) 0%, rgba(14, 165, 233, 0.14) 100%);
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  font-weight: 500;
+  color: #f1f5f9;
+  margin: 3px 6px;
 }
 
 .menu-item.featured:hover {
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.38) 0%, rgba(6, 182, 212, 0.38) 100%);
-  transform: translateX(3px);
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.28) 0%, rgba(14, 165, 233, 0.28) 100%);
+  border-color: rgba(99, 102, 241, 0.4);
+  transform: translateX(2px);
 }
 
 .menu-item.featured.active {
-  background: linear-gradient(135deg, #4f46e5 0%, #0891b2 100%);
+  background: linear-gradient(135deg, #6366f1 0%, #0284c7 100%);
   color: #ffffff;
-  box-shadow: 0 4px 16px rgba(79, 70, 229, 0.4);
+  font-weight: 600;
+  border: none;
+  box-shadow: 0 4px 16px rgba(99, 102, 241, 0.45);
+}
+
+/* Menu lock badge for non-admin users */
+.menu-lock-icon {
+  margin-left: auto;
+  font-size: 10px;
+  opacity: 0.85;
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  padding: 1px 6px;
+  border-radius: 6px;
+  font-weight: 600;
 }
 
 .stat.s-highlight {
@@ -2622,32 +2661,66 @@ input, select, textarea, button {
       return roles || ['superadmin', 'admin', 'manager', 'user', 'ผู้ใช้งานเฉพาะตัวเอง', 'พนักงานขับรถ', 'พนักงานใหม่'];
     }
 
+    function getNormalizedRole(user) {
+      const u = user || CURRENT_USER;
+      if (!u) return '';
+      const r = String(u.role || u['บทบาท'] || u['สิทธิ์'] || u['สิทธิ์การใช้งาน'] || '').trim().toLowerCase();
+      if (r.includes('superadmin') || r.includes('super_admin') || r.includes('super admin') || r.includes('ผู้ดูแลระบบสูงสุด')) return 'superadmin';
+      if (r.includes('admin') || r.includes('ผู้ดูแลระบบ') || r.includes('ผู้ดูแล') || r.includes('administrator')) return 'admin';
+      if (r.includes('manager') || r.includes('ผู้จัดการ') || r.includes('ผู้บริหาร')) return 'manager';
+      if (r.includes('driver') || r.includes('พนักงานขับรถ')) return 'driver';
+      if (r.includes('new_employee') || r.includes('พนักงานใหม่') || r.includes('เจ้าหน้าที่ใหม่')) return 'new_employee';
+      return r || 'user';
+    }
+    window.getNormalizedRole = getNormalizedRole;
+
+    function isSuperAdmin(user) {
+      const role = getNormalizedRole(user || CURRENT_USER);
+      return role === 'superadmin';
+    }
+    window.isSuperAdmin = isSuperAdmin;
+
+    function isAdmin(user) {
+      const role = getNormalizedRole(user || CURRENT_USER);
+      return role === 'admin' || role === 'superadmin';
+    }
+    window.isAdmin = isAdmin;
+
+    function isManager(user) {
+      const role = getNormalizedRole(user || CURRENT_USER);
+      return role === 'manager';
+    }
+    window.isManager = isManager;
+
+    function canManageEquipment(user) {
+      return isAdmin(user) || isManager(user);
+    }
+    window.canManageEquipment = canManageEquipment;
+
     function isNewEmployeeLocked(user) {
-      if (!user) return false;
-      const role = String(user.role || '').toLowerCase();
-      if (role === 'admin' || role === 'superadmin' || role === 'manager' || role === 'พนักงานขับรถ') {
+      const u = user || CURRENT_USER;
+      if (!u) return false;
+      if (isAdmin(u) || isManager(u) || getNormalizedRole(u) === 'driver') {
         return false;
       }
       
-      const isExplicitNew = role === 'new_employee' || role === 'พนักงานใหม่' || role === 'เจ้าหน้าที่ใหม่' || user.isNewEmployee === true;
+      const roleStr = String(u.role || u['บทบาท'] || '').toLowerCase();
+      const normRole = getNormalizedRole(u);
+      const isExplicitNew = normRole === 'new_employee' || roleStr === 'พนักงานใหม่' || roleStr === 'เจ้าหน้าที่ใหม่' || u.isNewEmployee === true;
       if (!isExplicitNew) return false;
 
-      let hasApprovedAccount = user.hasAccounts === true || user.hasAccount === true;
+      let hasApprovedAccount = u.hasAccounts === true || u.hasAccount === true;
       if (!hasApprovedAccount && window.DATA && Array.isArray(window.DATA.serviceRequests)) {
-        const cleanUserCard = String(user.idCard || user['เลขบัตรประชาชน'] || '').replace(/['\s-]/g, '');
-        const cleanUserName = String(user.name || user['ชื่อ-นามสกุล'] || '').trim();
+        const cleanUserCard = String(u.idCard || u['เลขบัตรประชาชน'] || '').replace(/['\s-]/g, '');
+        const cleanUserName = String(u.name || u['ชื่อ-นามสกุล'] || '').trim();
 
         const matchedReq = window.DATA.serviceRequests.find(r => {
           const cardMatch = cleanUserCard && String(r.idCard || '').replace(/['\s-]/g, '') === cleanUserCard;
-          const nameMatch = cleanUserName && String(r.nameTh || '').trim() === cleanUserName;
-          return (cardMatch || nameMatch) && (r.status === 'อนุมัติ');
+          const nameMatch = cleanUserName && String(r.nameTh || r['ชื่อ-นามสกุล'] || '').trim() === cleanUserName;
+          return (cardMatch || nameMatch) && (r.status === 'APPROVED' || r.status === 'COMPLETED' || r['สถานะ'] === 'อนุมัติ' || r['สถานะ'] === 'เสร็จสิ้น');
         });
         if (matchedReq) hasApprovedAccount = true;
       }
-
-      if (hasApprovedAccount) return false; // Approved HOSxP/VPN account unlocks full access
-
-      return true; // Explicit new employee is locked until approved
     }
     window.isNewEmployeeLocked = isNewEmployeeLocked;
 
@@ -2799,7 +2872,8 @@ input, select, textarea, button {
         };
       }
 
-      const role = CURRENT_USER ? CURRENT_USER.role : '';
+      const normRole = CURRENT_USER ? getNormalizedRole(CURRENT_USER) : '';
+      const rawRole = CURRENT_USER ? CURRENT_USER.role : '';
       const settingsMenu = $('menuSettings');
       const auditMenu = $('menuAudit');
       const btnLine = $('btnLine');
@@ -2820,10 +2894,7 @@ input, select, textarea, button {
       if (btnLine) btnLine.style.display = '';
 
       // Check New Employee Restriction (Shows ONLY serviceRequests if locked)
-      const roleStr = String(CURRENT_USER ? CURRENT_USER.role : '').toLowerCase();
-      const isExplicitNewUser = roleStr === 'พนักงานใหม่' || roleStr === 'เจ้าหน้าที่ใหม่' || roleStr === 'new_employee' || (CURRENT_USER && CURRENT_USER.isNewEmployee === true);
-
-      if (isNewEmployeeLocked(CURRENT_USER) || isExplicitNewUser) {
+      if (isNewEmployeeLocked(CURRENT_USER) || normRole === 'new_employee') {
         document.querySelectorAll('.menu-item').forEach(m => {
           if (m.dataset.page !== 'serviceRequests') {
             m.style.display = 'none';
@@ -2862,8 +2933,11 @@ input, select, textarea, button {
       if (menuQrBatch) menuQrBatch.style.display = isStaffUser ? 'none' : '';
       if (menuWifiQr) menuWifiQr.style.display = isStaffUser ? 'none' : '';
 
-      // Get permissions for current role (fallback to user if not found)
-      const rolePerm = perm[role] || perm["user"] || { "dashboard": true };
+      // Get permissions for current role (force defaultAdminPerm for admin/superadmin)
+      const defaultAdminPerm = { "dashboard": true, "vehicles": true, "usage": true, "booking": true, "maintenance": true, "fuel": true, "inspection": true, "equipment": true, "borrowing": true, "drivers": true, "users": true, "departments": true, "reports": true, "notifications": true, "audit": true, "settings": true, "attendanceCheckin": true, "attendanceHistory": true, "attendanceSettings": true };
+      const rolePerm = (isAdmin() || isSuperAdmin())
+        ? defaultAdminPerm
+        : (perm[normRole] || perm[rawRole] || perm["user"] || { "dashboard": true });
 
       // Set visibility / disabled states based on the permission configuration
       // 1. Settings, Audit, LINE Button
@@ -2908,8 +2982,7 @@ input, select, textarea, button {
       if (mAttCheckin) { mAttCheckin.style.display = ''; mAttCheckin.classList.remove('disabled'); }
       if (mAttHistory) { mAttHistory.style.display = ''; mAttHistory.classList.remove('disabled'); }
       if (mAttSettings) {
-        const isAdmin = role === 'admin' || role === 'superadmin' || role === 'manager';
-        mAttSettings.style.display = (rolePerm.attendanceSettings || isAdmin) ? '' : 'none';
+        mAttSettings.style.display = (rolePerm.attendanceSettings || isAdmin() || isManager()) ? '' : 'none';
       }
 
       // 4. Hide empty category groups
@@ -2918,10 +2991,27 @@ input, select, textarea, button {
         group.style.display = visibleItems.length > 0 ? '' : 'none';
       });
 
-      // If current page is disabled or hidden, navigate to dashboard
+      // 5. Render lock icons for non-admin restricted menus
+      document.querySelectorAll('.menu-item').forEach(m => {
+        const page = m.dataset.page;
+        const existingBadge = m.querySelector('.menu-lock-icon');
+        if (!isAdmin() && !isManager() && page && typeof isPageAllowedForUser === 'function' && !isPageAllowedForUser(page, CURRENT_USER)) {
+          if (!existingBadge) {
+            const badge = document.createElement('span');
+            badge.className = 'menu-lock-icon';
+            badge.title = 'ต้องยื่นขอสิทธิ์จาก Admin';
+            badge.textContent = '🔒 ขอสิทธิ์';
+            m.appendChild(badge);
+          }
+        } else if (existingBadge) {
+          existingBadge.remove();
+        }
+      });
+
+      // If current page is disabled or hidden, navigate to borrowing (for users) or dashboard (for admins)
       const curMenu = document.querySelector(`.menu-item[data-page="${CURRENT_PAGE}"]`);
       if (curMenu && (curMenu.classList.contains('disabled') || curMenu.style.display === 'none')) {
-        navigate('dashboard');
+        navigate(!isAdmin() && !isManager() ? 'borrowing' : 'dashboard');
       }
     }
 
@@ -6625,9 +6715,12 @@ input, select, textarea, button {
 
     // ============== USERS ==============
     function renderUsers() {
-      let baseUsers = DATA.users;
-      if (CURRENT_USER && (CURRENT_USER.role === 'user' || CURRENT_USER.role === 'ผู้ใช้งานเฉพาะตัวเอง' || CURRENT_USER.role === 'พนักงานขับรถ(เปิดเฉพาะตำแหน่งพนักงานขับรถ)')) {
-        baseUsers = DATA.users.filter(u => u['ชื่อ-นามสกุล'] === CURRENT_USER.name);
+      let baseUsers = DATA.users || [];
+      if (!isAdmin() && !isManager() && CURRENT_USER) {
+        const normRole = getNormalizedRole(CURRENT_USER);
+        if (normRole === 'user' || normRole === 'driver' || normRole === 'new_employee') {
+          baseUsers = (DATA.users || []).filter(u => u['ชื่อ-นามสกุล'] === CURRENT_USER.name || u['อีเมล'] === CURRENT_USER.email);
+        }
       }
 
       let filterName = '';
@@ -8514,8 +8607,11 @@ input, select, textarea, button {
       let filter = '';
       const render = () => {
         let list = DATA.departments || [];
-        if (CURRENT_USER && (CURRENT_USER.role === 'user' || CURRENT_USER.role === 'ผู้ใช้งานเฉพาะตัวเอง' || CURRENT_USER.role === 'พนักงานขับรถ(เปิดเฉพาะตำแหน่งพนักงานขับรถ)')) {
-          list = list.filter(d => d['ชื่อหน่วยงาน'] === CURRENT_USER.dept);
+        if (!isAdmin() && !isManager() && CURRENT_USER) {
+          const normRole = getNormalizedRole(CURRENT_USER);
+          if (normRole === 'user' || normRole === 'driver' || normRole === 'new_employee') {
+            list = list.filter(d => d['ชื่อหน่วยงาน'] === CURRENT_USER.dept);
+          }
         }
         const items = list.filter(d => !filter || JSON.stringify(d).toLowerCase().includes(filter.toLowerCase()));
         
