@@ -49,6 +49,7 @@ const SHEETS = {
   WIFI_QR_LOGS: 'wifiQrLogs',
   SATISFACTION_RATINGS: 'satisfactionRatings',
   ATTENDANCE: 'attendance',
+  EQUIPMENT_HANDOVER: 'equipmentHandover',
 };
 
 const COLLECTION = SHEETS;
@@ -281,6 +282,7 @@ async function getAllData() {
     'vehicles', 'usage', 'maintenance', 'fuel', 'fuelQuota',
     'equipment', 'equipmentCategory', 'borrowing', 'users', 'drivers',
     'booking', 'inspection', 'notifications', 'audit', 'departments', 'attendance',
+    'equipmentHandover',
   ];
   const results = await Promise.all(keys.map((k) => listDocs(k)));
   const out = {};

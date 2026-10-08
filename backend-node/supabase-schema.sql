@@ -17,7 +17,7 @@ begin
     'equipment','equipmentCategory','borrowing','users','drivers',
     'booking','inspection','notifications','audit','settings',
     'departments','userCredentials','serviceRequests','wifiQrLogs',
-    'satisfactionRatings','attendance'
+    'satisfactionRatings','attendance','equipmentHandover'
   ]
   loop
     execute format(

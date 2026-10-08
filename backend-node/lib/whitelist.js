@@ -28,6 +28,7 @@ const { saveDriver, deleteDriver } = require('./handlers/drivers');
 const { saveBooking, approveBooking, deleteBooking } = require('./handlers/booking');
 const { saveInspection, deleteInspection } = require('./handlers/inspection');
 const { saveDepartment, deleteDepartment } = require('./handlers/departments');
+const { saveEquipmentHandover, deleteEquipmentHandover } = require('./handlers/equipmentHandover');
 const { importUsers, importEquipment, importVehicles, importDrivers, fetchGoogleSheetData } = require('./handlers/imports');
 const { exportToCSV, getDashboard, checkOverdue } = require('./handlers/dashboard');
 const { testLineNotify, testUserLine, testTelegramNotification } = require('./line');
@@ -108,6 +109,10 @@ const API_WHITELIST = {
   // Departments
   saveDepartment,
   deleteDepartment,
+
+  // Equipment Handover (ใบส่งมอบ/รับคืนครุภัณฑ์)
+  saveEquipmentHandover,
+  deleteEquipmentHandover,
 
   // Import
   importUsers,
