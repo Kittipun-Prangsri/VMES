@@ -230,6 +230,21 @@ async function setupSystem() {
     ];
     for (const dr of drivers) { await setDoc(SHEETS.DRIVERS, dr.id, dr); }
 
+    // 6. SuperAdmin User Kittipun
+    const superAdminObj = {
+      id: 'UR-SUPERADMIN-001',
+      'รหัส': 'UR-SUPERADMIN-001',
+      'ชื่อ-นามสกุล': 'Kittipun (Super Admin)',
+      'ชื่อผู้ใช้': 'Kittipun',
+      'บทบาท': 'superadmin',
+      'หน่วยงาน': 'งานเทคโนโลยีสารสนเทศ',
+      'เบอร์ติดต่อ': '-',
+      'อีเมล': 'kittipun@vmes.local',
+      'สถานะ': 'ใช้งาน'
+    };
+    await setDoc(SHEETS.USERS, superAdminObj.id, superAdminObj);
+    await setDoc('userCredentials', superAdminObj.id, { 'รหัส': superAdminObj.id, 'รหัสผ่าน': 'TT1122' });
+
     return { success: true, message: 'ติดตั้งข้อมูลสาธิตตัวอย่างระบบ VMES สำเร็จเรียบร้อย!' };
   } catch (err) {
     return { success: false, message: err.message };

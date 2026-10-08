@@ -15,6 +15,41 @@
   <link
     href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@300;400;500;600;700&family=Sarabun:wght@300;400;500;600;700&display=swap"
     rel="stylesheet">
+  <!-- Tailwind CSS v3 -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"IBM Plex Sans Thai"', 'Sarabun', 'sans-serif'],
+          },
+          colors: {
+            brand: {
+              50: '#f0f7ff',
+              100: '#e0effe',
+              200: '#bae0fd',
+              500: '#0284c7',
+              600: '#0369a1',
+              700: '#075985',
+              800: '#0c4a6e',
+              900: '#0f3854',
+            },
+            vmes: {
+              primary: '#1e40af',
+              dark: '#1e3a8a',
+              light: '#3b82f6',
+              accent: '#06b6d4',
+              success: '#10b981',
+              warning: '#f59e0b',
+              danger: '#ef4444',
+            }
+          }
+        }
+      }
+    }
+  <!-- Libraries -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -333,6 +368,51 @@ body.resizing-active {
   font-weight: 600;
 }
 
+.moph-login-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 14px 0;
+  font-size: 12px;
+  color: var(--gray-500);
+}
+
+.moph-login-divider::before,
+.moph-login-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--gray-200);
+}
+
+.moph-login-btn {
+  background: #fff;
+  color: #047857;
+  border: 2px solid #10b981;
+  font-weight: 700;
+}
+
+.moph-login-btn:hover {
+  background: #ecfdf5;
+}
+
+.moph-login-error {
+  margin-bottom: 14px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.5;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+}
+
+.moph-login-error.info {
+  background: #fffbeb;
+  border-color: #fde68a;
+  color: #92400e;
+}
+
 .login-portal-card.new-emp-card {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(240, 249, 255, 0.98) 100%);
   border: 2px solid rgba(56, 189, 248, 0.35);
@@ -575,21 +655,26 @@ body.resizing-active {
 
 .sidebar {
   width: var(--sidebar-width, 260px);
-  background: linear-gradient(180deg, #1e3a8a 0%, #1e40af 100%);
-  color: #fff;
+  background: linear-gradient(180deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+  border-right: 1px solid rgba(255, 255, 255, 0.07);
+  color: #f8fafc;
   position: fixed;
   top: 0;
   left: 0;
   height: 100vh;
   overflow-y: auto;
-  transition: width .3s, transform .3s;
+  transition: width .3s ease, transform .3s ease;
   z-index: 100;
-  scrollbar-width: none; /* Firefox */
-  -ms-overflow-style: none; /* IE/Edge */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
 }
 
 .sidebar::-webkit-scrollbar {
-  display: none; /* Chrome/Safari/Opera */
+  width: 4px;
+}
+.sidebar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
 }
 
 .sidebar.resizing {
@@ -610,11 +695,11 @@ body.resizing-active {
   left: var(--sidebar-width, 260px);
   bottom: 0;
   z-index: 101;
-  transition: background .2s, left .3s;
+  transition: background .2s, left .3s ease;
 }
 
 .resizer:hover, .resizer.resizing {
-  background: var(--accent);
+  background: #6366f1;
 }
 
 .sidebar.resizing + .resizer {
@@ -627,38 +712,42 @@ body.resizing-active {
 }
 
 .sidebar-header {
-  padding: 20px 15px;
-  border-bottom: 1px solid rgba(255, 255, 255, .1);
+  padding: 16px 14px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, .06);
   text-align: center;
 }
 
 .sidebar-header .icon {
-  font-size: 40px;
+  font-size: 38px;
   display: block;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 .sidebar-header h1 {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 700;
-  color: #fff;
+  background: linear-gradient(135deg, #ffffff 0%, #cbd5e1 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
   margin: 0;
+  letter-spacing: 0.2px;
 }
 
 .sidebar-header p {
   font-size: 11px;
-  color: rgba(255, 255, 255, .6);
-  margin-top: 4px;
+  color: #94a3b8;
+  margin-top: 3px;
+  font-weight: 400;
 }
 
 .sidebar-menu {
-  padding: 8px 0 24px;
+  padding: 6px 4px 24px;
 }
 
 /* ===== SIDEBAR SEARCH BOX & ACTIONS ===== */
 .sidebar-search-box {
-  padding: 12px 14px 10px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .sidebar-search-wrapper {
@@ -669,31 +758,31 @@ body.resizing-active {
 
 .sidebar-search-input {
   width: 100%;
-  padding: 8px 30px 8px 34px;
-  background: rgba(0, 0, 0, 0.25);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  padding: 7px 28px 7px 32px;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 10px;
-  color: #ffffff;
-  font-size: 13px;
+  color: #f8fafc;
+  font-size: 12.5px;
   outline: none;
   transition: all 0.2s ease;
 }
 
 .sidebar-search-input::placeholder {
-  color: rgba(255, 255, 255, 0.45);
+  color: #64748b;
 }
 
 .sidebar-search-input:focus {
-  background: rgba(0, 0, 0, 0.4);
-  border-color: #38bdf8;
-  box-shadow: 0 0 12px rgba(56, 189, 248, 0.25);
+  background: rgba(15, 23, 42, 0.9);
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
 }
 
 .sidebar-search-icon {
   position: absolute;
   left: 10px;
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.5);
+  font-size: 12px;
+  color: #64748b;
   pointer-events: none;
 }
 
@@ -702,8 +791,8 @@ body.resizing-active {
   right: 8px;
   background: none;
   border: none;
-  color: rgba(255, 255, 255, 0.5);
-  font-size: 14px;
+  color: #64748b;
+  font-size: 13px;
   cursor: pointer;
   padding: 2px 6px;
   display: none;
@@ -711,71 +800,75 @@ body.resizing-active {
 }
 
 .sidebar-search-clear:hover {
-  color: #ffffff;
-  background: rgba(255, 255, 255, 0.15);
+  color: #f8fafc;
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .sidebar-actions {
   display: flex;
   justify-content: space-between;
-  padding: 8px 4px 2px;
-  font-size: 11px;
+  padding: 6px 2px 2px;
+  font-size: 10.5px;
 }
 
 .sidebar-action-btn {
-  color: rgba(255, 255, 255, 0.6);
+  color: #64748b;
   cursor: pointer;
-  transition: color 0.15s;
+  transition: all 0.15s ease;
   user-select: none;
   font-weight: 500;
+  background: rgba(30, 41, 59, 0.5);
+  padding: 2px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .sidebar-action-btn:hover {
   color: #38bdf8;
-  text-decoration: underline;
+  border-color: rgba(56, 189, 248, 0.3);
+  background: rgba(56, 189, 248, 0.1);
 }
 
 /* ===== COLLAPSIBLE CATEGORIES ===== */
 .menu-category-group {
-  margin-bottom: 4px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  margin-bottom: 2px;
 }
 
 .menu-category-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 9px 14px;
+  padding: 7px 10px;
   cursor: pointer;
   user-select: none;
-  transition: background 0.2s, color 0.2s;
-  border-radius: 8px;
-  margin: 4px 8px 2px 8px;
+  transition: all 0.15s ease;
+  border-radius: 10px;
+  margin: 4px 6px 2px;
 }
 
 .menu-category-header:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .menu-category-title {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 700;
-  letter-spacing: 0.4px;
-  color: rgba(255, 255, 255, 0.85);
+  letter-spacing: 0.5px;
+  color: #94a3b8;
   text-transform: uppercase;
 }
 
 .menu-category-header .cat-icon {
-  font-size: 15px;
+  font-size: 14px;
 }
 
 .menu-category-header .cat-arrow {
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.5);
-  transition: transform 0.3s ease;
+  font-size: 9px;
+  color: #64748b;
+  transition: transform 0.25s ease;
 }
 
 .menu-category-group.collapsed .cat-arrow {
@@ -783,18 +876,19 @@ body.resizing-active {
 }
 
 .menu-category-badge {
-  font-size: 10px;
+  font-size: 9.5px;
   padding: 1px 6px;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.15);
-  color: rgba(255, 255, 255, 0.9);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #cbd5e1;
   font-weight: 600;
   margin-left: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .menu-category-content {
   overflow: hidden;
-  transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s ease;
+  transition: max-height 0.25s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease;
   max-height: 600px;
   opacity: 1;
   padding: 2px 0;
@@ -812,54 +906,79 @@ body.resizing-active {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 9px 14px 9px 18px;
-  color: rgba(255, 255, 255, 0.8);
+  padding: 7.5px 12px 7.5px 14px;
+  color: #cbd5e1;
   cursor: pointer;
-  transition: all 0.18s ease;
-  font-size: 13.5px;
-  border-left: 3px solid transparent;
-  margin: 2px 8px;
-  border-radius: 8px;
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  font-size: 13px;
+  font-weight: 500;
+  margin: 2px 6px;
+  border-radius: 10px;
+  position: relative;
 }
 
 .menu-category-content .menu-item {
-  padding-left: 24px;
+  padding-left: 14px;
+}
+
+.menu-item .menu-icon {
+  font-size: 15px;
+  min-width: 20px;
+  text-align: center;
+  display: inline-block;
+  transition: transform 0.15s ease;
 }
 
 .menu-item:hover {
-  background: rgba(255, 255, 255, 0.09);
+  background: rgba(255, 255, 255, 0.07);
   color: #ffffff;
-  transform: translateX(3px);
+  transform: translateX(2px);
+}
+
+.menu-item:hover .menu-icon {
+  transform: scale(1.15);
 }
 
 .menu-item.active {
-  background: linear-gradient(90deg, rgba(59, 130, 246, 0.35) 0%, rgba(37, 99, 235, 0.18) 100%);
+  background: linear-gradient(135deg, #4f46e5 0%, #2563eb 100%);
   color: #ffffff;
-  border-left-color: #38bdf8;
-  font-weight: 700;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  font-weight: 600;
+  box-shadow: 0 4px 14px rgba(79, 70, 229, 0.35);
 }
 
 .menu-item.featured {
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.22) 0%, rgba(6, 182, 212, 0.22) 100%);
-  border-left-color: #38bdf8;
-  border-left-width: 3px;
-  font-weight: 600;
-  color: #ffffff;
-  margin: 3px 8px;
-  border-radius: 8px;
-  box-shadow: inset 0 0 10px rgba(56, 189, 248, 0.12);
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.14) 0%, rgba(14, 165, 233, 0.14) 100%);
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  font-weight: 500;
+  color: #f1f5f9;
+  margin: 3px 6px;
 }
 
 .menu-item.featured:hover {
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.38) 0%, rgba(6, 182, 212, 0.38) 100%);
-  transform: translateX(3px);
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.28) 0%, rgba(14, 165, 233, 0.28) 100%);
+  border-color: rgba(99, 102, 241, 0.4);
+  transform: translateX(2px);
 }
 
 .menu-item.featured.active {
-  background: linear-gradient(135deg, #4f46e5 0%, #0891b2 100%);
+  background: linear-gradient(135deg, #6366f1 0%, #0284c7 100%);
   color: #ffffff;
-  box-shadow: 0 4px 16px rgba(79, 70, 229, 0.4);
+  font-weight: 600;
+  border: none;
+  box-shadow: 0 4px 16px rgba(99, 102, 241, 0.45);
+}
+
+/* Menu lock badge for non-admin users */
+.menu-lock-icon {
+  margin-left: auto;
+  font-size: 10px;
+  opacity: 0.85;
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  padding: 1px 6px;
+  border-radius: 6px;
+  font-weight: 600;
 }
 
 .stat.s-highlight {
@@ -1854,89 +1973,95 @@ input, select, textarea, button {
 
 <body>
 
-  <div id="loginWrap" class="login-wrap">
+  <div id="loginWrap" class="login-wrap min-h-screen bg-slate-950 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-950 via-slate-900 to-slate-950 flex items-center justify-center p-4 sm:p-6 text-slate-100 font-sans">
     <div class="login-bg-orb-3"></div>
-    <div class="login-portal-container">
-      <div class="login-portal-header">
-        <img src="/logo-main.png" alt="VMES Main Icon Logo" class="login-portal-logo">
-        <h1>VMES System V2.0</h1>
-        <p>ระบบบริหารจัดการยานพาหนะ อุปกรณ์ และบริการไอที — โรงพยาบาลคลองหาด</p>
+    <div class="login-portal-container w-full max-w-4xl bg-white/10 backdrop-blur-2xl border border-white/15 rounded-3xl p-6 sm:p-10 shadow-2xl shadow-indigo-950/50 space-y-8 relative z-10">
+      <div class="login-portal-header text-center space-y-3">
+        <img src="/logo-main.png" alt="VMES Main Icon Logo" class="login-portal-logo w-24 h-24 rounded-full mx-auto p-1.5 bg-white border-4 border-white/80 shadow-2xl hover:scale-105 transition-all duration-300 object-contain">
+        <h1 class="text-3xl sm:text-4xl font-extrabold tracking-tight bg-gradient-to-r from-white via-indigo-100 to-sky-200 bg-clip-text text-transparent">VMES System V2.0</h1>
+        <p class="text-xs sm:text-sm text-indigo-200/90 font-medium">ระบบบริหารจัดการยานพาหนะ อุปกรณ์ และบริการไอที — โรงพยาบาลคลองหาด</p>
       </div>
 
-      <div class="login-portal-grid">
+      <div class="login-portal-grid grid grid-cols-1 md:grid-cols-2 gap-6">
         <!-- CARD 1: เจ้าหน้าที่ปัจจุบัน (เพื่อ Login เข้าระบบ) -->
-        <div class="login-portal-card staff-card">
-          <div class="portal-card-header">
-            <span class="portal-card-badge blue">🔐 เข้าสู่ระบบ</span>
-            <h2>เจ้าหน้าที่ / ผู้เข้าใช้งานระบบ</h2>
-            <p>สำหรับผู้มีชื่อผู้ใช้งานและรหัสผ่านเข้าปฏิบัติงานในระบบ</p>
+        <div class="login-portal-card staff-card bg-white/95 backdrop-blur-xl text-slate-800 p-6 sm:p-7 rounded-2xl shadow-2xl border border-white/60 space-y-4 hover:shadow-indigo-500/10 transition-all duration-300">
+          <div class="portal-card-header space-y-1">
+            <span class="portal-card-badge inline-block bg-indigo-100 text-indigo-700 text-xs font-bold px-3 py-1 rounded-full">🔐 เข้าสู่ระบบ</span>
+            <h2 class="text-lg font-bold text-slate-900 pt-1">เจ้าหน้าที่ / ผู้เข้าใช้งานระบบ</h2>
+            <p class="text-xs text-slate-500 font-medium">สำหรับผู้มีชื่อผู้ใช้งานและรหัสผ่านเข้าปฏิบัติงานในระบบ</p>
           </div>
-          
-          <div class="field">
-            <label>ชื่อผู้ใช้ / อีเมล</label>
-            <input type="text" id="loginUser" placeholder="กรอกชื่อผู้ใช้ หรือ อีเมล">
+
+          <div id="loginError" class="moph-login-error text-xs font-semibold text-rose-600 bg-rose-50 border border-rose-200 p-3 rounded-xl" style="display:none"></div>
+
+          <div class="field space-y-1">
+            <label class="text-xs font-bold text-slate-700">ชื่อผู้ใช้ / อีเมล</label>
+            <input type="text" id="loginUser" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:outline-none transition-all text-sm font-medium" placeholder="กรอกชื่อผู้ใช้ หรือ อีเมล">
           </div>
-          <div class="field">
-            <label>รหัสผ่าน</label>
-            <div style="position: relative;">
-              <input type="password" id="loginPass" placeholder="กรอกรหัสผ่าน" style="padding-right: 48px;">
-              <button type="button" onclick="toggleLoginPasswordShow()" style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); background: none; border: none; font-size: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center; height: 100%; z-index: 10;" id="togglePassBtn" title="แสดง/ซ่อนรหัสผ่าน">👁️</button>
+          <div class="field space-y-1">
+            <label class="text-xs font-bold text-slate-700">รหัสผ่าน</label>
+            <div class="relative">
+              <input type="password" id="loginPass" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:outline-none transition-all text-sm font-medium pr-12" placeholder="กรอกรหัสผ่าน">
+              <button type="button" onclick="toggleLoginPasswordShow()" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-lg transition-colors" id="togglePassBtn" title="แสดง/ซ่อนรหัสผ่าน">👁️</button>
             </div>
           </div>
-          <div class="login-options">
-            <label>
-              <input type="checkbox" id="rememberMe">
+          <div class="login-options flex justify-between items-center text-xs pt-1">
+            <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-600">
+              <input type="checkbox" id="rememberMe" class="rounded text-indigo-600 focus:ring-indigo-500">
               <span>จำรหัสผ่าน</span>
             </label>
-            <a href="#" onclick="showForgotPasswordModal(); return false;">ลืมรหัสผ่าน?</a>
+            <a href="#" onclick="showForgotPasswordModal(); return false;" class="text-indigo-600 font-bold hover:underline">ลืมรหัสผ่าน?</a>
           </div>
-          <button class="btn btn-primary btn-block" onclick="doLogin()" id="loginBtn">
+          <button class="btn btn-primary btn-block w-full py-3.5 bg-gradient-to-r from-indigo-600 via-indigo-700 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white font-extrabold rounded-xl shadow-lg shadow-indigo-500/25 active:scale-[0.98] transition-all text-sm flex items-center justify-center gap-2" onclick="doLogin()" id="loginBtn">
             <span>🔐 เข้าสู่ระบบ</span>
+          </button>
+          <div class="moph-login-divider flex items-center text-xs text-slate-400 my-3"><div class="flex-1 border-t border-slate-200"></div><span class="px-3 font-semibold">หรือ</span><div class="flex-1 border-t border-slate-200"></div></div>
+          <button type="button" class="btn btn-block moph-login-btn w-full py-3.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold rounded-xl shadow-lg shadow-emerald-500/25 active:scale-[0.98] transition-all text-sm flex items-center justify-center gap-2" onclick="startMophLogin()" id="mophLoginBtn">
+            <span>🏥 เข้าสู่ระบบด้วย MOPH ID</span>
           </button>
         </div>
 
         <!-- CARD 2: พนักงานแรกเข้าทำงาน (พนักงานใหม่) -->
-        <div class="login-portal-card new-emp-card">
-          <div class="portal-card-header">
-            <span class="portal-card-badge cyan">✨ ยื่นขอสิทธิ์ออนไลน์</span>
-            <h2>พนักงานแรกเข้าทำงาน (พนักงานใหม่)</h2>
-            <p>สำหรับพนักงานใหม่ที่ยังไม่มีรหัส HOSxP, อินเทอร์เน็ต หรือ VPN</p>
+        <div class="login-portal-card new-emp-card bg-gradient-to-br from-slate-900/90 to-indigo-950/90 backdrop-blur-xl text-white p-6 sm:p-7 rounded-2xl shadow-2xl border border-indigo-500/30 flex flex-col justify-between space-y-6 hover:shadow-indigo-500/20 transition-all duration-300">
+          <div class="portal-card-header space-y-1">
+            <span class="portal-card-badge cyan inline-block bg-cyan-500/20 text-cyan-300 border border-cyan-400/30 text-xs font-bold px-3 py-1 rounded-full">✨ ยื่นขอสิทธิ์ออนไลน์</span>
+            <h2 class="text-lg font-bold text-white pt-1">พนักงานแรกเข้าทำงาน (พนักงานใหม่)</h2>
+            <p class="text-xs text-indigo-200/80 font-medium">สำหรับพนักงานใหม่ที่ยังไม่มีรหัส HOSxP, อินเทอร์เน็ต หรือ VPN</p>
           </div>
           
-          <div class="new-emp-features">
-            <div class="feature-item">
-              <span class="feat-icon">📑</span>
-              <div class="feat-text">
-                <strong>ยื่นขอสิทธิ์ออนไลน์ 24 ชม.</strong>
-                <span>กรอกข้อมูลขอเปิดใช้งานบัญชีผู้ใช้ใหม่ได้ง่ายและสะดวก</span>
+          <div class="new-emp-features space-y-4">
+            <div class="feature-item flex items-start gap-3 bg-white/5 border border-white/10 p-3 rounded-xl">
+              <span class="feat-icon text-2xl">📑</span>
+              <div class="feat-text text-xs space-y-0.5">
+                <strong class="block text-cyan-300 font-bold">ยื่นขอสิทธิ์ออนไลน์ 24 ชม.</strong>
+                <span class="text-indigo-200/80">กรอกข้อมูลขอเปิดใช้งานบัญชีผู้ใช้ใหม่ได้ง่ายและสะดวก</span>
               </div>
             </div>
-            <div class="feature-item">
-              <span class="feat-icon">⚡</span>
-              <div class="feat-text">
-                <strong>ไม่ต้องใช้รหัสผ่านล่วงหน้า</strong>
-                <span>เข้าสู่แบบฟอร์มยื่นขอสิทธิ์เพื่อส่งเรื่องตรงถึงผู้ดูแลระบบ</span>
+            <div class="feature-item flex items-start gap-3 bg-white/5 border border-white/10 p-3 rounded-xl">
+              <span class="feat-icon text-2xl">⚡</span>
+              <div class="feat-text text-xs space-y-0.5">
+                <strong class="block text-cyan-300 font-bold">ไม่ต้องใช้รหัสผ่านล่วงหน้า</strong>
+                <span class="text-indigo-200/80">เข้าสู่แบบฟอร์มยื่นขอสิทธิ์เพื่อส่งเรื่องตรงถึงผู้ดูแลระบบ</span>
               </div>
             </div>
-            <div class="feature-item">
-              <span class="feat-icon">🔔</span>
-              <div class="feat-text">
-                <strong>อนุมัติรวดเร็ว</strong>
-                <span>ได้รับสิทธิ์และปลดล็อกการใช้งานระบบหลักอัตโนมัติ</span>
+            <div class="feature-item flex items-start gap-3 bg-white/5 border border-white/10 p-3 rounded-xl">
+              <span class="feat-icon text-2xl">🔔</span>
+              <div class="feat-text text-xs space-y-0.5">
+                <strong class="block text-cyan-300 font-bold">อนุมัติรวดเร็ว</strong>
+                <span class="text-indigo-200/80">ได้รับสิทธิ์และปลดล็อกการใช้งานระบบหลักอัตโนมัติ</span>
               </div>
             </div>
           </div>
 
-          <div style="margin-top: auto; padding-top: 10px;">
-            <button type="button" class="btn btn-new-emp" onclick="loginAsNewEmployeeGuest()">
+          <div class="pt-2">
+            <button type="button" class="btn btn-new-emp w-full py-3.5 bg-gradient-to-r from-cyan-400 via-teal-400 to-sky-400 hover:from-cyan-300 hover:to-sky-300 text-slate-950 font-extrabold rounded-xl shadow-lg shadow-cyan-500/25 active:scale-[0.98] transition-all text-sm flex items-center justify-center gap-2" onclick="loginAsNewEmployeeGuest()">
               ✨ ยื่นขอสิทธิ์ HOSxP / VPN (พนักงานใหม่) ➡️
             </button>
           </div>
         </div>
       </div>
 
-      <div class="login-portal-footer">
-        <button class="btn btn-secondary btn-sm" onclick="runSetup()">⚙️ ติดตั้งระบบครั้งแรก (setupSystem)</button>
+      <div class="login-portal-footer text-center pt-2">
+        <button class="btn btn-secondary btn-sm text-xs bg-white/10 hover:bg-white/20 text-indigo-200 border border-white/20 px-4 py-2 rounded-xl transition-all" onclick="runSetup()">⚙️ ติดตั้งระบบครั้งแรก (setupSystem)</button>
       </div>
     </div>
   </div>
@@ -2171,10 +2296,20 @@ input, select, textarea, button {
     const API_URL = 'https://vmes-backend.vercel.app/api/rpc';
 
     function callApi(fn, ...args) {
+      let token = storageGet('vmes_moph_token');
+      if (!token && typeof CURRENT_USER !== 'undefined' && CURRENT_USER && CURRENT_USER.token) token = CURRENT_USER.token;
+      if (!token) {
+        try {
+          const u = JSON.parse(storageGet('vmes_session_user') || '{}');
+          if (u && u.token) token = u.token;
+        } catch (e) {}
+      }
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = 'Bearer ' + token;
       return fetch(API_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fn, args })
+        headers: headers,
+        body: JSON.stringify({ fn, args, token: token })
       }).then(r => r.json());
     }
 
@@ -2238,22 +2373,7 @@ input, select, textarea, button {
               } catch(e){}
             }
 
-            const wrap = document.getElementById('loginWrap');
-            if (wrap) wrap.style.display = 'none';
-            const appEl = document.getElementById('app');
-            if (appEl) appEl.classList.add('active');
-            const nameEl = document.getElementById('userName');
-            if (nameEl) nameEl.textContent = r.user.name;
-            const roleEl = document.getElementById('userRole');
-            if (roleEl) roleEl.textContent = r.user.role;
-            const avatarEl = document.getElementById('userAvatar');
-            if (avatarEl) avatarEl.textContent = (r.user.name || '?')[0];
-            
-            // Apply role-based visibility
-            if (typeof applyPermissions === 'function') applyPermissions();
-            
-            if (typeof loadAll === 'function') loadAll();
-            if (typeof startAutoRefresh === 'function') startAutoRefresh();
+            enterApp(r.user);
           } else {
             const msg = (r && r.message) || 'เข้าสู่ระบบไม่สำเร็จ';
             if (typeof toast === 'function') toast(msg, 'error');
@@ -2277,6 +2397,130 @@ input, select, textarea, button {
     }
     console.log('doLogin function defined and exposed on window.');
     window.doLogin = doLogin;
+
+    // แสดงหน้าระบบหลักสำหรับผู้ใช้ที่เข้าสู่ระบบแล้ว (ใช้ร่วมกันทั้ง login ปกติ / MOPH ID / restore session)
+    function enterApp(user) {
+      CURRENT_USER = user;
+      const wrap = document.getElementById('loginWrap');
+      if (wrap) wrap.style.display = 'none';
+      const appEl = document.getElementById('app');
+      if (appEl) appEl.classList.add('active');
+      const nameEl = document.getElementById('userName');
+      if (nameEl) nameEl.textContent = user.name;
+      const roleEl = document.getElementById('userRole');
+      if (roleEl) roleEl.textContent = user.role;
+      const avatarEl = document.getElementById('userAvatar');
+      if (avatarEl) avatarEl.textContent = (user.name || '?')[0];
+
+      // Apply role-based visibility
+      if (typeof applyPermissions === 'function') applyPermissions();
+
+      if (typeof loadAll === 'function') loadAll();
+      if (typeof startAutoRefresh === 'function') startAutoRefresh();
+    }
+
+    // ============== MOPH ID LOGIN ==============
+    // ปุ่มพาไป backend -> moph.id.th -> callback ที่ backend -> กลับมาที่นี่พร้อม #moph=<session token>
+    // หรือ ?error=<code> ถ้าเข้าสู่ระบบไม่ได้ token เป็นแค่ session ของ VMES (ไม่มี token ของ MOPH)
+    const MOPH_LOGIN_URL = API_URL.replace(/\/rpc$/, '/auth/healthid/login');
+    const MOPH_TOKEN_KEY = 'vmes_moph_token';
+    const MOPH_ERRORS = {
+      pending: ['บัญชีของคุณลงทะเบียนผ่าน MOPH ID แล้ว กรุณารอผู้ดูแลระบบอนุมัติสิทธิ์เข้าใช้งาน', 'info'],
+      suspended: ['บัญชีนี้ถูกระงับการใช้งาน กรุณาติดต่อผู้ดูแลระบบ', 'error'],
+      not_allowed: ['หน่วยบริการของคุณไม่ได้รับอนุญาตให้ใช้งานระบบนี้', 'error'],
+      login_failed: ['เข้าสู่ระบบด้วย MOPH ID ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง', 'error'],
+      session: ['เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่', 'info'],
+    };
+
+    function startMophLogin() {
+      const btn = $('mophLoginBtn');
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spin"></span> กำลังไปที่ MOPH ID...';
+      }
+      window.location.href = MOPH_LOGIN_URL;
+    }
+    window.startMophLogin = startMophLogin;
+
+    function showLoginError(code, message) {
+      const el = $('loginError');
+      if (!el) return;
+      const known = MOPH_ERRORS[code];
+      el.textContent = message || (known ? known[0] : 'เข้าสู่ระบบไม่สำเร็จ');
+      el.className = 'moph-login-error' + (known && known[1] === 'info' ? ' info' : '');
+      el.style.display = 'block';
+    }
+
+    function clearMophSession() {
+      try {
+        localStorage.removeItem(MOPH_TOKEN_KEY);
+        localStorage.removeItem('vmes_session_user');
+      } catch (e) {}
+    }
+
+    function verifyMophToken(token, onSuccess) {
+      return callApi('getMophSession', token)
+        .then(r => {
+          if (r && r.success) {
+            storageSet('vmes_session_user', JSON.stringify(r.user));
+            onSuccess(r.user);
+          } else {
+            clearMophSession();
+            if (CURRENT_USER) {
+              CURRENT_USER = null;
+              $('app').classList.remove('active');
+              $('loginWrap').style.display = 'flex';
+            }
+            showLoginError(r && r.error, r && r.message);
+          }
+        })
+        .catch(err => {
+          console.error('MOPH session check failed:', err);
+          if (!CURRENT_USER) showLoginError('login_failed', 'ไม่สามารถติดต่อเซิร์ฟเวอร์ได้');
+        });
+    }
+
+    // เรียกตอนเปิดหน้า: คืนค่า true ถ้าจัดการ session MOPH แล้ว (ไม่ต้อง restore session แบบเดิมต่อ)
+    function handleMophLoginOnLoad() {
+      const hash = new URLSearchParams(window.location.hash.slice(1));
+      const query = new URLSearchParams(window.location.search);
+      const newToken = hash.get('moph');
+      const error = query.get('error');
+      if (newToken || error) {
+        // ลบ token / error ออกจาก address bar และประวัติเบราว์เซอร์
+        history.replaceState(null, '', window.location.pathname);
+      }
+
+      if (error) {
+        clearMophSession();
+        showLoginError(error);
+        return true;
+      }
+      if (newToken) {
+        storageSet(MOPH_TOKEN_KEY, newToken);
+        showLoading(true);
+        verifyMophToken(newToken, user => {
+          showLoading(false);
+          enterApp(user);
+          toast('ยินดีต้อนรับ ' + user.name);
+        }).finally(() => showLoading(false));
+        return true;
+      }
+
+      const savedToken = storageGet(MOPH_TOKEN_KEY);
+      if (savedToken) {
+        // เข้าระบบจาก session ที่บันทึกไว้ทันที แล้วตรวจกับ server ซ้ำ (หมดอายุ/ถูกระงับ -> กลับหน้า login)
+        let cached = null;
+        try { cached = JSON.parse(storageGet('vmes_session_user') || 'null'); } catch (e) {}
+        if (cached && cached.name) enterApp(cached);
+        verifyMophToken(savedToken, user => {
+          if (!cached || !cached.name) enterApp(user);
+          else CURRENT_USER = user;
+        });
+        return true;
+      }
+      return false;
+    }
 
     function loginAsNewEmployeeGuest() {
       CURRENT_USER = {
@@ -2418,32 +2662,66 @@ input, select, textarea, button {
       return roles || ['superadmin', 'admin', 'manager', 'user', 'ผู้ใช้งานเฉพาะตัวเอง', 'พนักงานขับรถ', 'พนักงานใหม่'];
     }
 
+    function getNormalizedRole(user) {
+      const u = user || CURRENT_USER;
+      if (!u) return '';
+      const r = String(u.role || u['บทบาท'] || u['สิทธิ์'] || u['สิทธิ์การใช้งาน'] || '').trim().toLowerCase();
+      if (r.includes('superadmin') || r.includes('super_admin') || r.includes('super admin') || r.includes('ผู้ดูแลระบบสูงสุด')) return 'superadmin';
+      if (r.includes('admin') || r.includes('ผู้ดูแลระบบ') || r.includes('ผู้ดูแล') || r.includes('administrator')) return 'admin';
+      if (r.includes('manager') || r.includes('ผู้จัดการ') || r.includes('ผู้บริหาร')) return 'manager';
+      if (r.includes('driver') || r.includes('พนักงานขับรถ')) return 'driver';
+      if (r.includes('new_employee') || r.includes('พนักงานใหม่') || r.includes('เจ้าหน้าที่ใหม่')) return 'new_employee';
+      return r || 'user';
+    }
+    window.getNormalizedRole = getNormalizedRole;
+
+    function isSuperAdmin(user) {
+      const role = getNormalizedRole(user || CURRENT_USER);
+      return role === 'superadmin';
+    }
+    window.isSuperAdmin = isSuperAdmin;
+
+    function isAdmin(user) {
+      const role = getNormalizedRole(user || CURRENT_USER);
+      return role === 'admin' || role === 'superadmin';
+    }
+    window.isAdmin = isAdmin;
+
+    function isManager(user) {
+      const role = getNormalizedRole(user || CURRENT_USER);
+      return role === 'manager';
+    }
+    window.isManager = isManager;
+
+    function canManageEquipment(user) {
+      return isAdmin(user) || isManager(user);
+    }
+    window.canManageEquipment = canManageEquipment;
+
     function isNewEmployeeLocked(user) {
-      if (!user) return false;
-      const role = String(user.role || '').toLowerCase();
-      if (role === 'admin' || role === 'superadmin' || role === 'manager' || role === 'พนักงานขับรถ') {
+      const u = user || CURRENT_USER;
+      if (!u) return false;
+      if (isAdmin(u) || isManager(u) || getNormalizedRole(u) === 'driver') {
         return false;
       }
       
-      const isExplicitNew = role === 'new_employee' || role === 'พนักงานใหม่' || role === 'เจ้าหน้าที่ใหม่' || user.isNewEmployee === true;
+      const roleStr = String(u.role || u['บทบาท'] || '').toLowerCase();
+      const normRole = getNormalizedRole(u);
+      const isExplicitNew = normRole === 'new_employee' || roleStr === 'พนักงานใหม่' || roleStr === 'เจ้าหน้าที่ใหม่' || u.isNewEmployee === true;
       if (!isExplicitNew) return false;
 
-      let hasApprovedAccount = user.hasAccounts === true || user.hasAccount === true;
+      let hasApprovedAccount = u.hasAccounts === true || u.hasAccount === true;
       if (!hasApprovedAccount && window.DATA && Array.isArray(window.DATA.serviceRequests)) {
-        const cleanUserCard = String(user.idCard || user['เลขบัตรประชาชน'] || '').replace(/['\s-]/g, '');
-        const cleanUserName = String(user.name || user['ชื่อ-นามสกุล'] || '').trim();
+        const cleanUserCard = String(u.idCard || u['เลขบัตรประชาชน'] || '').replace(/['\s-]/g, '');
+        const cleanUserName = String(u.name || u['ชื่อ-นามสกุล'] || '').trim();
 
         const matchedReq = window.DATA.serviceRequests.find(r => {
           const cardMatch = cleanUserCard && String(r.idCard || '').replace(/['\s-]/g, '') === cleanUserCard;
-          const nameMatch = cleanUserName && String(r.nameTh || '').trim() === cleanUserName;
-          return (cardMatch || nameMatch) && (r.status === 'อนุมัติ');
+          const nameMatch = cleanUserName && String(r.nameTh || r['ชื่อ-นามสกุล'] || '').trim() === cleanUserName;
+          return (cardMatch || nameMatch) && (r.status === 'APPROVED' || r.status === 'COMPLETED' || r['สถานะ'] === 'อนุมัติ' || r['สถานะ'] === 'เสร็จสิ้น');
         });
         if (matchedReq) hasApprovedAccount = true;
       }
-
-      if (hasApprovedAccount) return false; // Approved HOSxP/VPN account unlocks full access
-
-      return true; // Explicit new employee is locked until approved
     }
     window.isNewEmployeeLocked = isNewEmployeeLocked;
 
@@ -2595,7 +2873,8 @@ input, select, textarea, button {
         };
       }
 
-      const role = CURRENT_USER ? CURRENT_USER.role : '';
+      const normRole = CURRENT_USER ? getNormalizedRole(CURRENT_USER) : '';
+      const rawRole = CURRENT_USER ? CURRENT_USER.role : '';
       const settingsMenu = $('menuSettings');
       const auditMenu = $('menuAudit');
       const btnLine = $('btnLine');
@@ -2616,10 +2895,7 @@ input, select, textarea, button {
       if (btnLine) btnLine.style.display = '';
 
       // Check New Employee Restriction (Shows ONLY serviceRequests if locked)
-      const roleStr = String(CURRENT_USER ? CURRENT_USER.role : '').toLowerCase();
-      const isExplicitNewUser = roleStr === 'พนักงานใหม่' || roleStr === 'เจ้าหน้าที่ใหม่' || roleStr === 'new_employee' || (CURRENT_USER && CURRENT_USER.isNewEmployee === true);
-
-      if (isNewEmployeeLocked(CURRENT_USER) || isExplicitNewUser) {
+      if (isNewEmployeeLocked(CURRENT_USER) || normRole === 'new_employee') {
         document.querySelectorAll('.menu-item').forEach(m => {
           if (m.dataset.page !== 'serviceRequests') {
             m.style.display = 'none';
@@ -2658,8 +2934,11 @@ input, select, textarea, button {
       if (menuQrBatch) menuQrBatch.style.display = isStaffUser ? 'none' : '';
       if (menuWifiQr) menuWifiQr.style.display = isStaffUser ? 'none' : '';
 
-      // Get permissions for current role (fallback to user if not found)
-      const rolePerm = perm[role] || perm["user"] || { "dashboard": true };
+      // Get permissions for current role (force defaultAdminPerm for admin/superadmin)
+      const defaultAdminPerm = { "dashboard": true, "vehicles": true, "usage": true, "booking": true, "maintenance": true, "fuel": true, "inspection": true, "equipment": true, "borrowing": true, "drivers": true, "users": true, "departments": true, "reports": true, "notifications": true, "audit": true, "settings": true, "attendanceCheckin": true, "attendanceHistory": true, "attendanceSettings": true };
+      const rolePerm = (isAdmin() || isSuperAdmin())
+        ? defaultAdminPerm
+        : (perm[normRole] || perm[rawRole] || perm["user"] || { "dashboard": true });
 
       // Set visibility / disabled states based on the permission configuration
       // 1. Settings, Audit, LINE Button
@@ -2704,8 +2983,7 @@ input, select, textarea, button {
       if (mAttCheckin) { mAttCheckin.style.display = ''; mAttCheckin.classList.remove('disabled'); }
       if (mAttHistory) { mAttHistory.style.display = ''; mAttHistory.classList.remove('disabled'); }
       if (mAttSettings) {
-        const isAdmin = role === 'admin' || role === 'superadmin' || role === 'manager';
-        mAttSettings.style.display = (rolePerm.attendanceSettings || isAdmin) ? '' : 'none';
+        mAttSettings.style.display = (rolePerm.attendanceSettings || isAdmin() || isManager()) ? '' : 'none';
       }
 
       // 4. Hide empty category groups
@@ -2714,10 +2992,27 @@ input, select, textarea, button {
         group.style.display = visibleItems.length > 0 ? '' : 'none';
       });
 
-      // If current page is disabled or hidden, navigate to dashboard
+      // 5. Render lock icons for non-admin restricted menus
+      document.querySelectorAll('.menu-item').forEach(m => {
+        const page = m.dataset.page;
+        const existingBadge = m.querySelector('.menu-lock-icon');
+        if (!isAdmin() && !isManager() && page && typeof isPageAllowedForUser === 'function' && !isPageAllowedForUser(page, CURRENT_USER)) {
+          if (!existingBadge) {
+            const badge = document.createElement('span');
+            badge.className = 'menu-lock-icon';
+            badge.title = 'ต้องยื่นขอสิทธิ์จาก Admin';
+            badge.textContent = '🔒 ขอสิทธิ์';
+            m.appendChild(badge);
+          }
+        } else if (existingBadge) {
+          existingBadge.remove();
+        }
+      });
+
+      // If current page is disabled or hidden, navigate to borrowing (for users) or dashboard (for admins)
       const curMenu = document.querySelector(`.menu-item[data-page="${CURRENT_PAGE}"]`);
       if (curMenu && (curMenu.classList.contains('disabled') || curMenu.style.display === 'none')) {
-        navigate('dashboard');
+        navigate(!isAdmin() && !isManager() ? 'borrowing' : 'dashboard');
       }
     }
 
@@ -2726,6 +3021,7 @@ input, select, textarea, button {
       CURRENT_USER = null;
       try {
         localStorage.removeItem('vmes_session_user');
+        localStorage.removeItem(MOPH_TOKEN_KEY);
       } catch (e) {}
       $('app').classList.remove('active');
       $('loginWrap').style.display = 'flex';
@@ -3058,7 +3354,7 @@ input, select, textarea, button {
             return;
           }
           updateBadges();
-          navigate(CURRENT_PAGE || 'dashboard');
+          navigate(CURRENT_PAGE || (!isAdmin() && !isManager() ? 'borrowing' : 'dashboard'));
         })
         .catch(err => {
           showLoading(false);
@@ -3170,6 +3466,120 @@ input, select, textarea, button {
       el.style.display = pending > 0 ? '' : 'none';
     }
 
+    // ============== PERMISSION HELPERS & REQUEST FLOW ==============
+    function isPageAllowedForUser(page, user) {
+      if (!user) return false;
+      const role = String(user.role || '').toLowerCase();
+      if (role === 'admin' || role === 'superadmin' || role === 'manager') return true;
+
+      // Default allowed pages for general users: borrowing equipment, dashboard, service requests, attendance
+      const defaultAllowed = ['borrowing', 'dashboard', 'serviceRequests', 'attendanceCheckin', 'attendanceHistory'];
+      if (defaultAllowed.includes(page)) return true;
+
+      // Check allowedPages on the user's record in DATA.users (matched by login code)
+      let userAllowed = user.allowedPages || [];
+      if (DATA && Array.isArray(DATA.users)) {
+        const dbUser = DATA.users.find(u => u && (
+          (user.code && u['รหัส'] === user.code) ||
+          (!user.code && user.username && u['ชื่อผู้ใช้'] === user.username)
+        ));
+        if (dbUser && Array.isArray(dbUser.allowedPages)) {
+          userAllowed = dbUser.allowedPages;
+        }
+      }
+      return Array.isArray(userAllowed) && userAllowed.includes(page);
+    }
+    window.isPageAllowedForUser = isPageAllowedForUser;
+
+    function promptRoleAccessRequest(page) {
+      const titles = {
+        dashboard: '📊 แดชบอร์ดรวม', vehicles: '🚗 ข้อมูลรถทั้งหมด', usage: '📋 บันทึกการใช้รถ',
+        maintenance: '🔧 บันทึกบำรุงรักษา', fuel: '⛽ บันทึกการใช้น้ำมัน', equipment: '💻 คลังอุปกรณ์',
+        fieldSurvey: '🔎 สำรวจภาคสนาม', qrBatch: '🖨️ พิมพ์ป้าย QR แบบชุด',
+        borrowing: '📦 ระบบยืม-คืนอุปกรณ์', users: '👥 ผู้ใช้งานระบบ', drivers: '👨‍✈️ พนักงานขับรถ',
+        booking: '📅 จองรถล่วงหน้า', inspection: '🔍 ตรวจสภาพรถ', notifications: '🔔 ประวัติแจ้งเตือน',
+        audit: '📜 ประวัติระบบ', settings: '⚙️ ตั้งค่าระบบ', departments: '🏢 หน่วยงาน', reports: '📈 รายงานสรุป',
+        serviceRequests: '📝 ขอใช้บริการ HOSxP/VPN', wifiQr: '📶 สร้าง & คลัง WiFi QR',
+        attendanceSettings: '⚙️ ตั้งค่าพิกัด & รัศมี (Geofence)'
+      };
+      const pageTitle = titles[page] || page;
+
+      const bodyHtml = `
+      <div style="display:flex; flex-direction:column; gap:16px; padding:6px 0;">
+        <div style="background:linear-gradient(135deg, #fef3c7 0%, #fffbebe6 100%); border:1px solid #fde68a; border-radius:16px; padding:16px 18px; color:#92400e; display:flex; gap:14px; align-items:flex-start;">
+          <div style="font-size:32px; line-height:1;">🛡️</div>
+          <div style="font-size:13.5px; line-height:1.5;">
+            <div style="font-weight:700; font-size:15px; margin-bottom:4px; color:#78350f;">ต้องได้รับอนุมัติจาก Admin ก่อนเข้าใช้งาน</div>
+            ผู้ใช้งานทั่วไปส่วนใหญ่เข้ามาใช้งานเพื่อ <strong>ยืม-คืนอุปกรณ์</strong> <br>
+            หากต้องการเข้าถึงเมนู <span style="background:#fef08a; padding:2px 8px; border-radius:6px; font-weight:700; color:#854d0e;">${esc(pageTitle)}</span> กรุณาระบุวัตถุประสงค์เพื่อยื่นขอสิทธิ์ต่อ Admin
+          </div>
+        </div>
+
+        <div class="field full">
+          <label style="font-weight:700; color:#1e293b; font-size:14px; margin-bottom:6px; display:block;">
+            วัตถุประสงค์ / เหตุผลในการขอสิทธิ์เข้าถึง *
+          </label>
+          <textarea id="access_req_reason" rows="3" placeholder="ระบุเหตุผลความจำเป็น เช่น ขอเข้าใช้ข้อมูลสำหรับปฏิบัติงาน..." style="width:100%; border-radius:12px; border:2px solid #e2e8f0; padding:12px; font-size:14px; resize:vertical; outline:none; font-family:inherit;"></textarea>
+        </div>
+        <div style="font-size:12px; color:#64748b; font-style:italic;">
+          * เมื่อยื่นคำขอแล้ว ระบบจะส่งเรื่องให้ Admin และท่านสามารถติดตามผลอนุมัติในระบบได้
+        </div>
+      </div>
+      `;
+
+      openModal(`🔐 ขออนุมัติเข้าใช้งานเมนู ${esc(pageTitle)}`, bodyHtml, function() {
+        submitRoleAccessRequest(page, pageTitle);
+      });
+
+      const saveBtn = $('modalSave');
+      if (saveBtn) {
+        saveBtn.innerHTML = '📩 ส่งคำขออนุมัติให้ Admin';
+        saveBtn.className = 'btn btn-primary';
+      }
+    }
+    window.promptRoleAccessRequest = promptRoleAccessRequest;
+
+    function submitRoleAccessRequest(page, pageTitle) {
+      const reasonEl = $('access_req_reason');
+      const reason = reasonEl ? reasonEl.value.trim() : '';
+      if (!reason) {
+        toast('กรุณาระบุวัตถุประสงค์ในการขอสิทธิ์', 'warning');
+        if (reasonEl) reasonEl.focus();
+        return;
+      }
+
+      showLoading(true);
+      const u = CURRENT_USER || {};
+      const reqData = {
+        requestType: 'ขอสิทธิ์เข้าถึงเมนูระบบ VMES',
+        userCode: u.code || '',
+        nameTh: u.name || u.username || 'ผู้ใช้งาน',
+        position: u.role || '-',
+        department: u.dept || '-',
+        email: u.email || '',
+        lineId: u.phone || '',
+        reqMenu: page,
+        reqMenuTitle: pageTitle,
+        vpnPurpose: `ขอสิทธิ์เข้าถึงเมนู: ${pageTitle} | วัตถุประสงค์: ${reason}`
+      };
+
+      callApi('createServiceRequest', reqData)
+        .then(r => {
+          showLoading(false);
+          if (r && r.success) {
+            closeModal();
+            toast(`ส่งคำขอเข้าใช้งานเมนู "${pageTitle}" เรียบร้อยแล้ว กรุณารอ Admin อนุมัติ`, 'success');
+          } else {
+            toast((r && r.message) || 'ส่งคำขอไม่สำเร็จ', 'error');
+          }
+        })
+        .catch(err => {
+          showLoading(false);
+          toast('ส่งคำขอไม่สำเร็จ: ' + (err && err.message ? err.message : err), 'error');
+        });
+    }
+    window.submitRoleAccessRequest = submitRoleAccessRequest;
+
     // ============== NAVIGATION ==============
 
     function navigate(page) {
@@ -3181,6 +3591,12 @@ input, select, textarea, button {
         page = 'serviceRequests';
       }
 
+      // Non-admin menu access restriction: User's primary focus is equipment borrowing
+      if (!isAdmin() && !isManager() && !isPageAllowedForUser(page, CURRENT_USER)) {
+        promptRoleAccessRequest(page);
+        return;
+      }
+
       const targetMenu = document.querySelector(`.menu-item[data-page="${page}"]`);
       if (targetMenu && targetMenu.classList.contains('disabled')) {
         toast('คุณไม่มีสิทธิ์เข้าถึงหน้านี้', 'error');
@@ -3189,18 +3605,18 @@ input, select, textarea, button {
       
       if ((page === 'qrBatch' || page === 'wifiQr') && !isAdmin()) {
         toast('สิทธิ์เจ้าหน้าที่: การจัดการและแสดง QR Code อนุญาตเฉพาะ Admin เท่านั้น', 'warning');
-        navigate('dashboard');
+        navigate(!isAdmin() && !isManager() ? 'borrowing' : 'dashboard');
         return;
       }
 
       if (page === 'settings' && !isAdmin()) {
         toast('คุณไม่มีสิทธิ์เข้าถึงหน้านี้', 'error');
-        navigate('dashboard');
+        navigate(!isAdmin() && !isManager() ? 'borrowing' : 'dashboard');
         return;
       }
       if (page === 'audit' && !isAdmin()) {
         toast('คุณไม่มีสิทธิ์เข้าถึงหน้านี้', 'error');
-        navigate('dashboard');
+        navigate(!isAdmin() && !isManager() ? 'borrowing' : 'dashboard');
         return;
       }
       
@@ -4842,7 +5258,17 @@ input, select, textarea, button {
         });
     }
 
+    function isMicEquipment(name) {
+      if (!name) return false;
+      const s = String(name).toLowerCase();
+      return s.includes('ไมค์') || s.includes('ไมโครโฟน') || s.includes('microphone') || s.includes('mic') || s.includes('เครื่องเสียง');
+    }
+    window.isMicEquipment = isMicEquipment;
+
     function quickBorrow(eqId, eqName) {
+      if (isMicEquipment(eqName)) {
+        alert('⚠️ IT ไม่ได้รับผิดชอบเรื่องเครื่องเสียงและไมค์โครโฟนโดยตรง กรุณาติดต่อ ฝ่ายดูแล');
+      }
       navigate('borrowing');
       setTimeout(() => addBorrow(eqId, eqName), 100);
     }
@@ -5990,12 +6416,13 @@ input, select, textarea, button {
 
       openModal('📦 คำขอยืมอุปกรณ์', `
     <div class="form-grid">
-      <div class="field full"><label>เลือกอุปกรณ์ *</label>
-        <select id="b_eq" onchange="window._updateAvail(this.value)">
+      <div class="field full"><label>เลือกอุปกรณ์ * (พิมพ์ค้นหาชื่อหรือรหัสอุปกรณ์ได้)</label>
+        <input type="text" id="b_eq_search" placeholder="🔍 พิมพ์ค้นหาอุปกรณ์ หรือ รหัสครุภัณฑ์..." class="form-input w-full px-3.5 py-2 bg-indigo-50/60 border border-indigo-200 rounded-xl text-slate-800 text-xs font-medium focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:outline-none mb-2" oninput="window._filterEquipSelect(this.value)">
+        <select id="b_eq" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-indigo-500 text-sm font-medium" onchange="window._updateAvail(this.value)">
           ${DATA.equipment.map(e => {
             const avail = getAvail(e['รหัส']);
             return `<option value="${esc(e['รหัส'])}|${esc(e['ชื่ออุปกรณ์'])}" ${eqId === e['รหัส'] ? 'selected' : ''} ${avail <= 0 ? 'disabled' : ''}>
-              ${esc(e['ชื่ออุปกรณ์'])} (คงเหลือ: ${avail} ${esc(e['หน่วยนับ'])})
+              ${esc(e['ชื่ออุปกรณ์'])} ${e['รหัส'] ? '[' + esc(e['รหัส']) + ']' : ''} (คงเหลือ: ${avail} ${esc(e['หน่วยนับ'])})
             </option>`;
           }).join('')}
         </select>
@@ -6020,6 +6447,9 @@ input, select, textarea, button {
           </div>
         </div>
       </div>
+    </div>
+    <div id="micNoticeAlert" style="display:none; margin-top:10px; padding:10px 14px; background:#fffbebf0; border:1.5px solid #f59e0b; border-radius:10px; font-size:12px; color:#b45309; font-weight:700;">
+      ⚠️ แจ้งเตือน: IT ไม่ได้รับผิดชอบเรื่องเครื่องเสียงและไมค์โครโฟนโดยตรง กรุณาติดต่อ ฝ่ายดูแล
     </div>
     <div id="availInfo" style="margin-top:10px; font-size:12px; font-weight:600;"></div>
     <div style="margin-top:14px;padding:12px;background:#dbeafe;border-radius:10px;font-size:12px;color:var(--primary-dark)">
@@ -6052,10 +6482,40 @@ input, select, textarea, button {
       $('b_due').value = new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0];
       setTimeout(() => initSignatureCanvas('b_sig_canvas'), 150);
 
+      window._filterEquipSelect = (kw) => {
+        const query = String(kw || '').toLowerCase().trim();
+        const sel = $('b_eq');
+        if (!sel) return;
+        let firstValid = -1;
+        Array.from(sel.options).forEach((opt, idx) => {
+          const text = opt.textContent.toLowerCase();
+          const val = opt.value.toLowerCase();
+          const match = !query || text.includes(query) || val.includes(query);
+          opt.hidden = !match;
+          opt.style.display = match ? '' : 'none';
+          if (match && firstValid === -1 && !opt.disabled) firstValid = idx;
+        });
+        if (query && firstValid !== -1) {
+          sel.selectedIndex = firstValid;
+          window._updateAvail(sel.value);
+        }
+      };
+
       window._updateAvail = (val) => {
-        const id = val.split('|')[0];
+        const parts = val.split('|');
+        const id = parts[0];
+        const name = parts[1] || '';
         const avail = getAvail(id);
         const info = $('availInfo');
+        const micNotice = $('micNoticeAlert');
+
+        if (isMicEquipment(name)) {
+          if (micNotice) micNotice.style.display = 'block';
+          toast('⚠️ IT ไม่ได้รับผิดชอบเรื่องเครื่องเสียงและไมค์โครโฟนโดยตรง กรุณาติดต่อ ฝ่ายดูแล', 'warning');
+        } else {
+          if (micNotice) micNotice.style.display = 'none';
+        }
+
         if (avail <= 0) {
           info.style.color = 'var(--danger)';
           info.textContent = '❌ อุปกรณ์นี้ถูกยืมครบตามจำนวนแล้ว ไม่สามารถยืมเพิ่มได้';
@@ -6630,9 +7090,12 @@ input, select, textarea, button {
 
     // ============== USERS ==============
     function renderUsers() {
-      let baseUsers = DATA.users;
-      if (CURRENT_USER && (CURRENT_USER.role === 'user' || CURRENT_USER.role === 'ผู้ใช้งานเฉพาะตัวเอง' || CURRENT_USER.role === 'พนักงานขับรถ(เปิดเฉพาะตำแหน่งพนักงานขับรถ)')) {
-        baseUsers = DATA.users.filter(u => u['ชื่อ-นามสกุล'] === CURRENT_USER.name);
+      let baseUsers = DATA.users || [];
+      if (!isAdmin() && !isManager() && CURRENT_USER) {
+        const normRole = getNormalizedRole(CURRENT_USER);
+        if (normRole === 'user' || normRole === 'driver' || normRole === 'new_employee') {
+          baseUsers = (DATA.users || []).filter(u => u['ชื่อ-นามสกุล'] === CURRENT_USER.name || u['อีเมล'] === CURRENT_USER.email);
+        }
       }
 
       let filterName = '';
@@ -6650,6 +7113,8 @@ input, select, textarea, button {
           );
         }
         if (filterDept) items = items.filter(u => u['หน่วยงาน'] === filterDept);
+        // ผู้ที่ลงทะเบียนผ่าน MOPH ID และรออนุมัติ แสดงก่อน
+        items = items.slice().sort((a, b) => (b['สถานะ'] === 'รออนุมัติ') - (a['สถานะ'] === 'รออนุมัติ'));
 
         const deptMap = {};
         baseUsers.forEach(u => {
@@ -6858,6 +7323,7 @@ input, select, textarea, button {
       <div class="field"><label>สถานะ</label><select id="us_status">
         <option ${u['สถานะ'] === 'ใช้งาน' ? 'selected' : ''}>ใช้งาน</option>
         <option ${u['สถานะ'] === 'ระงับ' ? 'selected' : ''}>ระงับ</option>
+        <option ${u['สถานะ'] === 'รออนุมัติ' ? 'selected' : ''}>รออนุมัติ</option>
       </select></div>
       <div class="field full">
         <label>LINE User ID (สำหรับแจ้งเตือนส่วนตัวผ่านบอท)</label>
@@ -8516,8 +8982,11 @@ input, select, textarea, button {
       let filter = '';
       const render = () => {
         let list = DATA.departments || [];
-        if (CURRENT_USER && (CURRENT_USER.role === 'user' || CURRENT_USER.role === 'ผู้ใช้งานเฉพาะตัวเอง' || CURRENT_USER.role === 'พนักงานขับรถ(เปิดเฉพาะตำแหน่งพนักงานขับรถ)')) {
-          list = list.filter(d => d['ชื่อหน่วยงาน'] === CURRENT_USER.dept);
+        if (!isAdmin() && !isManager() && CURRENT_USER) {
+          const normRole = getNormalizedRole(CURRENT_USER);
+          if (normRole === 'user' || normRole === 'driver' || normRole === 'new_employee') {
+            list = list.filter(d => d['ชื่อหน่วยงาน'] === CURRENT_USER.dept);
+          }
         }
         const items = list.filter(d => !filter || JSON.stringify(d).toLowerCase().includes(filter.toLowerCase()));
         
@@ -9542,27 +10011,11 @@ input, select, textarea, button {
 
       // 4. Pre-fill saved login credentials & check Auto Session
       console.log('Loading saved login credentials & checking auto session...');
-      const savedSession = storageGet('vmes_session_user');
+      const savedSession = handleMophLoginOnLoad() ? null : storageGet('vmes_session_user');
       if (savedSession) {
         try {
           const user = JSON.parse(savedSession);
-          if (user && user.name) {
-            CURRENT_USER = user;
-            const wrap = document.getElementById('loginWrap');
-            if (wrap) wrap.style.display = 'none';
-            const appEl = document.getElementById('app');
-            if (appEl) appEl.classList.add('active');
-            const nameEl = document.getElementById('userName');
-            if (nameEl) nameEl.textContent = user.name;
-            const roleEl = document.getElementById('userRole');
-            if (roleEl) roleEl.textContent = user.role;
-            const avatarEl = document.getElementById('userAvatar');
-            if (avatarEl) avatarEl.textContent = (user.name || '?')[0];
-
-            if (typeof applyPermissions === 'function') applyPermissions();
-            if (typeof loadAll === 'function') loadAll();
-            if (typeof startAutoRefresh === 'function') startAutoRefresh();
-          }
+          if (user && user.name) enterApp(user);
         } catch (e) {
           console.error('Auto session restore failed:', e);
         }
@@ -10117,6 +10570,7 @@ input, select, textarea, button {
               <option value="HOSXP" ${SR_FILTER_STATE.type === 'HOSXP' ? 'selected' : ''}>เฉพาะ HOSxP</option>
               <option value="INTERNET" ${SR_FILTER_STATE.type === 'INTERNET' ? 'selected' : ''}>เฉพาะ Internet</option>
               <option value="VPN" ${SR_FILTER_STATE.type === 'VPN' ? 'selected' : ''}>เฉพาะ VPN</option>
+              <option value="ขอสิทธิ์เข้าถึงเมนูระบบ VMES" ${SR_FILTER_STATE.type === 'ขอสิทธิ์เข้าถึงเมนูระบบ VMES' ? 'selected' : ''}>🔐 ขอสิทธิ์เข้าถึงเมนู</option>
             </select>
           </div>
           <div class="field" style="margin:0;">
@@ -10246,6 +10700,29 @@ input, select, textarea, button {
           const defaultUser = item.reqUsername && item.reqUsername !== '-' ? item.reqUsername : '';
           const defaultPass = item.reqPassword && item.reqPassword !== '-' ? item.reqPassword : '';
 
+          let fieldsHtml = '';
+          if (item.requestType === 'ขอสิทธิ์เข้าถึงเมนูระบบ VMES') {
+            fieldsHtml = `
+            <div style="background:#eff6ff; border:1px solid #93c5fd; padding:12px 16px; border-radius:12px; font-size:13.5px; color:#1e40af; box-shadow:var(--shadow-xs);">
+              📌 <strong>เมนูที่ขอเข้าถึง:</strong> <span style="font-weight:700; color:#0369a1;">${esc(item.reqMenuTitle || item.reqMenu || '-')}</span><br>
+              📝 <strong>วัตถุประสงค์ในการใช้งาน:</strong> ${esc(item.vpnPurpose || item.remark || '-')}
+            </div>`;
+          } else if (item.requestType === 'VPN') {
+            fieldsHtml = `
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+              <div class="field"><label>VPN Username</label><input type="text" id="mod_vpn_user" value="${esc(item.vpnUser !== '-' ? item.vpnUser : defaultUser)}" placeholder="กำหนด VPN User"></div>
+              <div class="field"><label>VPN Password</label><input type="text" id="mod_vpn_pass" value="${esc(item.vpnPass !== '-' ? item.vpnPass : defaultPass)}" placeholder="กำหนด VPN Pass"></div>
+            </div>`;
+          } else {
+            fieldsHtml = `
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+              <div class="field"><label>HOSxP Username</label><input type="text" id="mod_hosxp_user" value="${esc(item.hosxpUser !== '-' ? item.hosxpUser : defaultUser)}" placeholder="กำหนด HOSxP User"></div>
+              <div class="field"><label>HOSxP Password</label><input type="text" id="mod_hosxp_pass" value="${esc(item.hosxpPass !== '-' ? item.hosxpPass : defaultPass)}" placeholder="กำหนด HOSxP Pass"></div>
+              <div class="field"><label>Internet Username</label><input type="text" id="mod_internet_user" value="${esc(item.internetUser !== '-' ? item.internetUser : defaultUser)}" placeholder="กำหนด Internet User"></div>
+              <div class="field"><label>Internet Password</label><input type="text" id="mod_internet_pass" value="${esc(item.internetPass !== '-' ? item.internetPass : defaultPass)}" placeholder="กำหนด Internet Pass"></div>
+            </div>`;
+          }
+
           const modalBody = `
           <div style="display:flex; flex-direction:column; gap:14px;">
             <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -10271,17 +10748,7 @@ input, select, textarea, button {
               </select>
             </div>
 
-            ${item.requestType === 'VPN' ? `
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-              <div class="field"><label>VPN Username</label><input type="text" id="mod_vpn_user" value="${esc(item.vpnUser !== '-' ? item.vpnUser : defaultUser)}" placeholder="กำหนด VPN User"></div>
-              <div class="field"><label>VPN Password</label><input type="text" id="mod_vpn_pass" value="${esc(item.vpnPass !== '-' ? item.vpnPass : defaultPass)}" placeholder="กำหนด VPN Pass"></div>
-            </div>` : `
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-              <div class="field"><label>HOSxP Username</label><input type="text" id="mod_hosxp_user" value="${esc(item.hosxpUser !== '-' ? item.hosxpUser : defaultUser)}" placeholder="กำหนด HOSxP User"></div>
-              <div class="field"><label>HOSxP Password</label><input type="text" id="mod_hosxp_pass" value="${esc(item.hosxpPass !== '-' ? item.hosxpPass : defaultPass)}" placeholder="กำหนด HOSxP Pass"></div>
-              <div class="field"><label>Internet Username</label><input type="text" id="mod_internet_user" value="${esc(item.internetUser !== '-' ? item.internetUser : defaultUser)}" placeholder="กำหนด Internet User"></div>
-              <div class="field"><label>Internet Password</label><input type="text" id="mod_internet_pass" value="${esc(item.internetPass !== '-' ? item.internetPass : defaultPass)}" placeholder="กำหนด Internet Pass"></div>
-            </div>`}
+            ${fieldsHtml}
 
             <div class="field full">
               <label>หมายเหตุ / เหตุผลเพิ่มเติม</label>
@@ -10289,13 +10756,13 @@ input, select, textarea, button {
             </div>
           </div>`;
 
-          openModal('⚙️ พิจารณาคำขอใช้บริการ', modalBody, () => submitServiceApproval(docId, item.requestType));
+          openModal('⚙️ พิจารณาคำขอใช้บริการ', modalBody, () => submitServiceApproval(docId, item.requestType, item));
         })
         .catch(err => { showLoading(false); toast('ผิดพลาด: ' + err.message, 'error'); });
     }
     window.openApproveServiceModal = openApproveServiceModal;
 
-    function submitServiceApproval(docId, reqType) {
+    function submitServiceApproval(docId, reqType, item) {
       const status = $('mod_sr_status').value;
       const remark = $('mod_sr_remark').value.trim() || '-';
       
@@ -10309,12 +10776,14 @@ input, select, textarea, button {
       if (reqType === 'VPN') {
         updateData.vpnUser = $('mod_vpn_user') ? $('mod_vpn_user').value.trim() : '-';
         updateData.vpnPass = $('mod_vpn_pass') ? $('mod_vpn_pass').value.trim() : '-';
-      } else {
+      } else if (reqType !== 'ขอสิทธิ์เข้าถึงเมนูระบบ VMES') {
         updateData.hosxpUser = $('mod_hosxp_user') ? $('mod_hosxp_user').value.trim() : '-';
         updateData.hosxpPass = $('mod_hosxp_pass') ? $('mod_hosxp_pass').value.trim() : '-';
         updateData.internetUser = $('mod_internet_user') ? $('mod_internet_user').value.trim() : '-';
         updateData.internetPass = $('mod_internet_pass') ? $('mod_internet_pass').value.trim() : '-';
       }
+
+      // การเพิ่มเมนูลง allowedPages ของผู้ใช้ ทำที่ backend (updateServiceRequestStatus) เมื่ออนุมัติ
 
       showLoading(true);
       callApi('updateServiceRequestStatus', updateData, ADMIN_PASS)

@@ -162,8 +162,9 @@ async function updateBorrowingStatus(code, newStatus, receiver, user, condition,
     const foundUser = usersList.find(
       (u) => String(u['ชื่อ-นามสกุล']).trim().toLowerCase() === String(user || '').trim().toLowerCase()
     );
-    const role = foundUser ? String(foundUser['บทบาท']).trim().toLowerCase() : '';
-    const isStaff = ['superadmin', 'admin', 'manager'].includes(role) || user === 'system';
+    const roleRaw = foundUser ? String(foundUser['บทบาท'] || foundUser.role || '').trim().toLowerCase() : '';
+    const isStaff = ['superadmin', 'admin', 'manager', 'ผู้ดูแลระบบ', 'ผู้ดูแลระบบสูงสุด', 'ผู้ดูแล', 'ผู้จัดการ'].includes(roleRaw)
+      || roleRaw.includes('admin') || roleRaw.includes('superadmin') || roleRaw.includes('manager') || user === 'system';
 
     if (!isStaff) {
       throw new Error('คุณไม่มีสิทธิ์ดำเนินการในส่วนนี้');

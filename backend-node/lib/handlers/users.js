@@ -49,7 +49,9 @@ async function saveUser(data, adminCode) {
     const newPassword = data['รหัสผ่าน'];
     const passwordToStore = newPassword ? newPassword : (existingCred && existingCred['รหัสผ่าน']) || '';
 
-    const publicData = Object.assign({}, data);
+    // ฟอร์มแก้ไขส่งมาเฉพาะฟิลด์ที่แก้ได้ — คงฟิลด์อื่นของผู้ใช้เดิมไว้ (เช่น ข้อมูล MOPH ID,
+    // LINE Display Name, เลขบัตรประชาชน) ไม่ให้ setDoc แบบ full replace ลบทิ้ง
+    const publicData = Object.assign({}, existingUser || {}, data);
     delete publicData['รหัสผ่าน'];
 
     await setDoc(SHEETS.USERS, data['รหัส'], publicData);

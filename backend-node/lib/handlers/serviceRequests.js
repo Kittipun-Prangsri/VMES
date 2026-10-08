@@ -7,6 +7,8 @@ const { verifyAdmin } = require('../auth');
 const { sendServiceRequestFlex, sendTelegramServiceNotify } = require('../line');
 const { createOrUpdateHotspotUser, testMikrotikConnection } = require('../mikrotik');
 
+const MENU_ACCESS_TYPE = 'ขอสิทธิ์เข้าถึงเมนูระบบ VMES';
+
 /**
  * ดึงรายการคำขอใช้บริการทั้งหมด (สำหรับ Admin / Manager)
  */
@@ -88,7 +90,11 @@ async function createServiceRequest(formData) {
     if (!formData || !formData.nameTh) {
       return { success: false, message: 'กรุณากรอกชื่อ-นามสกุล' };
     }
-    if (!formData.idCard || String(formData.idCard).trim().length < 13) {
+    const isMenuAccess = formData.requestType === MENU_ACCESS_TYPE;
+    if (isMenuAccess && !formData.userCode) {
+      return { success: false, message: 'ไม่พบรหัสผู้ใช้งาน กรุณาเข้าสู่ระบบใหม่' };
+    }
+    if (!isMenuAccess && (!formData.idCard || String(formData.idCard).trim().length < 13)) {
       return { success: false, message: 'กรุณากรอกเลขบัตรประชาชน 13 หลักให้ถูกต้อง' };
     }
 
@@ -112,6 +118,11 @@ async function createServiceRequest(formData) {
       vpnPurpose: String(formData.vpnPurpose || '-').trim(),
       hosxpDetails: String(formData.hosxpDetails || '-').trim(),
       internetDetails: String(formData.internetDetails || '-').trim(),
+      ...(isMenuAccess ? {
+        userCode: String(formData.userCode).trim(),
+        reqMenu: String(formData.reqMenu || '').trim(),
+        reqMenuTitle: String(formData.reqMenuTitle || '').trim(),
+      } : {}),
       status: 'รอพิจารณา',
       hosxpUser: '-',
       hosxpPass: '-',
@@ -195,6 +206,18 @@ async function updateServiceRequestStatus(updateData, adminCode) {
           console.error('MikroTik API trigger error:', mkErr);
           mikrotikNote = ` (⚠️ MikroTik API: ${mkErr.message})`;
         }
+      }
+    }
+
+    // 🔐 อนุมัติคำขอสิทธิ์เมนู → เพิ่มเมนูลง allowedPages ของผู้ใช้
+    if (updated.status === 'อนุมัติ' && updated.requestType === MENU_ACCESS_TYPE && updated.userCode && updated.reqMenu) {
+      const user = await getDoc(SHEETS.USERS, updated.userCode);
+      if (user) {
+        const pages = Array.isArray(user.allowedPages) ? user.allowedPages : [];
+        if (!pages.includes(updated.reqMenu)) pages.push(updated.reqMenu);
+        await setDoc(SHEETS.USERS, updated.userCode, { ...user, allowedPages: pages });
+      } else {
+        mikrotikNote = ' (⚠️ ไม่พบบัญชีผู้ใช้ จึงยังไม่ได้เพิ่มสิทธิ์)';
       }
     }
 
