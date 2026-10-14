@@ -462,6 +462,24 @@
         <input type="tel" id="phoneInput" class="form-input w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:outline-none transition-all text-sm font-medium" placeholder="เช่น 0812345678" required>
       </div>
 
+      <!-- สถานที่นำไปใช้งาน -->
+      <div class="form-group space-y-1.5">
+        <label class="form-label text-sm font-bold text-slate-700" for="locationInput">📍 สถานที่นำไปใช้งาน <span class="req text-rose-500">*</span></label>
+        <input type="text" id="locationInput" class="form-input w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:outline-none transition-all text-sm font-medium" placeholder="เช่น ห้องประชุมทับทิมจันทร์, อาคาร 1 ชั้น 3" required>
+      </div>
+
+      <!-- วันที่และเวลาที่ต้องการรับ -->
+      <div class="grid grid-cols-2 gap-3">
+        <div class="form-group space-y-1.5">
+          <label class="form-label text-sm font-bold text-slate-700" for="pickupDateInput">วันที่ต้องการรับ <span class="req text-rose-500">*</span></label>
+          <input type="date" id="pickupDateInput" class="form-input w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:outline-none transition-all text-sm font-medium" required>
+        </div>
+        <div class="form-group space-y-1.5">
+          <label class="form-label text-sm font-bold text-slate-700" for="pickupTimeInput">เวลาที่ต้องการรับ</label>
+          <input type="time" id="pickupTimeInput" class="form-input w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:outline-none transition-all text-sm font-medium">
+        </div>
+      </div>
+
       <!-- วันที่ครบกำหนดคืน -->
       <div class="form-group space-y-1.5">
         <label class="form-label text-sm font-bold text-slate-700" for="dueDateInput">วันที่ครบกำหนดคืน <span class="req text-rose-500">*</span></label>
@@ -506,12 +524,16 @@
     const API_URL = 'https://vmes-backend.vercel.app/api/rpc';
 
     document.addEventListener('DOMContentLoaded', async () => {
-      // Set Default Due Date to +3 days from today
+      // Set Default Pickup Date to today, Due Date to +3 days from today
+      const todayStr = new Date().toISOString().split('T')[0];
+      document.getElementById('pickupDateInput').value = todayStr;
+      document.getElementById('pickupDateInput').min = todayStr;
+
       const today = new Date();
       today.setDate(today.getDate() + 3);
       const defaultDate = today.toISOString().split('T')[0];
       document.getElementById('dueDateInput').value = defaultDate;
-      document.getElementById('dueDateInput').min = new Date().toISOString().split('T')[0];
+      document.getElementById('dueDateInput').min = todayStr;
 
       // Init LIFF & Load Data
       initLiff();
@@ -880,6 +902,12 @@
     async function handleSubmit(e) {
       e.preventDefault();
 
+      const locationValue = document.getElementById('locationInput').value.trim();
+      const pickupTimeValue = document.getElementById('pickupTimeInput').value;
+      const rawPickupDate = document.getElementById('pickupDateInput').value;
+      const pickupDateParts = rawPickupDate.split('-');
+      const formattedPickupDate = pickupDateParts.length === 3 ? `${pickupDateParts[2]}/${pickupDateParts[1]}/${pickupDateParts[0]}` : rawPickupDate;
+
       let payload = {};
       if (selectedCartItems.length > 0) {
         const itemNamesSummary = selectedCartItems.map(i => `${i['ชื่ออุปกรณ์']} (x${i['จำนวน']})`).join(', ');
@@ -896,6 +924,9 @@
           'ผู้ขอยืม': document.getElementById('borrowerName').value.trim(),
           'หน่วยงาน': document.getElementById('deptInput').value.trim(),
           'เบอร์ติดต่อ': document.getElementById('phoneInput').value.trim(),
+          'สถานที่ใช้งาน': locationValue,
+          'วันที่ต้องการรับ': formattedPickupDate,
+          'เวลาที่ต้องการรับ': pickupTimeValue,
           'วันที่ครบกำหนด': formattedDueDate,
           'วัตถุประสงค์': document.getElementById('purposeInput').value.trim(),
           'LINE_USER_ID': lineProfile ? lineProfile.userId : ''
@@ -931,6 +962,9 @@
           'ผู้ขอยืม': document.getElementById('borrowerName').value.trim(),
           'หน่วยงาน': document.getElementById('deptInput').value.trim(),
           'เบอร์ติดต่อ': document.getElementById('phoneInput').value.trim(),
+          'สถานที่ใช้งาน': locationValue,
+          'วันที่ต้องการรับ': formattedPickupDate,
+          'เวลาที่ต้องการรับ': pickupTimeValue,
           'วันที่ครบกำหนด': formattedDueDate,
           'วัตถุประสงค์': document.getElementById('purposeInput').value.trim(),
           'LINE_USER_ID': lineProfile ? lineProfile.userId : ''

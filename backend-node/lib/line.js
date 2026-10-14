@@ -188,6 +188,7 @@ async function sendBorrowingFlex(data, status, targetId) {
             flexRow('📞 ติดต่อ', String(data['เบอร์ติดต่อ'] || '-')),
             flexRow('🎯 วัตถุประสงค์', String(data['วัตถุประสงค์'] || '-')),
             flexRow('📍 สถานที่ใช้งาน', String(data['สถานที่ใช้งาน'] || data['สถานที่'] || '-')),
+            ...(data['วันที่ต้องการรับ'] ? [flexRow('🕐 วันที่/เวลาต้องการรับ', String(data['วันที่ต้องการรับ']) + (data['เวลาที่ต้องการรับ'] ? ' เวลา ' + data['เวลาที่ต้องการรับ'] + ' น.' : ''))] : []),
             flexRow('📅 ครบกำหนดคืน', String(data['วันที่ครบกำหนด'] || '-')),
           ],
         },

@@ -6850,6 +6850,7 @@ input, select, textarea, button {
         <div><strong>เบอร์ติดต่อ:</strong> ${esc(b['เบอร์ติดต่อ'])}</div>
         <div><strong>วันที่ขอยืม:</strong> ${esc(b['วันที่ขอยืม'])}</div>
         <div><strong>ครบกำหนดคืน:</strong> ${esc(b['วันที่ครบกำหนด'])}</div>
+        ${b['วันที่ต้องการรับ'] ? `<div><strong>🕐 วันที่/เวลาต้องการรับ:</strong> ${esc(b['วันที่ต้องการรับ'])}${b['เวลาที่ต้องการรับ'] ? ' เวลา ' + esc(b['เวลาที่ต้องการรับ']) + ' น.' : ''}</div>` : ''}
         <div class="full" style="grid-column:1/-1"><strong>📍 สถานที่นำไปใช้งาน:</strong> <span style="color:var(--primary);font-weight:600">${esc(b['สถานที่ใช้งาน'] || b['สถานที่'] || '-')}</span></div>
         ${b['สภาพอุปกรณ์ตอนคืน'] ? '<div><strong>สภาพตอนคืน:</strong> ' + statusBadge(b['สภาพอุปกรณ์ตอนคืน']) + '</div>' : ''}
         ${b['เหตุผลขอขยายเวลา'] ? '<div class="full" style="grid-column:1/-1"><strong>เหตุผลขอขยายเวลา:</strong> ' + esc(b['เหตุผลขอขยายเวลา']) + '</div>' : ''}
