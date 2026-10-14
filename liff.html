@@ -508,6 +508,22 @@
     <p id="loadingMsg">กำลังบันทึกคำขอ...</p>
   </div>
 
+  <!-- Return Confirmation Modal (ไม่ใช้ window.confirm() เพราะ LINE in-app browser มักบล็อก/เพิกเฉย dialog กำเนิดเบราว์เซอร์แบบนี้ ปุ่มจะดูเหมือนกดไม่ติด) -->
+  <div id="returnConfirmModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4" style="display: none; z-index: 100;">
+    <div class="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-6 space-y-4">
+      <div class="text-center">
+        <div class="text-4xl mb-1">🔄</div>
+        <h3 class="text-base font-extrabold text-slate-800">ยืนยันการแจ้งคืนอุปกรณ์</h3>
+        <p class="text-xs text-slate-500 mt-1">กรุณาตรวจสอบรายการที่จะแจ้งคืนก่อนยืนยัน</p>
+      </div>
+      <div id="returnConfirmItems" class="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-1.5 max-h-48 overflow-y-auto"></div>
+      <div class="flex gap-3">
+        <button type="button" class="flex-1 py-3 rounded-xl text-sm font-bold bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors" onclick="closeReturnConfirmModal()">ยกเลิก</button>
+        <button type="button" class="flex-1 py-3 rounded-xl text-sm font-bold bg-gradient-to-r from-cyan-600 to-teal-600 text-white hover:shadow-md active:scale-[0.98] transition-all" onclick="confirmReturnSubmit()">✅ ยืนยันแจ้งคืน</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     let equipmentList = [];
     let selectedEquip = null;
@@ -661,6 +677,8 @@
     }
 
     let returnsLoaded = false;
+    let myReturnableList = [];
+    let pendingReturn = null;
 
     function switchLiffTab(tab) {
       const borrowVisible = tab === 'borrow';
@@ -696,7 +714,8 @@
         });
         const list = await res.json();
         document.getElementById('returnLoadingState').style.display = 'none';
-        renderReturnList(Array.isArray(list) ? list : []);
+        myReturnableList = Array.isArray(list) ? list : [];
+        renderReturnList(myReturnableList);
         returnsLoaded = true;
       } catch (err) {
         document.getElementById('returnLoadingState').style.display = 'none';
@@ -735,7 +754,7 @@
               <span class="shrink-0 text-xs font-bold px-2.5 py-1 rounded-full ${badge.bg} ${badge.text}">${badge.label}</span>
             </div>
             <div class="text-xs text-slate-500 space-y-0.5">
-              <div>📅 ยืมเมื่อ: ${escHtml(item['วันที่ขอยืม'] || '-')}</div>
+              <div>📅 ยืมเมื่อ: ${escHtml(item['วันที่ขอยืม'] || item['วันที่บันทึก'] || '-')}</div>
               <div>⏰ ครบกำหนดคืน: ${escHtml(item['วันที่ครบกำหนด'] || '-')}</div>
             </div>
             <button type="button" class="w-full py-2.5 px-4 rounded-xl text-xs font-bold transition-all ${isPendingReturn ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-gradient-to-r from-cyan-600 to-teal-600 text-white hover:shadow-md active:scale-[0.98]'}" ${isPendingReturn ? 'disabled' : `onclick="submitReturn('${code}')"`}>
@@ -745,8 +764,37 @@
       }).join('');
     }
 
-    async function submitReturn(code) {
-      if (!confirm('ยืนยันแจ้งคืนอุปกรณ์รายการนี้?')) return;
+    // ไม่ใช้ window.confirm() เพราะ LINE in-app browser มักบล็อก/เพิกเฉย dialog กำเนิด
+    // เบราว์เซอร์แบบนี้ (กดปุ่มแล้วดูเหมือนไม่มีอะไรเกิดขึ้นเลย) ใช้ modal ในหน้าแทน พร้อม
+    // แสดงรายการอุปกรณ์ที่จะแจ้งคืนให้ตรวจสอบก่อนกดยืนยันจริง
+    function submitReturn(code) {
+      const item = myReturnableList.find(b => String(b['รหัส']) === String(code));
+      if (!item) { alert('ไม่พบข้อมูลรายการนี้ กรุณาลองโหลดรายการใหม่อีกครั้ง'); return; }
+
+      pendingReturn = item;
+      const items = Array.isArray(item['รายการอุปกรณ์']) && item['รายการอุปกรณ์'].length
+        ? item['รายการอุปกรณ์']
+        : [{ 'ชื่ออุปกรณ์': item['ชื่ออุปกรณ์'], 'จำนวน': item['จำนวน'], 'หน่วยนับ': '' }];
+
+      document.getElementById('returnConfirmItems').innerHTML = items.map(it => `
+        <div class="flex justify-between items-center text-sm text-slate-700">
+          <span>• ${escHtml(it['ชื่ออุปกรณ์'] || '-')}</span>
+          <span class="font-bold text-slate-500">x${escHtml(it['จำนวน'] || 1)} ${escHtml(it['หน่วยนับ'] || '')}</span>
+        </div>`).join('');
+
+      document.getElementById('returnConfirmModal').style.display = 'flex';
+    }
+
+    function closeReturnConfirmModal() {
+      document.getElementById('returnConfirmModal').style.display = 'none';
+      pendingReturn = null;
+    }
+
+    async function confirmReturnSubmit() {
+      if (!pendingReturn) return;
+      const code = pendingReturn['รหัส'];
+      closeReturnConfirmModal();
+
       showLoading(true, 'กำลังแจ้งคืนอุปกรณ์...');
       try {
         const res = await fetch(API_URL, {
