@@ -9,7 +9,7 @@ const { getVehicles } = require('../lib/handlers/vehicles');
 const { getEquipment } = require('../lib/handlers/equipment');
 const { getBorrowing, updateBorrowingStatus } = require('../lib/handlers/borrowing');
 
-const { bindLineByCitizenId } = require('../lib/handlers/users');
+const { bindLineByCitizenId, getUserNameByLineId } = require('../lib/handlers/users');
 
 async function handleAutoBind13Digit(replyToken, userId, userMessage) {
   try {
@@ -484,7 +484,15 @@ async function handleCodeLookup(replyToken, userMessage) {
           type: 'button',
           style: 'secondary',
           height: 'sm',
-          action: { type: 'message', label: '✅ ตอบรับคำขอยืมนี้', text: 'เช็คคำขอ ' + id },
+          action: { type: 'message', label: '✅ รับเรื่องคำขอนี้ (เจ้าหน้าที่)', text: 'รับเรื่อง ' + id },
+        });
+      } else if (status === 'รับเรื่องแล้ว') {
+        footerButtons.unshift({
+          type: 'button',
+          style: 'primary',
+          color: '#8b5cf6',
+          height: 'sm',
+          action: { type: 'message', label: '📦 ส่งมอบอุปกรณ์แล้ว (เจ้าหน้าที่)', text: 'ส่งมอบ ' + id },
         });
       } else if (status === 'อยู่ในระหว่างการยืม' || status === 'ถึงวันครบกำหนดคืน') {
         footerButtons.unshift({
@@ -828,6 +836,84 @@ async function handleReturnMenu(replyToken) {
   await replyLineFlex(replyToken, '🔄 แจ้งคืนอุปกรณ์', flexContent);
 }
 
+// ============== STAFF ACTIONS: รับเรื่อง / ส่งมอบ ==============
+// ต่างจากการคืน (ที่ผู้ยืมเองกดแจ้งคืนของตัวเองได้) สองแอ็กชันนี้เป็นสิทธิ์เฉพาะเจ้าหน้าที่
+// เท่านั้น — เช็คจาก LINE userId ของคนที่กดปุ่มจริง (ปลอมไม่ได้ เพราะ LINE ส่ง source.userId
+// มาเองในทุก event) ว่าผูกกับบัญชีผู้ใช้ในระบบหรือไม่ ถ้าไม่เคยผูกบัญชีเลยก็ปฏิเสธทันที ถ้าผูก
+// แล้วส่งชื่อจริงต่อให้ updateBorrowingStatus() เช็คบทบาทเจ้าหน้าที่ซ้ำอีกชั้นหนึ่งตามปกติ
+async function handleBorrowingStaffAction(replyToken, userId, userMessage, targetStatus, actionLabel, noCodeHint) {
+  const match = userMessage.match(/BR-[A-Z0-9-]+/i);
+  if (!match) {
+    const flexContent = simpleErrorBubble('#ef4444', '❌ ไม่ระบุรหัสคำขอ', noCodeHint);
+    await replyLineFlex(replyToken, '❌ ไม่ระบุรหัสคำขอ', flexContent);
+    return;
+  }
+  const code = match[0].toUpperCase();
+
+  const staffName = await getUserNameByLineId(userId);
+  if (!staffName) {
+    const flexContent = simpleErrorBubble(
+      '#ef4444',
+      '🚫 ไม่มีสิทธิ์ดำเนินการ',
+      `บัญชี LINE นี้ยังไม่ได้ผูกกับบัญชีผู้ใช้ในระบบ เฉพาะเจ้าหน้าที่ที่ผูกบัญชีแล้วเท่านั้นจึงจะ${actionLabel}ได้ กรุณาติดต่อผู้ดูแลระบบ`
+    );
+    await replyLineFlex(replyToken, '🚫 ไม่มีสิทธิ์', flexContent);
+    return;
+  }
+
+  const res = await updateBorrowingStatus(code, targetStatus, staffName, staffName);
+  if (res.success) {
+    const meta = BORROWING_STATUS_MAP[targetStatus] || { color: '#3b82f6', icon: '✅', desc: targetStatus };
+    const flexContent = {
+      type: 'bubble',
+      size: 'mega',
+      header: {
+        type: 'box',
+        layout: 'vertical',
+        backgroundColor: meta.color,
+        paddingAll: '20px',
+        contents: [
+          { type: 'text', text: meta.icon + ' ' + actionLabel + 'สำเร็จ', color: '#ffffff', size: 'lg', weight: 'bold' },
+          { type: 'text', text: 'รหัสคำขอ: ' + code, color: '#ffffff', size: 'xs', margin: 'xs' },
+        ],
+      },
+      body: {
+        type: 'box',
+        layout: 'vertical',
+        paddingAll: '20px',
+        contents: [
+          { type: 'text', text: `${actionLabel}คำขอ ${code} เรียบร้อยแล้ว โดย ${staffName}`, size: 'sm', color: '#0f172a', wrap: true },
+        ],
+      },
+      footer: {
+        type: 'box',
+        layout: 'vertical',
+        paddingAll: '12px',
+        backgroundColor: '#f1f5f9',
+        contents: [{ type: 'text', text: SYSTEM_NAME, size: 'xxs', color: '#94a3b8', align: 'center' }],
+      },
+    };
+    await replyLineFlex(replyToken, actionLabel + 'สำเร็จ ' + code, flexContent);
+  } else {
+    const flexContent = simpleErrorBubble('#ef4444', '❌ ไม่สามารถ' + actionLabel + 'ได้', res.message || 'เกิดข้อผิดพลาดในการเปลี่ยนสถานะ');
+    await replyLineFlex(replyToken, '❌ ไม่สามารถ' + actionLabel + 'ได้', flexContent);
+  }
+}
+
+async function handleAcceptBorrowing(replyToken, userId, userMessage) {
+  await handleBorrowingStaffAction(
+    replyToken, userId, userMessage, 'รับเรื่องแล้ว', 'รับเรื่อง',
+    'กรุณาระบุรหัสคำขอที่ต้องการรับเรื่อง เช่น "รับเรื่อง BR-20260812-001"'
+  );
+}
+
+async function handleHandoverBorrowing(replyToken, userId, userMessage) {
+  await handleBorrowingStaffAction(
+    replyToken, userId, userMessage, 'อยู่ในระหว่างการยืม', 'ส่งมอบ',
+    'กรุณาระบุรหัสคำขอที่ต้องการส่งมอบ เช่น "ส่งมอบ BR-20260812-001"'
+  );
+}
+
 async function handleReturnBorrowing(replyToken, userMessage) {
   const match = userMessage.match(/BR-[A-Z0-9-]+/i);
   if (!match) {
@@ -944,6 +1030,14 @@ module.exports = async function handler(req, res) {
       // 1.5 ผูกบัญชีอัตโนมัติด้วยเลขบัตรประชาชน 13 หลัก (ไม่ต้องคัดลอก LINE User ID)
       else if (/\d{13}/.test(userMessage)) {
         await handleAutoBind13Digit(replyToken, userId, userMessage);
+      }
+      // 1.6 รับเรื่องคำขอยืม (เฉพาะเจ้าหน้าที่ — เช็คสิทธิ์จาก LINE userId ข้างใน handler)
+      else if (msgLower.indexOf('รับเรื่อง br-') !== -1) {
+        await handleAcceptBorrowing(replyToken, userId, userMessage);
+      }
+      // 1.7 ส่งมอบอุปกรณ์ (เฉพาะเจ้าหน้าที่ — เช็คสิทธิ์จาก LINE userId ข้างใน handler)
+      else if (msgLower.indexOf('ส่งมอบ br-') !== -1) {
+        await handleHandoverBorrowing(replyToken, userId, userMessage);
       }
       // 2. แจ้งคืนอุปกรณ์ (ระบุรหัสคำขอมาด้วย)
       else if (msgLower.indexOf('คืน br-') !== -1 || msgLower.indexOf('แจ้งคืน br-') !== -1) {

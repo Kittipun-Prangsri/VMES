@@ -28,6 +28,19 @@ function findUserByLineId(users, lineUserId) {
   return users.find((u) => u['LINE ID'] === cleanId) || null;
 }
 
+// ใช้สำหรับ LINE webhook action ที่ต้องรู้ว่า "ใคร" (ชื่อจริงที่ลงทะเบียนไว้) กำลังกดปุ่ม
+// เพื่อส่งต่อให้ updateBorrowingStatus() เช็คสิทธิ์เจ้าหน้าที่เองอีกชั้นหนึ่งตามชื่อนี้ — คืน
+// null ถ้า LINE ID นี้ไม่เคยผูกกับบัญชีผู้ใช้เลย (กันคนไม่มีบัญชีในระบบมากดปุ่มรับเรื่อง/ส่งมอบ)
+async function getUserNameByLineId(lineUserId) {
+  try {
+    const users = await getUsers();
+    const user = findUserByLineId(users, lineUserId);
+    return user ? (user['ชื่อ-นามสกุล'] || null) : null;
+  } catch (e) {
+    return null;
+  }
+}
+
 // ============== LIFF SELF-REGISTRATION ==============
 // สำหรับผู้ยืมที่กด LIFF ครั้งแรกโดยไม่เคยมีบัญชีในระบบมาก่อน — ให้ลงทะเบียนชื่อ/เบอร์โทร
 // ครั้งเดียว แล้ว stamp LINE User ID ผูกไว้กับ record อัตโนมัติ ครั้งถัดไปเปิด LIFF จะเจอ
@@ -276,4 +289,4 @@ async function bindLineByCitizenId(idCard, lineUserId, displayName) {
   }
 }
 
-module.exports = { getUsers, getUserLineId, saveUser, deleteUser, requestPasswordResetNotification, autoLinkLineUser, bindLineByCitizenId, getLiffUserProfile, registerLiffUser };
+module.exports = { getUsers, getUserLineId, saveUser, deleteUser, requestPasswordResetNotification, autoLinkLineUser, bindLineByCitizenId, getLiffUserProfile, registerLiffUser, getUserNameByLineId };
