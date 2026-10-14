@@ -778,6 +778,56 @@ async function handleHelpMenu(replyToken) {
   await replyLineFlex(replyToken, '🤖 เมนูช่วยเหลือระบบ VMES', flexContent);
 }
 
+// การ์ดปุ่มเดียวสำหรับคนพิมพ์ "คืนอุปกรณ์"/"คืน"/"แจ้งคืน" มาเฉยๆ โดยไม่มีรหัสคำขอ — ต่างจาก
+// handleHelpMenu ที่มีหลายปุ่มรวมกัน การ์ดนี้โฟกัสแค่การคืนอย่างเดียวตามที่ user ขอ กดแล้ว
+// ไปเปิดแท็บคืนใน LIFF ตรงๆ ซึ่งจะแสดงรายการที่ยืมอยู่ให้เลือกแจ้งคืน ไม่ต้องรู้รหัสเอง
+async function handleReturnMenu(replyToken) {
+  const flexContent = {
+    type: 'bubble',
+    size: 'mega',
+    header: {
+      type: 'box',
+      layout: 'vertical',
+      backgroundColor: '#06b6d4',
+      paddingAll: '20px',
+      contents: [
+        { type: 'text', text: '🔄 แจ้งคืนอุปกรณ์', color: '#ffffff', size: 'lg', weight: 'bold' },
+        { type: 'text', text: 'ดูรายการที่กำลังยืมอยู่และแจ้งคืนได้ทันที', color: '#ecfeff', size: 'xs', margin: 'xs' },
+      ],
+    },
+    body: {
+      type: 'box',
+      layout: 'vertical',
+      paddingAll: '20px',
+      contents: [
+        {
+          type: 'text',
+          text: 'กดปุ่มด้านล่างเพื่อเปิดหน้าคืนอุปกรณ์ ระบบจะแสดงรายการที่คุณกำลังยืมอยู่ทั้งหมดให้เลือกแจ้งคืนได้เลย ไม่ต้องจำรหัสคำขอ',
+          size: 'sm',
+          color: '#475569',
+          wrap: true,
+        },
+      ],
+    },
+    footer: {
+      type: 'box',
+      layout: 'vertical',
+      paddingAll: '16px',
+      backgroundColor: '#f1f5f9',
+      contents: [
+        {
+          type: 'button',
+          style: 'primary',
+          color: '#06b6d4',
+          height: 'sm',
+          action: { type: 'uri', label: '🔄 คืนอุปกรณ์', uri: 'https://liff.line.me/2011083425-G0pup6PQ?tab=return' },
+        },
+      ],
+    },
+  };
+  await replyLineFlex(replyToken, '🔄 แจ้งคืนอุปกรณ์', flexContent);
+}
+
 async function handleReturnBorrowing(replyToken, userMessage) {
   const match = userMessage.match(/BR-[A-Z0-9-]+/i);
   if (!match) {
@@ -895,9 +945,14 @@ module.exports = async function handler(req, res) {
       else if (/\d{13}/.test(userMessage)) {
         await handleAutoBind13Digit(replyToken, userId, userMessage);
       }
-      // 2. แจ้งคืนอุปกรณ์
+      // 2. แจ้งคืนอุปกรณ์ (ระบุรหัสคำขอมาด้วย)
       else if (msgLower.indexOf('คืน br-') !== -1 || msgLower.indexOf('แจ้งคืน br-') !== -1) {
         await handleReturnBorrowing(replyToken, userMessage);
+      }
+      // 2.5 เมนูคืนอุปกรณ์ (ไม่ได้ระบุรหัสมาด้วย) — การ์ดปุ่มเดียวลิงก์ตรงไปแท็บคืนใน LIFF
+      // ไม่ต้องให้ผู้ใช้จำ/พิมพ์รหัสคำขอเอง
+      else if (msgLower.indexOf('คืนอุปกรณ์') !== -1 || msgLower === 'คืน' || msgLower.indexOf('แจ้งคืน') !== -1) {
+        await handleReturnMenu(replyToken);
       }
       // 3. เช็ครถยนต์
       else if (msgLower.indexOf('เช็ครถ') !== -1 || msgLower === 'รถ' || msgLower === 'รถยนต์') {
