@@ -123,6 +123,14 @@ async function sendBorrowingFlex(data, status, targetId) {
       height: 'sm',
       action: { type: 'message', label: '⏳ ขอขยายเวลาคืน', text: 'ขอขยายเวลา ' + String(data['รหัส'] || '') },
     });
+  } else if (status === 'อยู่ในระหว่างการคืน') {
+    footerButtons.unshift({
+      type: 'button',
+      style: 'primary',
+      color: '#10b981',
+      height: 'sm',
+      action: { type: 'message', label: '✅ ยืนยันรับคืนอุปกรณ์ (เจ้าหน้าที่)', text: 'ยืนยันคืน ' + String(data['รหัส'] || '') },
+    });
   } else if (status === 'คืนเสร็จสิ้น') {
     footerButtons.unshift({
       type: 'button',

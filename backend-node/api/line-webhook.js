@@ -508,6 +508,14 @@ async function handleCodeLookup(replyToken, userMessage) {
           height: 'sm',
           action: { type: 'message', label: '⏳ ขอขยายเวลาคืน', text: 'ขอขยายเวลา ' + id },
         });
+      } else if (status === 'อยู่ในระหว่างการคืน') {
+        footerButtons.unshift({
+          type: 'button',
+          style: 'primary',
+          color: '#10b981',
+          height: 'sm',
+          action: { type: 'message', label: '✅ ยืนยันรับคืนอุปกรณ์ (เจ้าหน้าที่)', text: 'ยืนยันคืน ' + id },
+        });
       }
 
       const flexContent = {
@@ -841,7 +849,7 @@ async function handleReturnMenu(replyToken) {
 // เท่านั้น — เช็คจาก LINE userId ของคนที่กดปุ่มจริง (ปลอมไม่ได้ เพราะ LINE ส่ง source.userId
 // มาเองในทุก event) ว่าผูกกับบัญชีผู้ใช้ในระบบหรือไม่ ถ้าไม่เคยผูกบัญชีเลยก็ปฏิเสธทันที ถ้าผูก
 // แล้วส่งชื่อจริงต่อให้ updateBorrowingStatus() เช็คบทบาทเจ้าหน้าที่ซ้ำอีกชั้นหนึ่งตามปกติ
-async function handleBorrowingStaffAction(replyToken, userId, userMessage, targetStatus, actionLabel, noCodeHint) {
+async function handleBorrowingStaffAction(replyToken, userId, userMessage, targetStatus, actionLabel, noCodeHint, condition) {
   const match = userMessage.match(/BR-[A-Z0-9-]+/i);
   if (!match) {
     const flexContent = simpleErrorBubble('#ef4444', '❌ ไม่ระบุรหัสคำขอ', noCodeHint);
@@ -861,7 +869,7 @@ async function handleBorrowingStaffAction(replyToken, userId, userMessage, targe
     return;
   }
 
-  const res = await updateBorrowingStatus(code, targetStatus, staffName, staffName);
+  const res = await updateBorrowingStatus(code, targetStatus, staffName, staffName, condition);
   if (res.success) {
     const meta = BORROWING_STATUS_MAP[targetStatus] || { color: '#3b82f6', icon: '✅', desc: targetStatus };
     const flexContent = {
@@ -911,6 +919,26 @@ async function handleHandoverBorrowing(replyToken, userId, userMessage) {
   await handleBorrowingStaffAction(
     replyToken, userId, userMessage, 'อยู่ในระหว่างการยืม', 'ส่งมอบ',
     'กรุณาระบุรหัสคำขอที่ต้องการส่งมอบ เช่น "ส่งมอบ BR-20260812-001"'
+  );
+}
+
+// ขั้นสุดท้ายของวงจร: ผู้ยืมกดแจ้งคืนผ่าน LIFF/แชทแล้ว (สถานะ "อยู่ในระหว่างการคืน")
+// เจ้าหน้าที่ต้องตรวจรับของจริงก่อนปิดงานเป็น "คืนเสร็จสิ้น" — ค่าเริ่มต้นถือว่าสภาพปกติ
+// ถ้าของชำรุดให้ใช้คำสั่ง "ยืนยันคืนชำรุด BR-xxx" แทน ระบบจะปรับสถานะอุปกรณ์ชิ้นนั้นเป็น
+// ชำรุดให้อัตโนมัติ (ดู markEquipmentDamaged ใน updateBorrowingStatus)
+async function handleConfirmReturn(replyToken, userId, userMessage) {
+  await handleBorrowingStaffAction(
+    replyToken, userId, userMessage, 'คืนเสร็จสิ้น', 'ยืนยันรับคืน',
+    'กรุณาระบุรหัสคำขอที่ต้องการยืนยันรับคืน เช่น "ยืนยันคืน BR-20260812-001"',
+    'ปกติ'
+  );
+}
+
+async function handleConfirmReturnDamaged(replyToken, userId, userMessage) {
+  await handleBorrowingStaffAction(
+    replyToken, userId, userMessage, 'คืนเสร็จสิ้น', 'ยืนยันรับคืน (ชำรุด)',
+    'กรุณาระบุรหัสคำขอที่ต้องการยืนยันรับคืนแบบชำรุด เช่น "ยืนยันคืนชำรุด BR-20260812-001"',
+    'ชำรุดบางส่วน'
   );
 }
 
@@ -1042,6 +1070,15 @@ module.exports = async function handler(req, res) {
       // 1.7 ส่งมอบอุปกรณ์ (เฉพาะเจ้าหน้าที่ — เช็คสิทธิ์จาก LINE userId ข้างใน handler)
       else if (msgLower.indexOf('ส่งมอบ br-') !== -1) {
         await handleHandoverBorrowing(replyToken, userId, userMessage);
+      }
+      // 1.8/1.9 ยืนยันรับคืน (เฉพาะเจ้าหน้าที่) — ต้องเช็คก่อนกิ่ง "คืน br-" ด้านล่างเสมอ เพราะ
+      // "ยืนยันคืน br-..." เองก็มีคำว่า "คืน br-" เป็น substring อยู่ในตัว ถ้าสลับลำดับจะถูก
+      // กิ่งแจ้งคืน (ของผู้ยืม) ตัดหน้าไปก่อน ไม่มีทางมาถึงกิ่งนี้เลย
+      else if (msgLower.indexOf('ยืนยันคืนชำรุด br-') !== -1) {
+        await handleConfirmReturnDamaged(replyToken, userId, userMessage);
+      }
+      else if (msgLower.indexOf('ยืนยันคืน br-') !== -1) {
+        await handleConfirmReturn(replyToken, userId, userMessage);
       }
       // 2. แจ้งคืนอุปกรณ์ (ระบุรหัสคำขอมาด้วย)
       else if (msgLower.indexOf('คืน br-') !== -1 || msgLower.indexOf('แจ้งคืน br-') !== -1) {
