@@ -298,6 +298,63 @@ async function getBorrowingByCode(code) {
   }
 }
 
+// ============== RETURN VIA LIFF ==============
+// เดิมการ "คืน" ผ่านไลน์ทำได้แค่พิมพ์แชทคำสั่ง "คืน BR-xxxxx" ซึ่งผู้ใช้ทั่วไปแทบไม่มีทางรู้
+// รหัสคำขอยืมของตัวเองมาพิมพ์เอง (ไม่มีปุ่ม/เมนูให้กดโดยตรง) ฟังก์ชันคู่นี้เปิดให้ LIFF
+// แสดงรายการที่ผู้ใช้คนนั้นยืมอยู่ (จับคู่ด้วย LINE_USER_ID ที่บันทึกไว้ตอนยืม — ไม่ต้องรู้
+// รหัสคำขอเลย) แล้วกดปุ่มแจ้งคืนได้ตรงๆ — เช็คความเป็นเจ้าของด้วย LINE_USER_ID ก่อนเสมอ
+// กันไม่ให้คนอื่นกดแจ้งคืนแทนเจ้าของจริงได้
+
+async function getMyActiveBorrowings(lineUserId) {
+  try {
+    const cleanLineId = String(lineUserId || '').trim();
+    if (!cleanLineId) return [];
+    const all = await getBorrowing();
+    return all.filter(
+      (b) => String(b['LINE_USER_ID'] || '') === cleanLineId && ACTIVE_BORROW_STATUSES.includes(b['สถานะ'])
+    );
+  } catch (err) {
+    return [];
+  }
+}
+
+async function requestReturnViaLiff(code, lineUserId) {
+  try {
+    const cleanCode = String(code || '').trim();
+    const cleanLineId = String(lineUserId || '').trim();
+    if (!cleanCode) return { success: false, message: 'ไม่พบรหัสคำขอยืม' };
+    if (!cleanLineId) return { success: false, message: 'ไม่พบข้อมูล LINE ผู้ใช้ กรุณาเปิดผ่านแอป LINE' };
+
+    const item = await getDoc(SHEETS.BORROWING, cleanCode);
+    if (!item) return { success: false, message: 'ไม่พบข้อมูลคำขอยืม' };
+
+    if (String(item['LINE_USER_ID'] || '') !== cleanLineId) {
+      return { success: false, message: 'คุณไม่มีสิทธิ์แจ้งคืนรายการนี้' };
+    }
+
+    if (item['สถานะ'] === 'อยู่ในระหว่างการคืน') {
+      return { success: false, message: 'รายการนี้แจ้งคืนไปแล้ว กำลังรอเจ้าหน้าที่ตรวจรับ' };
+    }
+    if (!ACTIVE_BORROW_STATUSES.includes(item['สถานะ'])) {
+      return { success: false, message: 'รายการนี้ไม่อยู่ในสถานะที่แจ้งคืนได้ (สถานะปัจจุบัน: ' + item['สถานะ'] + ')' };
+    }
+
+    item['สถานะ'] = 'อยู่ในระหว่างการคืน';
+    await setDoc(SHEETS.BORROWING, item['รหัส'], item);
+
+    await sendBorrowingFlex(item, 'อยู่ในระหว่างการคืน');
+    const userLineId = await resolveBorrowerLineId(item);
+    if (userLineId) {
+      await sendBorrowingFlex(item, 'อยู่ในระหว่างการคืน', userLineId);
+    }
+
+    await logAudit('แจ้งคืนอุปกรณ์ผ่าน LIFF', item['ผู้ขอยืม'] || 'LINE User', item['รหัส']);
+    return { success: true, message: 'แจ้งคืนอุปกรณ์สำเร็จ รอเจ้าหน้าที่ตรวจรับอุปกรณ์' };
+  } catch (err) {
+    return { success: false, message: err.message };
+  }
+}
+
 async function deleteBorrowing(code, adminCode, reason) {
   if (!verifyAdmin(adminCode)) return { success: false, message: 'ต้องเป็น Admin' };
   const item = await getDoc(SHEETS.BORROWING, String(code));
@@ -315,4 +372,6 @@ module.exports = {
   approveBorrowExtension,
   getBorrowingByCode,
   deleteBorrowing,
+  getMyActiveBorrowings,
+  requestReturnViaLiff,
 };

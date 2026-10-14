@@ -23,6 +23,8 @@ const {
   approveBorrowExtension,
   getBorrowingByCode,
   deleteBorrowing,
+  getMyActiveBorrowings,
+  requestReturnViaLiff,
 } = require('./handlers/borrowing');
 const { saveUser, deleteUser, requestPasswordResetNotification, autoLinkLineUser, bindLineByCitizenId, getLiffUserProfile, registerLiffUser } = require('./handlers/users');
 const { saveDriver, deleteDriver } = require('./handlers/drivers');
@@ -90,6 +92,8 @@ const API_WHITELIST = {
   approveBorrowExtension,
   getBorrowingByCode,
   deleteBorrowing,
+  getMyActiveBorrowings,
+  requestReturnViaLiff,
 
   // Users
   saveUser,

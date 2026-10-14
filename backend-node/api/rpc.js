@@ -28,6 +28,8 @@ const PUBLIC_FUNCTIONS = new Set([
   'bindLineByCitizenId',
   'getLiffUserProfile',
   'registerLiffUser',
+  'getMyActiveBorrowings',
+  'requestReturnViaLiff',
 ]);
 
 function readRawBody(req) {
