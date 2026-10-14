@@ -571,6 +571,15 @@
                 })
               }).catch(() => {});
               await checkLiffRegistration(lineProfile);
+
+              // รองรับลิงก์ลัดเข้าแท็บคืนอุปกรณ์ตรง (ปุ่ม "แจ้งคืนอุปกรณ์ (LIFF)" ใน Help Menu
+              // ส่ง ?tab=return มาด้วย) — ต้องอ่าน query ใหม่ "หลัง" liff.init() เสร็จเท่านั้น
+              // เพราะถ้าเปิดผ่านเบราว์เซอร์นอกแอป LINE ค่า query เดิมจะถูกห่อไว้ใน
+              // liff.state และ SDK จะคลี่กลับเป็น query จริงให้ตอน init() เสร็จเท่านั้น
+              const postInitParams = new URLSearchParams(window.location.search);
+              if (postInitParams.get('tab') === 'return') {
+                switchLiffTab('return');
+              }
             }
           } else if (liff.isInClient && liff.isInClient()) {
             liff.login();

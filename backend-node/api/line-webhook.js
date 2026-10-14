@@ -421,6 +421,13 @@ async function handleBorrowingList(replyToken) {
         },
         {
           type: 'button',
+          style: 'primary',
+          color: '#06b6d4',
+          height: 'sm',
+          action: { type: 'uri', label: '🔄 แจ้งคืนอุปกรณ์ (LIFF)', uri: 'https://liff.line.me/2011083425-G0pup6PQ?tab=return' },
+        },
+        {
+          type: 'button',
           style: 'secondary',
           height: 'sm',
           action: { type: 'message', label: '💻 ดูรายการอุปกรณ์ที่ยืมได้', text: 'เช็คอุปกรณ์' },
@@ -715,6 +722,13 @@ async function handleHelpMenu(replyToken) {
               color: '#4f46e5',
               height: 'sm',
               action: { type: 'uri', label: '📦 ทำรายการยืมอุปกรณ์ (LIFF)', uri: 'https://liff.line.me/2011083425-G0pup6PQ' },
+            },
+            {
+              type: 'button',
+              style: 'primary',
+              color: '#06b6d4',
+              height: 'sm',
+              action: { type: 'uri', label: '🔄 แจ้งคืนอุปกรณ์ (LIFF)', uri: 'https://liff.line.me/2011083425-G0pup6PQ?tab=return' },
             },
             {
               type: 'button',
