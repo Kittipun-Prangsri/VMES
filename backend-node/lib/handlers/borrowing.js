@@ -14,6 +14,16 @@ async function getBorrowing() {
   return listDocs(SHEETS.BORROWING);
 }
 
+// แบบฟอร์มยืมผ่าน LIFF (liff.html) แนบ LINE_USER_ID จาก liff.getProfile() มาด้วยอยู่แล้วตอนยืม
+// (ผู้ขอยืมพิมพ์ชื่อเองในช่องฟอร์ม อาจสะกด/เว้นวรรคไม่ตรงกับชื่อที่ลงทะเบียนไว้ใน users)
+// ใช้ค่านี้ก่อนเสมอถ้ามี แทนที่จะพึ่ง getUserLineId() ซึ่ง match ชื่อแบบ exact string เทียบกับ
+// collection users เพียงอย่างเดียว — ไม่งั้นผู้ยืมผ่าน LIFF จะไม่ได้รับแจ้งเตือนส่วนตัวเลย
+// ทั้งที่ระบบรู้ LINE ID ของเขาอยู่แล้วตั้งแต่ตอนส่งคำขอ
+async function resolveBorrowerLineId(record) {
+  if (record['LINE_USER_ID']) return record['LINE_USER_ID'];
+  return await getUserLineId(record['ผู้ขอยืม']);
+}
+
 const ACTIVE_BORROW_STATUSES = ['รอรับเรื่อง', 'รับเรื่องแล้ว', 'อยู่ในระหว่างการยืม', 'ถึงวันครบกำหนดคืน', 'อยู่ในระหว่างการคืน'];
 
 async function saveBorrowing(data, user) {
@@ -126,7 +136,7 @@ async function saveBorrowing(data, user) {
       await sendBorrowingFlex(data, 'รอรับเรื่อง');
 
       // 2. ตรวจสอบ LINE ID และส่งแจ้งเตือนหาส่วนตัว
-      const userLineId = await getUserLineId(data['ผู้ขอยืม']);
+      const userLineId = await resolveBorrowerLineId(data);
       if (userLineId) {
         await sendBorrowingFlex(data, 'รอรับเรื่อง', userLineId);
       }
@@ -197,7 +207,7 @@ async function updateBorrowingStatus(code, newStatus, receiver, user, condition,
     await sendBorrowingFlex(item, newStatus);
 
     // 2. แจ้งเตือนสถานะล่าสุดไปยังผู้ยืมแบบส่วนตัว
-    const userLineId = await getUserLineId(item['ผู้ขอยืม']);
+    const userLineId = await resolveBorrowerLineId(item);
     if (userLineId) {
       await sendBorrowingFlex(item, newStatus, userLineId);
     }
@@ -224,7 +234,7 @@ async function requestBorrowExtension(code, newDueDate, reason, user) {
     await setDoc(SHEETS.BORROWING, item['รหัส'], item);
 
     await sendBorrowingFlex(item, 'ขอขยายเวลา');
-    const userLineId = await getUserLineId(item['ผู้ขอยืม']);
+    const userLineId = await resolveBorrowerLineId(item);
     if (userLineId) {
       await sendBorrowingFlex(item, 'ขอขยายเวลา', userLineId);
     }
@@ -249,7 +259,7 @@ async function approveBorrowExtension(code, newDueDate, approver) {
     await setDoc(SHEETS.BORROWING, item['รหัส'], item);
 
     await sendBorrowingFlex(item, 'อนุมัติขยายเวลา');
-    const userLineId = await getUserLineId(item['ผู้ขอยืม']);
+    const userLineId = await resolveBorrowerLineId(item);
     if (userLineId) {
       await sendBorrowingFlex(item, 'อนุมัติขยายเวลา', userLineId);
     }
