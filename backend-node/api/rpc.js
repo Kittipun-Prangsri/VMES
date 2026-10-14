@@ -26,6 +26,8 @@ const PUBLIC_FUNCTIONS = new Set([
   'saveBorrowing',
   'autoLinkLineUser',
   'bindLineByCitizenId',
+  'getLiffUserProfile',
+  'registerLiffUser',
 ]);
 
 function readRawBody(req) {

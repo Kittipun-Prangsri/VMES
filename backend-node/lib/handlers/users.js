@@ -22,6 +22,71 @@ async function getUserLineId(userName) {
   }
 }
 
+function findUserByLineId(users, lineUserId) {
+  const cleanId = String(lineUserId || '').trim();
+  if (!cleanId) return null;
+  return users.find((u) => u['LINE ID'] === cleanId) || null;
+}
+
+// ============== LIFF SELF-REGISTRATION ==============
+// สำหรับผู้ยืมที่กด LIFF ครั้งแรกโดยไม่เคยมีบัญชีในระบบมาก่อน — ให้ลงทะเบียนชื่อ/เบอร์โทร
+// ครั้งเดียว แล้ว stamp LINE User ID ผูกไว้กับ record อัตโนมัติ ครั้งถัดไปเปิด LIFF จะเจอ
+// โปรไฟล์เดิมผ่าน getLiffUserProfile() ไม่ต้องกรอกซ้ำ ฟังก์ชันนี้เป็น public (ไม่ผ่าน
+// admin auth เหมือน saveUser ทั่วไป) จึงจงใจไม่สร้าง userCredentials คู่กันเลย — บัญชีที่
+// ลงทะเบียนผ่านทางนี้จะไม่มีรหัสผ่าน ล็อกอินเข้าหน้าแอดมินไม่ได้โดยเด็ดขาด เป็นแค่โปรไฟล์
+// สำหรับอ้างอิงตอนยืมอุปกรณ์/รับแจ้งเตือนเท่านั้น
+
+// คืนเฉพาะข้อมูลของ LINE ID ที่ขอมาเท่านั้น (ไม่คืนรายชื่อผู้ใช้ทั้งหมด) เพื่อไม่ให้ endpoint
+// สาธารณะนี้รั่วข้อมูลผู้ใช้คนอื่นออกไป
+async function getLiffUserProfile(lineUserId) {
+  try {
+    const users = await getUsers();
+    const user = findUserByLineId(users, lineUserId);
+    if (!user) return { success: true, found: false };
+    return {
+      success: true,
+      found: true,
+      name: user['ชื่อ-นามสกุล'] || '',
+      phone: user['เบอร์ติดต่อ'] || '',
+      dept: user['หน่วยงาน'] || '',
+    };
+  } catch (err) {
+    return { success: false, message: err.message };
+  }
+}
+
+async function registerLiffUser(lineUserId, displayName, name, phone, dept) {
+  try {
+    const cleanLineId = String(lineUserId || '').trim();
+    const cleanName = String(name || '').trim();
+    const cleanPhone = String(phone || '').trim();
+    if (!cleanLineId) return { success: false, message: 'ไม่พบ LINE User ID' };
+    if (!cleanName) return { success: false, message: 'กรุณากรอกชื่อ-นามสกุล' };
+    if (!cleanPhone) return { success: false, message: 'กรุณากรอกเบอร์โทรศัพท์' };
+
+    const users = await getUsers();
+    const existing = findUserByLineId(users, cleanLineId);
+
+    const data = {
+      'รหัส': existing ? existing['รหัส'] : newId('UR'),
+      'ชื่อ-นามสกุล': cleanName,
+      'เบอร์ติดต่อ': cleanPhone,
+      'หน่วยงาน': String(dept || '').trim() || (existing && existing['หน่วยงาน']) || '',
+      'บทบาท': (existing && existing['บทบาท']) || 'ผู้ใช้งานเฉพาะตัวเอง',
+      'สถานะ': (existing && existing['สถานะ']) || 'พร้อมใช้งาน',
+      'LINE ID': cleanLineId,
+      'LINE Display Name': displayName || (existing && existing['LINE Display Name']) || '',
+      'วันที่บันทึก': (existing && existing['วันที่บันทึก']) || todayStr(),
+    };
+
+    await setDoc(SHEETS.USERS, data['รหัส'], Object.assign({}, existing || {}, data));
+    await logAudit('ลงทะเบียนผู้ใช้ผ่าน LIFF', cleanName, `LINE ID: ${cleanLineId}`);
+    return { success: true, name: cleanName, phone: cleanPhone };
+  } catch (err) {
+    return { success: false, message: err.message };
+  }
+}
+
 // หมายเหตุความปลอดภัย: รหัสผ่านผู้ใช้จะไม่ถูกเขียนลง collection "users" ที่ frontend
 // ฟัง real-time อีกต่อไป — แยกเก็บใน collection "userCredentials"
 async function saveUser(data, adminCode) {
@@ -211,4 +276,4 @@ async function bindLineByCitizenId(idCard, lineUserId, displayName) {
   }
 }
 
-module.exports = { getUsers, getUserLineId, saveUser, deleteUser, requestPasswordResetNotification, autoLinkLineUser, bindLineByCitizenId };
+module.exports = { getUsers, getUserLineId, saveUser, deleteUser, requestPasswordResetNotification, autoLinkLineUser, bindLineByCitizenId, getLiffUserProfile, registerLiffUser };

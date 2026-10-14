@@ -377,8 +377,31 @@
       </div>
     </div>
 
+    <!-- First-time LIFF registration gate -->
+    <div id="registerCard" class="form-body p-5 sm:p-6 space-y-4" style="display: none;">
+      <div class="text-center mb-2">
+        <p class="text-sm font-bold text-slate-700">👋 ยินดีต้อนรับ! เป็นการใช้งานครั้งแรกของคุณ</p>
+        <p class="text-xs text-slate-500 mt-1">กรุณาลงทะเบียนชื่อ-เบอร์โทรครั้งเดียว ครั้งต่อไปจะไม่ต้องกรอกซ้ำ</p>
+      </div>
+      <div class="form-group space-y-1.5">
+        <label class="form-label text-sm font-bold text-slate-700" for="reg_name">ชื่อ-นามสกุล <span class="req text-rose-500">*</span></label>
+        <input type="text" id="reg_name" class="form-input w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:outline-none transition-all text-sm font-medium" placeholder="ระบุชื่อ-นามสกุล" required>
+      </div>
+      <div class="form-group space-y-1.5">
+        <label class="form-label text-sm font-bold text-slate-700" for="reg_phone">เบอร์โทรศัพท์ <span class="req text-rose-500">*</span></label>
+        <input type="tel" id="reg_phone" class="form-input w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:outline-none transition-all text-sm font-medium" placeholder="เช่น 0812345678" required>
+      </div>
+      <div class="form-group space-y-1.5">
+        <label class="form-label text-sm font-bold text-slate-700" for="reg_dept">หน่วยงาน/สังกัด</label>
+        <input type="text" id="reg_dept" class="form-input w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:outline-none transition-all text-sm font-medium" placeholder="เช่น งานสารสนเทศ, งานบริหาร (ไม่กรอกก็ได้)">
+      </div>
+      <button type="button" id="registerBtn" class="submit-btn w-full py-3.5 px-6 bg-gradient-to-r from-indigo-600 via-indigo-700 to-purple-700 hover:from-indigo-500 hover:to-purple-600 text-white font-extrabold rounded-xl shadow-lg shadow-indigo-500/30 active:scale-[0.98] transition-all duration-200 flex items-center justify-center gap-2 text-base mt-4" onclick="submitLiffRegistration()">
+        ✅ ลงทะเบียนและดำเนินการต่อ
+      </button>
+    </div>
+
     <form id="borrowForm" class="form-body p-5 sm:p-6 space-y-4" onsubmit="handleSubmit(event)">
-      
+
       <!-- เลือกอุปกรณ์ -->
       <div class="form-group space-y-1.5">
         <div class="flex justify-between items-center">
@@ -508,6 +531,7 @@
                   args: [lineProfile.userId, lineProfile.displayName, lineProfile.displayName]
                 })
               }).catch(() => {});
+              await checkLiffRegistration(lineProfile);
             }
           } else if (liff.isInClient && liff.isInClient()) {
             liff.login();
@@ -537,6 +561,72 @@
       }
       if (profile.displayName) {
         document.getElementById('borrowerName').value = profile.displayName;
+      }
+    }
+
+    // เช็คว่า LINE account นี้เคยลงทะเบียน ชื่อ-เบอร์โทร ไว้แล้วหรือยัง — ถ้ายัง ให้สลับไปโชว์
+    // การ์ดลงทะเบียนครั้งแรกแทนฟอร์มยืม ถ้าเคยแล้วให้ดึงชื่อ/เบอร์/หน่วยงานเดิมมาเติมให้เลย
+    // ไม่ต้องให้พิมพ์ซ้ำทุกครั้งที่ยืม
+    async function checkLiffRegistration(profile) {
+      try {
+        const res = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fn: 'getLiffUserProfile', args: [profile.userId] })
+        });
+        const result = await res.json();
+
+        if (result && result.success && result.found) {
+          document.getElementById('borrowerName').value = result.name || profile.displayName || '';
+          document.getElementById('phoneInput').value = result.phone || '';
+          if (result.dept) document.getElementById('deptInput').value = result.dept;
+          document.getElementById('registerCard').style.display = 'none';
+          document.getElementById('borrowForm').style.display = 'block';
+        } else {
+          document.getElementById('reg_name').value = profile.displayName || '';
+          document.getElementById('borrowForm').style.display = 'none';
+          document.getElementById('registerCard').style.display = 'block';
+        }
+      } catch (err) {
+        console.error('checkLiffRegistration error:', err);
+        // เช็คไม่สำเร็จ (เช่น เน็ตหลุด) ให้ปล่อยผ่านไปใช้ฟอร์มยืมตามปกติ ดีกว่าค้างผู้ใช้ไว้
+      }
+    }
+
+    async function submitLiffRegistration() {
+      const name = document.getElementById('reg_name').value.trim();
+      const phone = document.getElementById('reg_phone').value.trim();
+      const dept = document.getElementById('reg_dept').value.trim();
+
+      if (!name) { alert('กรุณากรอกชื่อ-นามสกุล'); return; }
+      if (!phone) { alert('กรุณากรอกเบอร์โทรศัพท์'); return; }
+      if (!lineProfile || !lineProfile.userId) { alert('ไม่พบข้อมูล LINE โปรดเปิดผ่านแอป LINE อีกครั้ง'); return; }
+
+      showLoading(true, 'กำลังลงทะเบียน...');
+      try {
+        const res = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fn: 'registerLiffUser',
+            args: [lineProfile.userId, lineProfile.displayName, name, phone, dept]
+          })
+        });
+        const result = await res.json();
+        showLoading(false);
+
+        if (result && result.success) {
+          document.getElementById('borrowerName').value = name;
+          document.getElementById('phoneInput').value = phone;
+          if (dept) document.getElementById('deptInput').value = dept;
+          document.getElementById('registerCard').style.display = 'none';
+          document.getElementById('borrowForm').style.display = 'block';
+        } else {
+          alert('ลงทะเบียนไม่สำเร็จ: ' + (result ? result.message : 'ไม่สามารถเชื่อมต่อระบบได้'));
+        }
+      } catch (err) {
+        showLoading(false);
+        alert('เกิดข้อผิดพลาดในการเชื่อมต่อระบบ: ' + err.message);
       }
     }
 
