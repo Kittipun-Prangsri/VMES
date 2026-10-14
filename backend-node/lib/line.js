@@ -106,7 +106,15 @@ async function sendBorrowingFlex(data, status, targetId) {
       type: 'button',
       style: 'secondary',
       height: 'sm',
-      action: { type: 'message', label: '✅ ตอบรับคำขอยืมนี้', text: 'เช็คคำขอ ' + String(data['รหัส'] || '') },
+      action: { type: 'message', label: '✅ รับเรื่องคำขอนี้ (เจ้าหน้าที่)', text: 'รับเรื่อง ' + String(data['รหัส'] || '') },
+    });
+  } else if (status === 'รับเรื่องแล้ว') {
+    footerButtons.unshift({
+      type: 'button',
+      style: 'primary',
+      color: '#8b5cf6',
+      height: 'sm',
+      action: { type: 'message', label: '📦 ส่งมอบอุปกรณ์แล้ว (เจ้าหน้าที่)', text: 'ส่งมอบ ' + String(data['รหัส'] || '') },
     });
   } else if (status === 'อยู่ในระหว่างการยืม' || status === 'ถึงวันครบกำหนดคืน') {
     footerButtons.unshift({
