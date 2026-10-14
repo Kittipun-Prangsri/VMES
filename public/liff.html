@@ -377,22 +377,8 @@
       </div>
     </div>
 
-    <!-- Tab switcher: borrow / return -->
-    <div id="liffTabs" class="flex border-b border-slate-200 bg-slate-50">
-      <button type="button" id="tabBtnBorrow" class="flex-1 py-3 text-sm font-bold text-indigo-700 border-b-2 border-indigo-600 bg-white transition-colors" onclick="switchLiffTab('borrow')">📦 ยืมอุปกรณ์</button>
-      <button type="button" id="tabBtnReturn" class="flex-1 py-3 text-sm font-bold text-slate-500 border-b-2 border-transparent transition-colors" onclick="switchLiffTab('return')">🔄 คืนอุปกรณ์</button>
-    </div>
-
-    <!-- Return section -->
-    <div id="returnSection" class="form-body p-5 sm:p-6 space-y-3" style="display: none;">
-      <div id="returnEmptyState" class="text-center py-10 text-slate-400" style="display:none;">
-        <div class="text-4xl mb-2">📭</div>
-        <p class="text-sm font-medium">ไม่มีรายการที่กำลังยืมอยู่</p>
-      </div>
-      <div id="returnLoadingState" class="text-center py-10 text-slate-400">
-        <p class="text-sm font-medium">กำลังโหลดรายการที่ยืมอยู่...</p>
-      </div>
-      <div id="returnList" class="space-y-3"></div>
+    <div class="px-5 pt-4 bg-slate-50 border-b border-slate-200 pb-3">
+      <a href="/liff-return.html" class="block text-center text-xs font-bold text-cyan-700 hover:text-cyan-800 transition-colors">🔄 ต้องการคืนอุปกรณ์แทน? กดที่นี่</a>
     </div>
 
     <!-- First-time LIFF registration gate -->
@@ -508,31 +494,12 @@
     <p id="loadingMsg">กำลังบันทึกคำขอ...</p>
   </div>
 
-  <!-- Return Confirmation Modal (ไม่ใช้ window.confirm() เพราะ LINE in-app browser มักบล็อก/เพิกเฉย dialog กำเนิดเบราว์เซอร์แบบนี้ ปุ่มจะดูเหมือนกดไม่ติด) -->
-  <div id="returnConfirmModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4" style="display: none; z-index: 100;">
-    <div class="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-6 space-y-4">
-      <div class="text-center">
-        <div class="text-4xl mb-1">🔄</div>
-        <h3 class="text-base font-extrabold text-slate-800">ยืนยันการแจ้งคืนอุปกรณ์</h3>
-        <p class="text-xs text-slate-500 mt-1">กรุณาตรวจสอบรายการที่จะแจ้งคืนก่อนยืนยัน</p>
-      </div>
-      <div id="returnConfirmItems" class="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-1.5 max-h-48 overflow-y-auto"></div>
-      <div class="flex gap-3">
-        <button type="button" class="flex-1 py-3 rounded-xl text-sm font-bold bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors" onclick="closeReturnConfirmModal()">ยกเลิก</button>
-        <button type="button" class="flex-1 py-3 rounded-xl text-sm font-bold bg-gradient-to-r from-cyan-600 to-teal-600 text-white hover:shadow-md active:scale-[0.98] transition-all" onclick="confirmReturnSubmit()">✅ ยืนยันแจ้งคืน</button>
-      </div>
-    </div>
-  </div>
-
   <script>
     let equipmentList = [];
     let selectedEquip = null;
     let lineProfile = null;
     let selectedCartItems = [];
-    // true = เคยลงทะเบียนแล้ว (โชว์ borrowForm), false = ยังไม่เคย (โชว์ registerCard) —
-    // ใช้ตัวแปรนี้แทนการอ่าน style.display ของ DOM ตรงๆ เพราะ switchLiffTab() จะ set ทั้ง
-    // borrowForm/registerCard เป็น 'none' ตอนสลับไปแท็บคืนอุปกรณ์ ถ้าอ่านจาก DOM จะจำสถานะ
-    // เดิมไม่ได้อีกเลยหลังสลับแท็บครั้งแรก
+    // true = เคยลงทะเบียนแล้ว (โชว์ borrowForm), false = ยังไม่เคย (โชว์ registerCard)
     let liffRegistered = true;
 
     // Default API Host (Vercel API)
@@ -572,13 +539,16 @@
               }).catch(() => {});
               await checkLiffRegistration(lineProfile);
 
-              // รองรับลิงก์ลัดเข้าแท็บคืนอุปกรณ์ตรง (ปุ่ม "แจ้งคืนอุปกรณ์ (LIFF)" ใน Help Menu
+              // รองรับลิงก์ลัดเข้าหน้าคืนอุปกรณ์ตรง (ปุ่ม "แจ้งคืนอุปกรณ์ (LIFF)" ใน Help Menu
               // ส่ง ?tab=return มาด้วย) — ต้องอ่าน query ใหม่ "หลัง" liff.init() เสร็จเท่านั้น
-              // เพราะถ้าเปิดผ่านเบราว์เซอร์นอกแอป LINE ค่า query เดิมจะถูกห่อไว้ใน
-              // liff.state และ SDK จะคลี่กลับเป็น query จริงให้ตอน init() เสร็จเท่านั้น
+              // เพราะถ้าเปิดผ่านเบราว์เซอร์นอกแอป LINE ค่า query เดิมจะถูกห่อไว้ใน liff.state
+              // และ SDK จะคลี่กลับเป็น query จริงให้ตอน init() เสร็จเท่านั้น — ฟอร์มคืนอุปกรณ์
+              // แยกเป็นไฟล์ liff-return.html ต่างหาก แต่ LIFF endpoint ที่ลงทะเบียนไว้ชี้มาที่
+              // ไฟล์นี้ไฟล์เดียว เลยต้อง redirect ต่อไปเองหลัง init() สำเร็จ
               const postInitParams = new URLSearchParams(window.location.search);
               if (postInitParams.get('tab') === 'return') {
-                switchLiffTab('return');
+                window.location.replace('/liff-return.html');
+                return;
               }
             }
           } else if (liff.isInClient && liff.isInClient()) {
@@ -674,150 +644,6 @@
           document.getElementById('borrowForm').style.display = 'block';
         } else {
           alert('ลงทะเบียนไม่สำเร็จ: ' + (result ? result.message : 'ไม่สามารถเชื่อมต่อระบบได้'));
-        }
-      } catch (err) {
-        showLoading(false);
-        alert('เกิดข้อผิดพลาดในการเชื่อมต่อระบบ: ' + err.message);
-      }
-    }
-
-    function escHtml(s) {
-      return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-    }
-
-    let returnsLoaded = false;
-    let myReturnableList = [];
-    let pendingReturn = null;
-
-    function switchLiffTab(tab) {
-      const borrowVisible = tab === 'borrow';
-      document.getElementById('tabBtnBorrow').className = 'flex-1 py-3 text-sm font-bold transition-colors ' + (borrowVisible ? 'text-indigo-700 border-b-2 border-indigo-600 bg-white' : 'text-slate-500 border-b-2 border-transparent');
-      document.getElementById('tabBtnReturn').className = 'flex-1 py-3 text-sm font-bold transition-colors ' + (!borrowVisible ? 'text-indigo-700 border-b-2 border-indigo-600 bg-white' : 'text-slate-500 border-b-2 border-transparent');
-
-      // ฟอร์มยืม/การ์ดลงทะเบียนอยู่กลุ่มเดียวกัน — ใช้ liffRegistered (ไม่ใช่ DOM) เพื่อรู้ว่า
-      // ควรกลับไปโชว์อันไหนตอนสลับแท็บมา "ยืมอุปกรณ์" อีกครั้ง
-      document.getElementById('borrowForm').style.display = borrowVisible && liffRegistered ? 'block' : 'none';
-      document.getElementById('registerCard').style.display = borrowVisible && !liffRegistered ? 'block' : 'none';
-      document.getElementById('returnSection').style.display = borrowVisible ? 'none' : 'block';
-
-      if (!borrowVisible) loadMyReturns();
-    }
-
-    async function loadMyReturns() {
-      if (!lineProfile || !lineProfile.userId) {
-        document.getElementById('returnLoadingState').style.display = 'none';
-        document.getElementById('returnEmptyState').style.display = 'block';
-        document.getElementById('returnEmptyState').querySelector('p').textContent = 'กรุณาเปิดผ่านแอป LINE เพื่อดูรายการที่ยืมอยู่';
-        return;
-      }
-
-      document.getElementById('returnLoadingState').style.display = 'block';
-      document.getElementById('returnEmptyState').style.display = 'none';
-      document.getElementById('returnList').innerHTML = '';
-
-      try {
-        const res = await fetch(API_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fn: 'getMyActiveBorrowings', args: [lineProfile.userId] })
-        });
-        const list = await res.json();
-        document.getElementById('returnLoadingState').style.display = 'none';
-        myReturnableList = Array.isArray(list) ? list : [];
-        renderReturnList(myReturnableList);
-        returnsLoaded = true;
-      } catch (err) {
-        document.getElementById('returnLoadingState').style.display = 'none';
-        document.getElementById('returnEmptyState').style.display = 'block';
-        document.getElementById('returnEmptyState').querySelector('p').textContent = 'โหลดรายการไม่สำเร็จ: ' + err.message;
-      }
-    }
-
-    const RETURN_STATUS_BADGE = {
-      'รอรับเรื่อง': { bg: 'bg-amber-100', text: 'text-amber-700', label: '⏳ รอรับเรื่อง' },
-      'รับเรื่องแล้ว': { bg: 'bg-sky-100', text: 'text-sky-700', label: '📋 รับเรื่องแล้ว' },
-      'อยู่ในระหว่างการยืม': { bg: 'bg-indigo-100', text: 'text-indigo-700', label: '📦 กำลังยืมอยู่' },
-      'ถึงวันครบกำหนดคืน': { bg: 'bg-rose-100', text: 'text-rose-700', label: '⚠️ ครบกำหนดคืนแล้ว' },
-      'อยู่ในระหว่างการคืน': { bg: 'bg-emerald-100', text: 'text-emerald-700', label: '🔄 รอตรวจรับคืน' },
-    };
-
-    function renderReturnList(list) {
-      const container = document.getElementById('returnList');
-      if (!list.length) {
-        document.getElementById('returnEmptyState').style.display = 'block';
-        document.getElementById('returnEmptyState').querySelector('p').textContent = 'ไม่มีรายการที่กำลังยืมอยู่';
-        container.innerHTML = '';
-        return;
-      }
-      document.getElementById('returnEmptyState').style.display = 'none';
-
-      container.innerHTML = list.map(item => {
-        const code = item['รหัส'];
-        const status = item['สถานะ'] || '';
-        const badge = RETURN_STATUS_BADGE[status] || { bg: 'bg-slate-100', text: 'text-slate-600', label: status };
-        const isPendingReturn = status === 'อยู่ในระหว่างการคืน';
-        return `
-          <div class="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-2">
-            <div class="flex justify-between items-start gap-2">
-              <div class="font-bold text-sm text-slate-800">${escHtml(item['ชื่ออุปกรณ์'] || '-')}</div>
-              <span class="shrink-0 text-xs font-bold px-2.5 py-1 rounded-full ${badge.bg} ${badge.text}">${badge.label}</span>
-            </div>
-            <div class="text-xs text-slate-500 space-y-0.5">
-              <div>📅 ยืมเมื่อ: ${escHtml(item['วันที่ขอยืม'] || item['วันที่บันทึก'] || '-')}</div>
-              <div>⏰ ครบกำหนดคืน: ${escHtml(item['วันที่ครบกำหนด'] || '-')}</div>
-            </div>
-            <button type="button" class="w-full py-2.5 px-4 rounded-xl text-xs font-bold transition-all ${isPendingReturn ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-gradient-to-r from-cyan-600 to-teal-600 text-white hover:shadow-md active:scale-[0.98]'}" ${isPendingReturn ? 'disabled' : `onclick="submitReturn('${code}')"`}>
-              ${isPendingReturn ? '🔄 รอเจ้าหน้าที่ตรวจรับคืน' : '🔄 แจ้งคืนอุปกรณ์นี้'}
-            </button>
-          </div>`;
-      }).join('');
-    }
-
-    // ไม่ใช้ window.confirm() เพราะ LINE in-app browser มักบล็อก/เพิกเฉย dialog กำเนิด
-    // เบราว์เซอร์แบบนี้ (กดปุ่มแล้วดูเหมือนไม่มีอะไรเกิดขึ้นเลย) ใช้ modal ในหน้าแทน พร้อม
-    // แสดงรายการอุปกรณ์ที่จะแจ้งคืนให้ตรวจสอบก่อนกดยืนยันจริง
-    function submitReturn(code) {
-      const item = myReturnableList.find(b => String(b['รหัส']) === String(code));
-      if (!item) { alert('ไม่พบข้อมูลรายการนี้ กรุณาลองโหลดรายการใหม่อีกครั้ง'); return; }
-
-      pendingReturn = item;
-      const items = Array.isArray(item['รายการอุปกรณ์']) && item['รายการอุปกรณ์'].length
-        ? item['รายการอุปกรณ์']
-        : [{ 'ชื่ออุปกรณ์': item['ชื่ออุปกรณ์'], 'จำนวน': item['จำนวน'], 'หน่วยนับ': '' }];
-
-      document.getElementById('returnConfirmItems').innerHTML = items.map(it => `
-        <div class="flex justify-between items-center text-sm text-slate-700">
-          <span>• ${escHtml(it['ชื่ออุปกรณ์'] || '-')}</span>
-          <span class="font-bold text-slate-500">x${escHtml(it['จำนวน'] || 1)} ${escHtml(it['หน่วยนับ'] || '')}</span>
-        </div>`).join('');
-
-      document.getElementById('returnConfirmModal').style.display = 'flex';
-    }
-
-    function closeReturnConfirmModal() {
-      document.getElementById('returnConfirmModal').style.display = 'none';
-      pendingReturn = null;
-    }
-
-    async function confirmReturnSubmit() {
-      if (!pendingReturn) return;
-      const code = pendingReturn['รหัส'];
-      closeReturnConfirmModal();
-
-      showLoading(true, 'กำลังแจ้งคืนอุปกรณ์...');
-      try {
-        const res = await fetch(API_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fn: 'requestReturnViaLiff', args: [code, lineProfile ? lineProfile.userId : ''] })
-        });
-        const result = await res.json();
-        showLoading(false);
-        if (result && result.success) {
-          alert('✅ ' + result.message);
-          loadMyReturns();
-        } else {
-          alert('❌ ' + (result ? result.message : 'ไม่สามารถแจ้งคืนได้'));
         }
       } catch (err) {
         showLoading(false);

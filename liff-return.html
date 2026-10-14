@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>คืนอุปกรณ์ผ่าน LINE - ระบบ VMES</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="icon" type="image/png" sizes="64x64" href="/favicon.png">
+  <link rel="shortcut icon" href="/favicon.ico">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <!-- LINE LIFF SDK -->
+  <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <!-- Tailwind CSS v3 -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"IBM Plex Sans Thai"', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    :root {
+      --primary: #0891b2;
+      --primary-dark: #0e7490;
+      --bg: #f8fafc;
+      --card-bg: #ffffff;
+      --text: #0f172a;
+      --text-muted: #64748b;
+      --border: #e2e8f0;
+      --radius: 16px;
+      --shadow: 0 10px 25px -5px rgba(8, 145, 178, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'IBM Plex Sans Thai', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      min-height: 100vh;
+      padding: 16px;
+    }
+
+    .app-container {
+      width: 100%;
+      max-width: 480px;
+      background: var(--card-bg);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      border: 1px solid var(--border);
+    }
+
+    .user-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(255, 255, 255, 0.15);
+      backdrop-filter: blur(8px);
+      padding: 6px 14px;
+      border-radius: 20px;
+      margin-top: 12px;
+      font-size: 0.8rem;
+      color: #ffffff;
+    }
+
+    .user-avatar {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      object-fit: cover;
+      border: 1px solid #ffffff;
+    }
+
+    /* Loading Overlay */
+    .loading-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.6);
+      backdrop-filter: blur(4px);
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+      z-index: 99;
+      color: #ffffff;
+    }
+
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 4px solid rgba(255, 255, 255, 0.3);
+      border-top-color: #ffffff;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin-bottom: 12px;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body class="bg-slate-900 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-cyan-950 via-slate-900 to-slate-950 text-slate-100 min-h-screen p-3 sm:p-6 font-sans flex justify-center items-start">
+
+  <div class="app-container max-w-md w-full bg-white/95 backdrop-blur-2xl rounded-3xl shadow-2xl border border-white/30 overflow-hidden text-slate-800 transition-all duration-300">
+    <div class="header bg-gradient-to-br from-cyan-600 via-cyan-700 to-teal-800 text-white p-6 text-center relative shadow-lg">
+      <img src="/logo-main.png" alt="VMES Main Icon Logo" class="w-20 h-20 rounded-full mx-auto mb-2 border-4 border-white/90 shadow-2xl bg-white object-contain p-1 transform hover:scale-105 transition-transform duration-300">
+      <h1 class="text-xl font-extrabold tracking-tight flex items-center justify-center gap-2 mt-1">🔄 ฟอร์มคืนอุปกรณ์ออนไลน์</h1>
+      <p class="text-xs text-cyan-100 mt-1 font-medium opacity-90">ระบบบริหารทรัพยากรและอุปกรณ์ — VMES V2.0</p>
+      <div id="userBadge" class="user-badge inline-flex items-center gap-2 bg-white/20 backdrop-blur-md px-3.5 py-1.5 rounded-full mt-3 text-xs text-white shadow-inner font-medium" style="display: none;">
+        <img id="userAvatar" class="user-avatar w-6 h-6 rounded-full object-cover border border-white" src="" alt="Profile">
+        <span id="userName">กำลังโหลดโปรไฟล์...</span>
+      </div>
+    </div>
+
+    <div class="px-5 pt-4">
+      <a href="/liff.html" class="block text-center text-xs font-bold text-indigo-600 hover:text-indigo-700 transition-colors">📦 ต้องการยืมอุปกรณ์แทน? กดที่นี่</a>
+    </div>
+
+    <div id="returnSection" class="p-5 sm:p-6 space-y-3">
+      <div id="returnEmptyState" class="text-center py-10 text-slate-400" style="display:none;">
+        <div class="text-4xl mb-2">📭</div>
+        <p class="text-sm font-medium">ไม่มีรายการที่กำลังยืมอยู่</p>
+      </div>
+      <div id="returnLoadingState" class="text-center py-10 text-slate-400">
+        <p class="text-sm font-medium">กำลังโหลดรายการที่ยืมอยู่...</p>
+      </div>
+      <div id="returnList" class="space-y-3"></div>
+    </div>
+  </div>
+
+  <!-- Loading Overlay -->
+  <div id="loadingOverlay" class="loading-overlay">
+    <div class="spinner"></div>
+    <p id="loadingMsg">กำลังโหลด...</p>
+  </div>
+
+  <!-- Return Confirmation Modal (ไม่ใช้ window.confirm() เพราะ LINE in-app browser มักบล็อก/เพิกเฉย dialog กำเนิดเบราว์เซอร์แบบนี้ ปุ่มจะดูเหมือนกดไม่ติด) -->
+  <div id="returnConfirmModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4" style="display: none; z-index: 100;">
+    <div class="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-6 space-y-4">
+      <div class="text-center">
+        <div class="text-4xl mb-1">🔄</div>
+        <h3 class="text-base font-extrabold text-slate-800">ยืนยันการแจ้งคืนอุปกรณ์</h3>
+        <p class="text-xs text-slate-500 mt-1">กรุณาตรวจสอบรายการที่จะแจ้งคืนก่อนยืนยัน</p>
+      </div>
+      <div id="returnConfirmItems" class="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-1.5 max-h-48 overflow-y-auto"></div>
+      <div class="flex gap-3">
+        <button type="button" class="flex-1 py-3 rounded-xl text-sm font-bold bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors" onclick="closeReturnConfirmModal()">ยกเลิก</button>
+        <button type="button" class="flex-1 py-3 rounded-xl text-sm font-bold bg-gradient-to-r from-cyan-600 to-teal-600 text-white hover:shadow-md active:scale-[0.98] transition-all" onclick="confirmReturnSubmit()">✅ ยืนยันแจ้งคืน</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = 'https://vmes-backend.vercel.app/api/rpc';
+    let lineProfile = null;
+    let myReturnableList = [];
+    let pendingReturn = null;
+
+    function escHtml(s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
+    function showLoading(show, msg = 'กำลังโหลด...') {
+      const overlay = document.getElementById('loadingOverlay');
+      document.getElementById('loadingMsg').textContent = msg;
+      overlay.style.display = show ? 'flex' : 'none';
+    }
+
+    function closeLiff() {
+      if (typeof liff !== 'undefined' && liff.isLoggedIn()) {
+        liff.closeWindow();
+      } else {
+        window.close();
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      initLiff();
+    });
+
+    async function initLiff() {
+      try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const liffId = urlParams.get('liffId') || '2011083425-G0pup6PQ';
+
+        if (typeof liff !== 'undefined' && liffId) {
+          await liff.init({ liffId: liffId });
+          if (liff.isLoggedIn()) {
+            lineProfile = await liff.getProfile();
+            showUserProfile(lineProfile);
+            if (lineProfile && lineProfile.userId) {
+              fetch(API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  fn: 'autoLinkLineUser',
+                  args: [lineProfile.userId, lineProfile.displayName, lineProfile.displayName]
+                })
+              }).catch(() => {});
+            }
+            loadMyReturns();
+          } else if (liff.isInClient && liff.isInClient()) {
+            liff.login();
+          } else {
+            console.log('LIFF not logged in. ต้องเปิดผ่านแอป LINE เพื่อดูรายการที่ยืมอยู่');
+            loadMyReturns();
+          }
+        }
+      } catch (err) {
+        console.error('LIFF init error:', err);
+        const userBadge = document.getElementById('userBadge');
+        if (userBadge) {
+          userBadge.style.display = 'inline-flex';
+          userBadge.style.background = 'rgba(239, 68, 68, 0.2)';
+          userBadge.innerHTML = '⚠️ กรุณาเปิดผ่านแอป LINE';
+        }
+        loadMyReturns();
+      }
+    }
+
+    function showUserProfile(profile) {
+      if (!profile) return;
+      document.getElementById('userBadge').style.display = 'inline-flex';
+      document.getElementById('userName').textContent = profile.displayName || 'ผู้ใช้งาน LINE';
+      if (profile.pictureUrl) {
+        document.getElementById('userAvatar').src = profile.pictureUrl;
+      } else {
+        document.getElementById('userAvatar').style.display = 'none';
+      }
+    }
+
+    async function loadMyReturns() {
+      if (!lineProfile || !lineProfile.userId) {
+        document.getElementById('returnLoadingState').style.display = 'none';
+        document.getElementById('returnEmptyState').style.display = 'block';
+        document.getElementById('returnEmptyState').querySelector('p').textContent = 'กรุณาเปิดผ่านแอป LINE เพื่อดูรายการที่ยืมอยู่';
+        return;
+      }
+
+      document.getElementById('returnLoadingState').style.display = 'block';
+      document.getElementById('returnEmptyState').style.display = 'none';
+      document.getElementById('returnList').innerHTML = '';
+
+      try {
+        const res = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fn: 'getMyActiveBorrowings', args: [lineProfile.userId] })
+        });
+        const list = await res.json();
+        document.getElementById('returnLoadingState').style.display = 'none';
+        myReturnableList = Array.isArray(list) ? list : [];
+        renderReturnList(myReturnableList);
+      } catch (err) {
+        document.getElementById('returnLoadingState').style.display = 'none';
+        document.getElementById('returnEmptyState').style.display = 'block';
+        document.getElementById('returnEmptyState').querySelector('p').textContent = 'โหลดรายการไม่สำเร็จ: ' + err.message;
+      }
+    }
+
+    const RETURN_STATUS_BADGE = {
+      'รอรับเรื่อง': { bg: 'bg-amber-100', text: 'text-amber-700', label: '⏳ รอรับเรื่อง' },
+      'รับเรื่องแล้ว': { bg: 'bg-sky-100', text: 'text-sky-700', label: '📋 รับเรื่องแล้ว' },
+      'อยู่ในระหว่างการยืม': { bg: 'bg-indigo-100', text: 'text-indigo-700', label: '📦 กำลังยืมอยู่' },
+      'ถึงวันครบกำหนดคืน': { bg: 'bg-rose-100', text: 'text-rose-700', label: '⚠️ ครบกำหนดคืนแล้ว' },
+      'อยู่ในระหว่างการคืน': { bg: 'bg-emerald-100', text: 'text-emerald-700', label: '🔄 รอตรวจรับคืน' },
+    };
+
+    function renderReturnList(list) {
+      const container = document.getElementById('returnList');
+      if (!list.length) {
+        document.getElementById('returnEmptyState').style.display = 'block';
+        document.getElementById('returnEmptyState').querySelector('p').textContent = 'ไม่มีรายการที่กำลังยืมอยู่';
+        container.innerHTML = '';
+        return;
+      }
+      document.getElementById('returnEmptyState').style.display = 'none';
+
+      container.innerHTML = list.map(item => {
+        const code = item['รหัส'];
+        const status = item['สถานะ'] || '';
+        const badge = RETURN_STATUS_BADGE[status] || { bg: 'bg-slate-100', text: 'text-slate-600', label: status };
+        const isPendingReturn = status === 'อยู่ในระหว่างการคืน';
+        return `
+          <div class="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-2">
+            <div class="flex justify-between items-start gap-2">
+              <div class="font-bold text-sm text-slate-800">${escHtml(item['ชื่ออุปกรณ์'] || '-')}</div>
+              <span class="shrink-0 text-xs font-bold px-2.5 py-1 rounded-full ${badge.bg} ${badge.text}">${badge.label}</span>
+            </div>
+            <div class="text-xs text-slate-500 space-y-0.5">
+              <div>📅 ยืมเมื่อ: ${escHtml(item['วันที่ขอยืม'] || item['วันที่บันทึก'] || '-')}</div>
+              <div>⏰ ครบกำหนดคืน: ${escHtml(item['วันที่ครบกำหนด'] || '-')}</div>
+            </div>
+            <button type="button" class="w-full py-2.5 px-4 rounded-xl text-xs font-bold transition-all ${isPendingReturn ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-gradient-to-r from-cyan-600 to-teal-600 text-white hover:shadow-md active:scale-[0.98]'}" ${isPendingReturn ? 'disabled' : `onclick="submitReturn('${code}')"`}>
+              ${isPendingReturn ? '🔄 รอเจ้าหน้าที่ตรวจรับคืน' : '🔄 แจ้งคืนอุปกรณ์นี้'}
+            </button>
+          </div>`;
+      }).join('');
+    }
+
+    // ไม่ใช้ window.confirm() เพราะ LINE in-app browser มักบล็อก/เพิกเฉย dialog กำเนิด
+    // เบราว์เซอร์แบบนี้ (กดปุ่มแล้วดูเหมือนไม่มีอะไรเกิดขึ้นเลย) ใช้ modal ในหน้าแทน พร้อม
+    // แสดงรายการอุปกรณ์ที่จะแจ้งคืนให้ตรวจสอบก่อนกดยืนยันจริง
+    function submitReturn(code) {
+      const item = myReturnableList.find(b => String(b['รหัส']) === String(code));
+      if (!item) { alert('ไม่พบข้อมูลรายการนี้ กรุณาลองโหลดรายการใหม่อีกครั้ง'); return; }
+
+      pendingReturn = item;
+      const items = Array.isArray(item['รายการอุปกรณ์']) && item['รายการอุปกรณ์'].length
+        ? item['รายการอุปกรณ์']
+        : [{ 'ชื่ออุปกรณ์': item['ชื่ออุปกรณ์'], 'จำนวน': item['จำนวน'], 'หน่วยนับ': '' }];
+
+      document.getElementById('returnConfirmItems').innerHTML = items.map(it => `
+        <div class="flex justify-between items-center text-sm text-slate-700">
+          <span>• ${escHtml(it['ชื่ออุปกรณ์'] || '-')}</span>
+          <span class="font-bold text-slate-500">x${escHtml(it['จำนวน'] || 1)} ${escHtml(it['หน่วยนับ'] || '')}</span>
+        </div>`).join('');
+
+      document.getElementById('returnConfirmModal').style.display = 'flex';
+    }
+
+    function closeReturnConfirmModal() {
+      document.getElementById('returnConfirmModal').style.display = 'none';
+      pendingReturn = null;
+    }
+
+    async function confirmReturnSubmit() {
+      if (!pendingReturn) return;
+      const code = pendingReturn['รหัส'];
+      closeReturnConfirmModal();
+
+      showLoading(true, 'กำลังแจ้งคืนอุปกรณ์...');
+      try {
+        const res = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fn: 'requestReturnViaLiff', args: [code, lineProfile ? lineProfile.userId : ''] })
+        });
+        const result = await res.json();
+        showLoading(false);
+        if (result && result.success) {
+          alert('✅ ' + result.message);
+          loadMyReturns();
+        } else {
+          alert('❌ ' + (result ? result.message : 'ไม่สามารถแจ้งคืนได้'));
+        }
+      } catch (err) {
+        showLoading(false);
+        alert('เกิดข้อผิดพลาดในการเชื่อมต่อระบบ: ' + err.message);
+      }
+    }
+  </script>
+</body>
+</html>
