@@ -1028,7 +1028,11 @@ module.exports = async function handler(req, res) {
         await handleAskId(replyToken, userId);
       }
       // 1.5 ผูกบัญชีอัตโนมัติด้วยเลขบัตรประชาชน 13 หลัก (ไม่ต้องคัดลอก LINE User ID)
-      else if (/\d{13}/.test(userMessage)) {
+      // รหัส BR-/EQ- มีไทม์สแตมป์ 14 หลักฝังอยู่เสมอ (เช่น BR-20261014220308-458) ซึ่งมี
+      // เลข 13 หลักติดกันอยู่ในนั้นพอดี — ถ้าไม่กันไว้ ทุกข้อความที่มีรหัส BR-/EQ- (รวมถึง
+      // "รับเรื่อง BR-...", "ส่งมอบ BR-...", "คืน BR-..." ด้านล่างทั้งหมด) จะโดนกิ่งนี้ตัดหน้า
+      // ไปตีความเป็นเลขบัตรประชาชนผิดๆ ก่อนเสมอ ไม่มีทางไปถึงกิ่งที่ตั้งใจจะเข้าเลย
+      else if (/\d{13}/.test(userMessage) && msgLower.indexOf('br-') === -1 && msgLower.indexOf('eq-') === -1) {
         await handleAutoBind13Digit(replyToken, userId, userMessage);
       }
       // 1.6 รับเรื่องคำขอยืม (เฉพาะเจ้าหน้าที่ — เช็คสิทธิ์จาก LINE userId ข้างใน handler)
