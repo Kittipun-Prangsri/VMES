@@ -7,7 +7,7 @@ const { SYSTEM_NAME, safeTruncate, safeGet, nowStr } = require('../lib/util');
 const { replyLineFlex, flexRow } = require('../lib/line');
 const { getVehicles } = require('../lib/handlers/vehicles');
 const { getEquipment } = require('../lib/handlers/equipment');
-const { getBorrowing, updateBorrowingStatus } = require('../lib/handlers/borrowing');
+const { getBorrowing, updateBorrowingStatus, getMyActiveBorrowings } = require('../lib/handlers/borrowing');
 
 const { bindLineByCitizenId, getUserNameByLineId } = require('../lib/handlers/users');
 
@@ -794,6 +794,238 @@ async function handleHelpMenu(replyToken) {
   await replyLineFlex(replyToken, '🤖 เมนูช่วยเหลือระบบ VMES', flexContent);
 }
 
+// ============== รายการของฉัน ==============
+// แสดงรายการยืมที่ผูกกับ LINE User ID ของผู้ส่งข้อความโดยตรง — ดึงจาก field LINE_USER_ID
+// ที่บันทึกไว้ตอนยืมผ่าน LIFF ใช้ getMyActiveBorrowings() ที่มีอยู่แล้ว
+async function handleMyBorrowings(replyToken, userId) {
+  const myList = await getMyActiveBorrowings(userId);
+
+  if (!myList || myList.length === 0) {
+    // ตรวจว่าผู้ใช้เคยผูกบัญชีหรือยัง
+    const flexContent = {
+      type: 'bubble',
+      size: 'mega',
+      header: {
+        type: 'box',
+        layout: 'vertical',
+        backgroundColor: '#4f46e5',
+        paddingAll: '20px',
+        contents: [
+          { type: 'text', text: '📋 รายการของฉัน', color: '#ffffff', size: 'lg', weight: 'bold' },
+          { type: 'text', text: 'รายการอุปกรณ์ที่คุณกำลังยืมอยู่', color: '#e0e7ff', size: 'xs', margin: 'xs' },
+        ],
+      },
+      body: {
+        type: 'box',
+        layout: 'vertical',
+        paddingAll: '20px',
+        spacing: 'md',
+        contents: [
+          {
+            type: 'box',
+            layout: 'vertical',
+            backgroundColor: '#f8fafc',
+            cornerRadius: '12px',
+            paddingAll: '16px',
+            contents: [
+              { type: 'text', text: '✅ ไม่มีรายการยืมที่ค้างอยู่', size: 'md', weight: 'bold', color: '#10b981', align: 'center' },
+              { type: 'text', text: 'คุณไม่มีรายการอุปกรณ์ที่กำลังยืมอยู่ในขณะนี้', size: 'sm', color: '#64748b', align: 'center', margin: 'sm', wrap: true },
+            ],
+          },
+          {
+            type: 'text',
+            text: '💡 หากคุณเพิ่งยืมและไม่เห็นรายการ อาจเป็นเพราะบัญชี LINE ยังไม่ได้ผูกกับระบบ กรุณาผูกบัญชีก่อน',
+            size: 'xs',
+            color: '#94a3b8',
+            wrap: true,
+            margin: 'sm',
+          },
+        ],
+      },
+      footer: {
+        type: 'box',
+        layout: 'vertical',
+        spacing: 'sm',
+        paddingAll: '16px',
+        backgroundColor: '#f1f5f9',
+        contents: [
+          {
+            type: 'button',
+            style: 'primary',
+            color: '#4f46e5',
+            height: 'sm',
+            action: { type: 'uri', label: '📦 ยืมอุปกรณ์ใหม่ (LIFF)', uri: 'https://liff.line.me/2011083425-G0pup6PQ' },
+          },
+          {
+            type: 'button',
+            style: 'secondary',
+            height: 'sm',
+            action: { type: 'message', label: '🆔 ผูกบัญชี LINE', text: 'ขอไอดี' },
+          },
+          { type: 'text', text: SYSTEM_NAME, size: 'xxs', color: '#94a3b8', align: 'center', margin: 'sm' },
+        ],
+      },
+    };
+    await replyLineFlex(replyToken, '📋 ไม่มีรายการยืมค้างอยู่', flexContent);
+    return;
+  }
+
+  const statusColors = {
+    'รอรับเรื่อง': '#f59e0b',
+    'รับเรื่องแล้ว': '#3b82f6',
+    'อยู่ในระหว่างการยืม': '#8b5cf6',
+    'ถึงวันครบกำหนดคืน': '#ef4444',
+    'อยู่ในระหว่างการคืน': '#06b6d4',
+    'ขอขยายเวลา': '#d97706',
+  };
+
+  const statusIcons = {
+    'รอรับเรื่อง': '📥',
+    'รับเรื่องแล้ว': '✅',
+    'อยู่ในระหว่างการยืม': '📦',
+    'ถึงวันครบกำหนดคืน': '⏰',
+    'อยู่ในระหว่างการคืน': '🔄',
+    'ขอขยายเวลา': '⏳',
+  };
+
+  // แสดงสูงสุด 5 รายการ (LINE Flex มีขีดจำกัดความสูง)
+  const displayList = myList.slice(0, 5);
+
+  const rows = displayList.map((b, idx) => {
+    const id = safeTruncate(b['รหัส'] || '-', 25);
+    const eqName = safeTruncate(
+      Array.isArray(b['รายการอุปกรณ์']) && b['รายการอุปกรณ์'].length > 0
+        ? b['รายการอุปกรณ์'].map(i => i['ชื่ออุปกรณ์']).join(', ')
+        : (b['ชื่ออุปกรณ์'] || '-'),
+      40
+    );
+    const status = b['สถานะ'] || '-';
+    const dueDate = safeTruncate(b['วันที่ครบกำหนด'] || '-', 20);
+    const qty = b['จำนวน'] || 1;
+    const color = statusColors[status] || '#3b82f6';
+    const icon = statusIcons[status] || '📋';
+    const canReturn = ['อยู่ในระหว่างการยืม', 'ถึงวันครบกำหนดคืน', 'ขอขยายเวลา'].includes(status);
+
+    const cardContents = [
+      {
+        type: 'box',
+        layout: 'horizontal',
+        contents: [
+          { type: 'text', text: id, size: 'xs', weight: 'bold', color: '#1e40af', flex: 7 },
+          {
+            type: 'box',
+            layout: 'horizontal',
+            backgroundColor: color,
+            cornerRadius: '8px',
+            paddingStart: '6px',
+            paddingEnd: '6px',
+            paddingTop: '3px',
+            paddingBottom: '3px',
+            flex: 5,
+            justifyContent: 'flex-end',
+            contents: [
+              { type: 'text', text: icon + ' ' + status, size: 'xxs', color: '#ffffff', align: 'end', weight: 'bold', wrap: false },
+            ],
+          },
+        ],
+      },
+      { type: 'text', text: eqName, size: 'sm', weight: 'bold', color: '#0f172a', margin: 'xs', wrap: true },
+      { type: 'text', text: '📦 จำนวน: ' + qty + ' รายการ  |  📅 ครบกำหนด: ' + dueDate, size: 'xxs', color: '#64748b', margin: 'xs', wrap: true },
+    ];
+
+    if (canReturn) {
+      cardContents.push({
+        type: 'button',
+        style: 'primary',
+        color: '#06b6d4',
+        height: 'sm',
+        margin: 'sm',
+        action: { type: 'message', label: '🔄 แจ้งคืน ' + id, text: 'คืน ' + id },
+      });
+    } else if (status === 'รอรับเรื่อง' || status === 'รับเรื่องแล้ว') {
+      cardContents.push({
+        type: 'text',
+        text: '⏳ กำลังรอเจ้าหน้าที่ดำเนินการ',
+        size: 'xs',
+        color: '#94a3b8',
+        margin: 'sm',
+        align: 'center',
+      });
+    } else if (status === 'อยู่ในระหว่างการคืน') {
+      cardContents.push({
+        type: 'text',
+        text: '✅ แจ้งคืนแล้ว รอเจ้าหน้าที่ตรวจรับ',
+        size: 'xs',
+        color: '#06b6d4',
+        margin: 'sm',
+        align: 'center',
+      });
+    }
+
+    return {
+      type: 'box',
+      layout: 'vertical',
+      backgroundColor: '#f8fafc',
+      cornerRadius: '10px',
+      paddingAll: '14px',
+      margin: idx === 0 ? 'none' : 'md',
+      borderWidth: '1px',
+      borderColor: color,
+      contents: cardContents,
+    };
+  });
+
+  const summaryText = myList.length > 5
+    ? `* แสดง 5 รายการแรก จากทั้งหมด ${myList.length} รายการ`
+    : `รวม ${myList.length} รายการที่กำลังยืมอยู่`;
+
+  const flexContent = {
+    type: 'bubble',
+    size: 'mega',
+    header: {
+      type: 'box',
+      layout: 'vertical',
+      backgroundColor: '#4f46e5',
+      paddingAll: '20px',
+      contents: [
+        { type: 'text', text: '📋 รายการของฉัน', color: '#ffffff', size: 'lg', weight: 'bold' },
+        { type: 'text', text: summaryText, color: '#e0e7ff', size: 'xs', margin: 'xs' },
+      ],
+    },
+    body: {
+      type: 'box',
+      layout: 'vertical',
+      spacing: 'none',
+      paddingAll: '16px',
+      contents: rows,
+    },
+    footer: {
+      type: 'box',
+      layout: 'vertical',
+      spacing: 'sm',
+      paddingAll: '16px',
+      backgroundColor: '#f1f5f9',
+      contents: [
+        {
+          type: 'button',
+          style: 'primary',
+          color: '#4f46e5',
+          height: 'sm',
+          action: { type: 'uri', label: '📦 ยืมอุปกรณ์เพิ่มเติม (LIFF)', uri: 'https://liff.line.me/2011083425-G0pup6PQ' },
+        },
+        {
+          type: 'button',
+          style: 'secondary',
+          height: 'sm',
+          action: { type: 'uri', label: '🌐 ดูในระบบ (vmes.web.app)', uri: 'https://vmes.web.app/#borrowing' },
+        },
+        { type: 'text', text: '⏱ ' + nowStr() + ' | ' + SYSTEM_NAME, size: 'xxs', color: '#94a3b8', align: 'center', margin: 'sm' },
+      ],
+    },
+  };
+  await replyLineFlex(replyToken, '📋 รายการของฉัน (' + myList.length + ' รายการ)', flexContent);
+}
+
 // การ์ดปุ่มเดียวสำหรับคนพิมพ์ "คืนอุปกรณ์"/"คืน"/"แจ้งคืน" มาเฉยๆ โดยไม่มีรหัสคำขอ — ต่างจาก
 // handleHelpMenu ที่มีหลายปุ่มรวมกัน การ์ดนี้โฟกัสแค่การคืนอย่างเดียวตามที่ user ขอ กดแล้ว
 // ไปเปิดแท็บคืนใน LIFF ตรงๆ ซึ่งจะแสดงรายการที่ยืมอยู่ให้เลือกแจ้งคืน ไม่ต้องรู้รหัสเอง
@@ -1051,8 +1283,12 @@ module.exports = async function handler(req, res) {
 
       const msgLower = userMessage.toLowerCase();
 
+      // 0. รายการของฉัน — ต้องอยู่ก่อน กิ่งที่มีคำว่า "ยืม" เพราะ trigger นี้ไม่มีคำนั้น
+      if (msgLower === 'รายการของฉัน' || msgLower.indexOf('รายการของฉัน') !== -1) {
+        await handleMyBorrowings(replyToken, userId);
+      }
       // 1. ขอไอดี
-      if (msgLower === 'ขอไอดี' || msgLower === 'id' || msgLower === 'user id') {
+      else if (msgLower === 'ขอไอดี' || msgLower === 'id' || msgLower === 'user id') {
         await handleAskId(replyToken, userId);
       }
       // 1.5 ผูกบัญชีอัตโนมัติด้วยเลขบัตรประชาชน 13 หลัก (ไม่ต้องคัดลอก LINE User ID)
