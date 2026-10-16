@@ -4880,15 +4880,11 @@ input, select, textarea, button {
       const render = () => {
         let items = DATA.equipment;
         if (filterText) {
-          const q = filterText.toLowerCase();
-          items = items.filter(e => 
-            (e['รหัสครุภัณฑ์'] || '').toLowerCase().includes(q) ||
-            (e['ชื่ออุปกรณ์'] || '').toLowerCase().includes(q) ||
-            (e['ยี่ห้อ'] || '').toLowerCase().includes(q) ||
-            (e['รุ่น'] || '').toLowerCase().includes(q) ||
-            (e['Serial'] || '').toLowerCase().includes(q) ||
-            (e['ที่เก็บ'] || '').toLowerCase().includes(q)
-          );
+          // ค่าจาก Excel/Firestore อาจเป็นตัวเลข (เช่น Serial, รหัสครุภัณฑ์) — ต้องแปลงเป็น String ก่อน
+          // ไม่งั้น .toLowerCase() จะ throw แล้วช่องค้นหาพังทั้งหน้า
+          const q = filterText.trim().toLowerCase();
+          const fields = ['รหัสครุภัณฑ์', 'รหัส', 'ชื่ออุปกรณ์', 'ยี่ห้อ', 'รุ่น', 'Serial', 'ที่เก็บ', 'หมวดหมู่'];
+          if (q) items = items.filter(e => fields.some(f => String(e[f] ?? '').toLowerCase().includes(q)));
         }
         if (filterCat) items = items.filter(e => e['หมวดหมู่'] === filterCat);
         if (filterStatus) items = items.filter(e => e['สถานะ'] === filterStatus);
@@ -4941,25 +4937,25 @@ input, select, textarea, button {
     </div>
 
     <div class="stat-grid" style="margin-bottom: 20px;">
-      <div class="stat s-blue" onclick="window._ef(filterText, filterCat, '', filterLoc)" style="cursor:pointer; transition:transform 0.15s;" title="คลิกเพื่อดูอุปกรณ์ทั้งหมด">
+      <div class="stat s-blue" onclick="window._ef(undefined, undefined, '')" style="cursor:pointer; transition:transform 0.15s;" title="คลิกเพื่อดูอุปกรณ์ทั้งหมด">
         <div class="icon-big">💻</div>
         <div class="label">ครุภัณฑ์ในระบบ</div>
         <div class="value">${valAll} <span style="font-size:14px;color:var(--gray-500)">รายการ</span></div>
         <div class="sub">ครอบคลุม ${catList.length} หมวดหมู่</div>
       </div>
-      <div class="stat s-green" onclick="window._ef(filterText, filterCat, 'พร้อมยืม', filterLoc)" style="cursor:pointer; transition:transform 0.15s;" title="คลิกเพื่อกรองเฉพาะพร้อมยืม">
+      <div class="stat s-green" onclick="window._ef(undefined, undefined, 'พร้อมยืม')" style="cursor:pointer; transition:transform 0.15s;" title="คลิกเพื่อกรองเฉพาะพร้อมยืม">
         <div class="icon-big">✅</div>
         <div class="label">พร้อมใช้งานในคลัง</div>
         <div class="value">${valReady} <span style="font-size:14px;color:var(--gray-500)">รายการ</span></div>
         <div class="sub">พร้อมสำหรับการยืม</div>
       </div>
-      <div class="stat s-purple" onclick="window._ef(filterText, filterCat, 'อยู่ระหว่างยืม', filterLoc)" style="cursor:pointer; transition:transform 0.15s;" title="คลิกเพื่อกรองเฉพาะกำลังยืม">
+      <div class="stat s-purple" onclick="window._ef(undefined, undefined, 'อยู่ระหว่างยืม')" style="cursor:pointer; transition:transform 0.15s;" title="คลิกเพื่อกรองเฉพาะกำลังยืม">
         <div class="icon-big">📦</div>
         <div class="label">กำลังยืมใช้งานอยู่</div>
         <div class="value">${valBorrowed} <span style="font-size:14px;color:var(--gray-500)">รายการ</span></div>
         <div class="sub">อยู่นอกคลังขณะนี้</div>
       </div>
-      <div class="stat s-red" onclick="window._ef(filterText, filterCat, 'ชำรุด', filterLoc)" style="cursor:pointer; transition:transform 0.15s;" title="คลิกเพื่อกรองเฉพาะชำรุด">
+      <div class="stat s-red" onclick="window._ef(undefined, undefined, 'ชำรุด')" style="cursor:pointer; transition:transform 0.15s;" title="คลิกเพื่อกรองเฉพาะชำรุด">
         <div class="icon-big">⚠️</div>
         <div class="label">ชำรุด / ส่งซ่อม</div>
         <div class="value">${valDamaged} <span style="font-size:14px;color:var(--gray-500)">รายการ</span></div>
@@ -4975,12 +4971,12 @@ input, select, textarea, button {
               <input id="eSearchText"
                 value="${esc(filterText)}"
                 placeholder="🔍 ค้นหา รหัสครุภัณฑ์, ชื่ออุปกรณ์, ยี่ห้อ, Serial, ที่เก็บ..."
-                oninput="window._ef(this.value, filterCat, filterStatus, filterLoc)"
+                oninput="window._efText(this.value)"
                 style="width:100%; padding:10px 14px; border-radius:10px; border:1px solid #cbd5e1; font-size:14px; outline:none; box-sizing:border-box;">
             </div>
             <div style="flex:1; min-width:160px; max-width:220px;">
               <select id="eSearchCat"
-                onchange="window._ef(filterText, this.value, filterStatus, filterLoc)"
+                onchange="window._ef(undefined, this.value)"
                 style="width:100%; padding:10px 14px; border-radius:10px; border:1px solid #cbd5e1; font-size:14px; outline:none; cursor:pointer; box-sizing:border-box;">
                 <option value="">🏷️ ทุกหมวดหมู่ (${catList.length})</option>
                 ${catList.map(([name, count]) => `<option value="${esc(name)}" ${filterCat === name ? 'selected' : ''}>${esc(name)} (${count})</option>`).join('')}
@@ -4988,7 +4984,7 @@ input, select, textarea, button {
             </div>
             <div style="flex:1; min-width:150px; max-width:200px;">
               <select id="eSearchStatus"
-                onchange="window._ef(filterText, filterCat, this.value, filterLoc)"
+                onchange="window._ef(undefined, undefined, this.value)"
                 style="width:100%; padding:10px 14px; border-radius:10px; border:1px solid #cbd5e1; font-size:14px; outline:none; cursor:pointer; box-sizing:border-box;">
                 <option value="">📌 ทุกสถานะคลัง</option>
                 <option value="พร้อมยืม" ${filterStatus === 'พร้อมยืม' ? 'selected' : ''}>🟢 พร้อมยืม (${valReady})</option>
@@ -4999,13 +4995,13 @@ input, select, textarea, button {
             </div>
             <div style="flex:1; min-width:160px; max-width:220px;">
               <select id="eSearchLoc"
-                onchange="window._ef(filterText, filterCat, filterStatus, this.value)"
+                onchange="window._ef(undefined, undefined, undefined, this.value)"
                 style="width:100%; padding:10px 14px; border-radius:10px; border:1px solid #cbd5e1; font-size:14px; outline:none; cursor:pointer; box-sizing:border-box;">
                 <option value="">📍 ทุกสถานที่จัดเก็บ (${locList.length})</option>
                 ${locList.map(([name, count]) => `<option value="${esc(name)}" ${filterLoc === name ? 'selected' : ''}>${esc(name)} (${count})</option>`).join('')}
               </select>
             </div>
-            <div style="display:flex; align-items:center; gap:8px;">
+            <div id="eCountWrap" style="display:flex; align-items:center; gap:8px;">
               <span class="badge b-blue" style="font-size:12px; padding:8px 12px; border-radius:10px; font-weight:700; white-space:nowrap;">แสดง ${items.length} / ${valAll} รายการ</span>
               ${isFiltered ? `<button class="btn btn-sm btn-outline-danger" onclick="window._ef('','','','')" style="border-radius:10px; padding:8px 12px; font-weight:600;">✕ ล้างการกรอง</button>` : ''}
             </div>
@@ -5014,7 +5010,7 @@ input, select, textarea, button {
       </div>
     </div>
 
-    <div class="card">
+    <div class="card" id="eResults">
       <div class="card-body" style="padding:0">
         <div class="table-wrap" style="border:none">
           <table>
@@ -5115,36 +5111,30 @@ input, select, textarea, button {
   `;
       };
 
+      // handler ใน HTML ส่ง undefined = คงค่าเดิมไว้ — ห้ามอ่านตัวแปร filterX จาก inline handler
+      // เพราะ renderEquipment ถูกเรียกซ้ำทุกรอบ auto-refresh แล้วค่าที่อ่านได้จะค้างจากรอบแรก
       window._ef = (text, catVal, statusVal, locVal) => {
-        filterText = text !== undefined ? text : filterText;
-        filterCat = catVal !== undefined ? catVal : filterCat;
-        filterStatus = statusVal !== undefined ? statusVal : filterStatus;
-        filterLoc = locVal !== undefined ? locVal : filterLoc;
-
+        if (text !== undefined) filterText = text;
+        if (catVal !== undefined) filterCat = catVal;
+        if (statusVal !== undefined) filterStatus = statusVal;
+        if (locVal !== undefined) filterLoc = locVal;
         window.EQUIPMENT_FILTER_STATE = { text: filterText, cat: filterCat, status: filterStatus, loc: filterLoc };
-
         $('content').innerHTML = render();
-        const searchInput = document.getElementById('eSearchText');
-        if (searchInput && text !== undefined) {
-          searchInput.focus();
-          searchInput.setSelectionRange(filterText.length, filterText.length);
-        }
       };
 
-      try {
-        if (!Object.getOwnPropertyDescriptor(window, 'filterText')) {
-          Object.defineProperty(window, 'filterText', { get: () => filterText, set: v => { filterText = v; window.EQUIPMENT_FILTER_STATE.text = v; }, configurable: true });
-        }
-        if (!Object.getOwnPropertyDescriptor(window, 'filterCat')) {
-          Object.defineProperty(window, 'filterCat', { get: () => filterCat, set: v => { filterCat = v; window.EQUIPMENT_FILTER_STATE.cat = v; }, configurable: true });
-        }
-        if (!Object.getOwnPropertyDescriptor(window, 'filterStatus')) {
-          Object.defineProperty(window, 'filterStatus', { get: () => filterStatus, set: v => { filterStatus = v; window.EQUIPMENT_FILTER_STATE.status = v; }, configurable: true });
-        }
-        if (!Object.getOwnPropertyDescriptor(window, 'filterLoc')) {
-          Object.defineProperty(window, 'filterLoc', { get: () => filterLoc, set: v => { filterLoc = v; window.EQUIPMENT_FILTER_STATE.loc = v; window.EQUIPMENT_FILTER_STATE.loc = v; }, configurable: true });
-        }
-      } catch(e) {}
+      // ค้นหาแบบเรียลไทม์: อัปเดตเฉพาะตารางและตัวนับ ไม่สร้างช่อง input ใหม่
+      // (สร้างใหม่ทุกตัวอักษรทำให้เสีย focus / คีย์บอร์ดมือถือหุบ / พิมพ์ไทยสะดุด)
+      window._efText = (text) => {
+        filterText = text;
+        window.EQUIPMENT_FILTER_STATE.text = text;
+        const tmp = document.createElement('div');
+        tmp.innerHTML = render();
+        ['eResults', 'eCountWrap'].forEach(id => {
+          const cur = document.getElementById(id);
+          const next = tmp.querySelector('#' + id);
+          if (cur && next) cur.replaceWith(next);
+        });
+      };
 
       $('content').innerHTML = render();
     }
