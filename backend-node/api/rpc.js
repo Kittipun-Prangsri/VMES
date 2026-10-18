@@ -87,12 +87,13 @@ module.exports = async function handler(req, res) {
     }
 
     // Checking authentication for protected API functions
+    let session = null;
     if (!PUBLIC_FUNCTIONS.has(fnName)) {
       const authHeader = req.headers['authorization'] || req.headers['Authorization'] || '';
       const tokenHeader = authHeader.startsWith('Bearer ') ? authHeader.substring(7).trim() : authHeader.trim();
       const token = body.token || tokenHeader;
 
-      const session = verifySessionToken(token);
+      session = verifySessionToken(token);
       if (!session) {
         res.status(401).json({ success: false, error: 'unauthorized', message: 'กรุณาเข้าสู่ระบบก่อนทำรายการ (Session expired or invalid)' });
         return;
@@ -100,7 +101,8 @@ module.exports = async function handler(req, res) {
     }
 
     try {
-      const result = await fn.apply(null, body.args || []);
+      // handler ที่ต้องเช็คสิทธิ์อ่าน session ผ่าน this.session (handler อื่นไม่ได้ใช้ this)
+      const result = await fn.apply({ session }, body.args || []);
       res.status(200).json(result);
     } catch (err) {
       console.error(`Error executing RPC function ${fnName}:`, err);

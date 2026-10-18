@@ -2643,7 +2643,7 @@ input, select, textarea, button {
         'รอรับเรื่อง': 'b-yellow', 'รับเรื่องแล้ว': 'b-blue', 'อยู่ในระหว่างการยืม': 'b-purple',
         'ถึงวันครบกำหนดคืน': 'b-red', 'อยู่ในระหว่างการคืน': 'b-cyan', 'คืนเสร็จสิ้น': 'b-green',
         'ขอขยายเวลา': 'b-gold', 'อนุมัติขยายเวลา': 'b-green', 'ชำรุดบางส่วน': 'b-orange', 'ชำรุดเสียหาย': 'b-red', 'สูญหาย': 'b-darkred',
-        'พร้อมยืม': 'b-green', 'ใช้งาน': 'b-green', 'รออนุมัติ': 'b-yellow', 'อนุมัติแล้ว': 'b-green',
+        'พร้อมยืม': 'b-green', 'ใช้งาน': 'b-green', 'รออนุมัติ': 'b-yellow', 'อนุมัติแล้ว': 'b-green', 'ไม่อนุมัติ': 'b-red',
         'ผ่าน': 'b-green', 'ไม่ผ่าน': 'b-red', 'ปฏิบัติงาน': 'b-green', 'ลาพัก': 'b-orange',
         'สำเร็จ': 'b-green', 'ผิดพลาด': 'b-red', 'ปกติ': 'b-green', 'ต้องเปลี่ยน': 'b-red',
         'ต้องเติม': 'b-orange', 'ต้องซ่อม': 'b-red', 'สึกหรอ': 'b-orange', 'หมดอายุ': 'b-red'
@@ -8810,7 +8810,34 @@ input, select, textarea, button {
     }
 
     // ============== BOOKING ==============
+    const BOOKING_ACTIVE = ['รออนุมัติ', 'อนุมัติแล้ว'];
+    function canApproveBooking() { return isAdmin() || isManager(); }
+
+    // วันที่ตามเวลาเครื่อง (ไทย) — toISOString() เป็น UTC ทำให้ช่วง 00:00-07:00 ได้วันก่อนหน้า
+    function localDateStr(offsetDays) {
+      const d = new Date();
+      d.setDate(d.getDate() + (offsetDays || 0));
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    }
+
+    // ตรรกะเดียวกับ findConflicts ใน backend-node/lib/handlers/booking.js (backend เป็นตัวตัดสินจริง)
+    function findBookingConflicts(data) {
+      const plate = String(data['ทะเบียน'] || '').trim();
+      const driver = String(data['พนักงานขับรถ'] || '').trim();
+      return (DATA.booking || []).filter(b => {
+        if (data['รหัส'] && String(b['รหัส']) === String(data['รหัส'])) return false;
+        if (!BOOKING_ACTIVE.includes(b['สถานะ'])) return false;
+        if (String(b['วันที่ใช้'] || '') !== data['วันที่ใช้']) return false;
+        const sameCar = plate && String(b['ทะเบียน'] || '').trim() === plate;
+        const sameDriver = driver && String(b['พนักงานขับรถ'] || '').trim() === driver;
+        if (!sameCar && !sameDriver) return false;
+        return data['เวลาเริ่ม'] < String(b['เวลาสิ้นสุด'] || '23:59') && String(b['เวลาเริ่ม'] || '00:00') < data['เวลาสิ้นสุด'];
+      });
+    }
+
     function renderBooking() {
+      const staff = canApproveBooking();
+      const me = CURRENT_USER ? String(CURRENT_USER.name || '').trim() : '';
       $('content').innerHTML = `
     <div class="toolbar">
       <button class="btn btn-success" onclick="addBooking()">➕ จองรถใหม่</button>
@@ -8819,7 +8846,17 @@ input, select, textarea, button {
     <div class="card"><div class="card-body" style="padding:0">
     <div class="table-wrap" style="border:none"><table>
       <thead><tr><th>ผู้จอง</th><th>หน่วยงาน</th><th>ทะเบียน</th><th>วันที่ใช้</th><th>เวลา</th><th>สถานที่</th><th>คนขับ</th><th>สถานะ</th><th></th></tr></thead>
-      <tbody>${DATA.booking.slice().reverse().map(b => `
+      <tbody>${DATA.booking.slice().reverse().map(b => {
+        const code = esc(b['รหัส']);
+        const st = b['สถานะ'];
+        const isOwner = me && String(b['ผู้ขอจอง'] || '').trim() === me;
+        const actions = [
+          staff && st === 'รออนุมัติ' ? `<button class="btn btn-sm btn-success" onclick="approveBk('${code}')">✅ อนุมัติ</button>` : '',
+          staff && st === 'รออนุมัติ' ? `<button class="btn btn-sm btn-danger" onclick="rejectBk('${code}')">✖ ไม่อนุมัติ</button>` : '',
+          (staff || isOwner) && BOOKING_ACTIVE.includes(st) ? `<button class="btn btn-sm btn-secondary" onclick="cancelBk('${code}')">↩ ยกเลิก</button>` : '',
+          isAdmin() ? `<button class="btn btn-sm btn-danger" onclick="delBk('${code}')" title="ลบรายการ">🗑️</button>` : ''
+        ].filter(Boolean).join(' ');
+        return `
         <tr>
           <td data-label="ผู้จอง">${esc(b['ผู้ขอจอง'])}</td>
           <td data-label="หน่วยงาน">${esc(b['หน่วยงาน'])}</td>
@@ -8827,49 +8864,121 @@ input, select, textarea, button {
           <td data-label="วันที่ใช้">${esc(b['วันที่ใช้'])}</td>
           <td data-label="เวลา">${esc(b['เวลาเริ่ม'])}-${esc(b['เวลาสิ้นสุด'])}</td>
           <td data-label="สถานที่">${esc(b['สถานที่ไป'])}</td>
-          <td data-label="คนขับ">${esc(b['พนักงานขับรถ'])}</td>
-          <td data-label="สถานะ">${statusBadge(b['สถานะ'])}</td>
-          <td data-label="">${b['สถานะ'] === 'รออนุมัติ' ? `<button class="btn btn-sm btn-success" onclick="approveBk('${b['รหัส']}')">✅ อนุมัติ</button>` : ''}</td>
-        </tr>`).join('') || '<tr><td colspan="9" class="empty"><span class="ico">📅</span>ยังไม่มีการจอง</td></tr>'}
+          <td data-label="คนขับ">${esc(b['พนักงานขับรถ'] || '-')}</td>
+          <td data-label="สถานะ">${statusBadge(st)}${b['เหตุผล'] ? `<div style="font-size:11px; color:#64748b; margin-top:3px;">📝 ${esc(b['เหตุผล'])}</div>` : ''}</td>
+          <td data-label="" style="white-space:nowrap;">${actions}</td>
+        </tr>`;
+      }).join('') || '<tr><td colspan="9" class="empty"><span class="ico">📅</span>ยังไม่มีการจอง</td></tr>'}
     </tbody></table></div></div></div>
   `;
     }
 
     function addBooking() {
+      // รถที่กำลังออกงานหรือซ่อมอยู่ยังจองล่วงหน้าได้ — ตัดเฉพาะคันที่ใช้ไม่ได้ถาวร
+      const cars = DATA.vehicles.filter(v => !['ไม่พร้อมใช้', 'ชำรุด'].includes(v['สถานะ']));
       openModal('📅 จองรถล่วงหน้า', `
     <div class="form-grid">
       <div class="field"><label>ผู้ขอจอง *</label><input id="bk_user" value="${esc(CURRENT_USER.name)}"></div>
       <div class="field"><label>หน่วยงาน</label><select id="bk_dept">${DATA.departments.map(d => `<option ${d['ชื่อหน่วยงาน'] === CURRENT_USER.dept ? 'selected' : ''}>${esc(d['ชื่อหน่วยงาน'])}</option>`).join('')}</select></div>
-      <div class="field"><label>ทะเบียนรถ *</label><select id="bk_plate">${DATA.vehicles.filter(v => v['สถานะ'] === 'พร้อมใช้งาน').map(v => `<option>${esc(v['ทะเบียน'])}</option>`).join('')}</select></div>
-      <div class="field"><label>วันที่ใช้ *</label><input id="bk_date" type="date"></div>
-      <div class="field"><label>เวลาเริ่ม</label><input id="bk_start" type="time" value="08:00"></div>
-      <div class="field"><label>เวลาสิ้นสุด</label><input id="bk_end" type="time" value="17:00"></div>
+      <div class="field"><label>ทะเบียนรถ *</label><select id="bk_plate" onchange="checkBookingConflict()">${cars.map(v => `<option value="${esc(v['ทะเบียน'])}">${esc(v['ทะเบียน'])}${v['สถานะ'] && v['สถานะ'] !== 'พร้อมใช้งาน' ? ' (' + esc(v['สถานะ']) + ')' : ''}</option>`).join('') || '<option value="">— ไม่มีรถที่จองได้ —</option>'}</select></div>
+      <div class="field"><label>วันที่ใช้ *</label><input id="bk_date" type="date" min="${localDateStr(0)}" value="${localDateStr(1)}" onchange="checkBookingConflict()"></div>
+      <div class="field"><label>เวลาเริ่ม *</label><input id="bk_start" type="time" value="08:00" onchange="checkBookingConflict()"></div>
+      <div class="field"><label>เวลาสิ้นสุด *</label><input id="bk_end" type="time" value="17:00" onchange="checkBookingConflict()"></div>
+      <div class="field full" id="bk_conflict" style="display:none; background:#fef2f2; border:1px solid #fecaca; color:#b91c1c; border-radius:10px; padding:10px 12px; font-size:13px;"></div>
       <div class="field full"><label>สถานที่ไป *</label><input id="bk_place"></div>
       <div class="field full"><label>วัตถุประสงค์</label><input id="bk_purpose"></div>
-      <div class="field"><label>จำนวนผู้โดยสาร</label><input id="bk_pax" type="number" value="1"></div>
-      <div class="field"><label>พนักงานขับรถ</label><select id="bk_driver">${DATA.drivers.filter(d => d['สถานะ'] === 'ปฏิบัติงาน').map(d => `<option>${esc(d['ชื่อ-นามสกุล'])}</option>`).join('')}</select></div>
+      <div class="field"><label>จำนวนผู้โดยสาร</label><input id="bk_pax" type="number" min="1" value="1"></div>
+      <div class="field"><label>พนักงานขับรถ</label><select id="bk_driver" onchange="checkBookingConflict()"><option value="">— ไม่ระบุ (ให้ผู้อนุมัติจัด) —</option>${DATA.drivers.filter(d => d['สถานะ'] === 'ปฏิบัติงาน').map(d => `<option>${esc(d['ชื่อ-นามสกุล'])}</option>`).join('')}</select></div>
       <div class="field full"><label>หมายเหตุ</label><textarea id="bk_note" rows="2"></textarea></div>
     </div>
   `, () => {
-        const data = {
-          'ผู้ขอจอง': $('bk_user').value, 'หน่วยงาน': $('bk_dept').value, 'ทะเบียน': $('bk_plate').value,
-          'วันที่ใช้': $('bk_date').value, 'เวลาเริ่ม': $('bk_start').value, 'เวลาสิ้นสุด': $('bk_end').value,
-          'สถานที่ไป': $('bk_place').value, 'วัตถุประสงค์': $('bk_purpose').value,
-          'จำนวนผู้โดยสาร': +$('bk_pax').value, 'พนักงานขับรถ': $('bk_driver').value,
-          'หมายเหตุ': $('bk_note').value, 'สถานะ': 'รออนุมัติ'
-        };
-        if (!data['สถานที่ไป']) { toast('กรอกสถานที่', 'warning'); return; }
+        const data = readBookingForm();
+        if (!data['ผู้ขอจอง'].trim()) { toast('กรอกชื่อผู้ขอจอง', 'warning'); return; }
+        if (!data['ทะเบียน']) { toast('เลือกรถที่ต้องการจอง', 'warning'); return; }
+        if (!data['วันที่ใช้']) { toast('เลือกวันที่ใช้', 'warning'); return; }
+        if (data['วันที่ใช้'] < localDateStr(0)) { toast('ไม่สามารถจองย้อนหลังได้', 'warning'); return; }
+        if (!data['เวลาเริ่ม'] || !data['เวลาสิ้นสุด'] || data['เวลาเริ่ม'] >= data['เวลาสิ้นสุด']) { toast('เวลาสิ้นสุดต้องหลังเวลาเริ่ม', 'warning'); return; }
+        if (!data['สถานที่ไป'].trim()) { toast('กรอกสถานที่', 'warning'); return; }
+        if (checkBookingConflict()) { toast('ช่วงเวลานี้ถูกจองแล้ว กรุณาเปลี่ยนเวลา รถ หรือคนขับ', 'warning'); return; }
         showLoading(true);
-        callApi('saveBooking', data, CURRENT_USER.name).then(r => { showLoading(false); if (r.success) { toast('จองสำเร็จ'); closeModal(); refreshData(); } });
+        callApi('saveBooking', data, CURRENT_USER.name).then(r => {
+          showLoading(false);
+          if (r && r.success) { toast('จองสำเร็จ รอการอนุมัติ'); closeModal(); refreshData(); return; }
+          const msg = (r && r.message) || 'บันทึกการจองไม่สำเร็จ';
+          if (r && r.conflict) showBookingConflict(msg);
+          toast(msg.split('\n')[0], 'error');
+        }).catch(() => { showLoading(false); toast('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ กรุณาลองใหม่', 'error'); });
       }, true);
-
-      // Set booking date programmatically (tomorrow)
-      $('bk_date').value = new Date(Date.now() + 86400000).toISOString().split('T')[0];
+      checkBookingConflict();
     }
 
-    function approveBk(row) {
+    function readBookingForm() {
+      return {
+        'ผู้ขอจอง': $('bk_user').value, 'หน่วยงาน': $('bk_dept').value, 'ทะเบียน': $('bk_plate').value,
+        'วันที่ใช้': $('bk_date').value, 'เวลาเริ่ม': $('bk_start').value, 'เวลาสิ้นสุด': $('bk_end').value,
+        'สถานที่ไป': $('bk_place').value, 'วัตถุประสงค์': $('bk_purpose').value,
+        'จำนวนผู้โดยสาร': +$('bk_pax').value || 1, 'พนักงานขับรถ': $('bk_driver').value,
+        'หมายเหตุ': $('bk_note').value
+      };
+    }
+
+    function showBookingConflict(text) {
+      const box = $('bk_conflict');
+      if (!box) return;
+      box.style.display = text ? '' : 'none';
+      box.innerHTML = text ? '⚠️ ' + esc(text).replace(/\n/g, '<br>') : '';
+    }
+
+    // เตือนทันทีในฟอร์มเมื่อรถ/คนขับ/เวลาที่เลือกชนกับการจองที่มีอยู่ — คืน true ถ้าชน
+    function checkBookingConflict() {
+      if (!$('bk_plate')) return false;
+      const data = readBookingForm();
+      const conflicts = data['วันที่ใช้'] && data['เวลาเริ่ม'] < data['เวลาสิ้นสุด'] ? findBookingConflicts(data) : [];
+      showBookingConflict(conflicts.length ? 'ช่วงเวลานี้ถูกจองไปแล้ว:\n' + conflicts.map(b => {
+        const what = String(b['ทะเบียน'] || '').trim() === data['ทะเบียน'] ? 'รถ ' + b['ทะเบียน'] : 'คนขับ ' + b['พนักงานขับรถ'];
+        return `• ${what} ${b['เวลาเริ่ม']}-${b['เวลาสิ้นสุด']} โดย ${b['ผู้ขอจอง'] || '-'} (${b['สถานะ']})`;
+      }).join('\n') : '');
+      return conflicts.length > 0;
+    }
+
+    function setBookingStatus(code, status, reason, okMsg) {
+      showLoading(true);
+      callApi('updateBookingStatus', code, status, reason || '').then(r => {
+        showLoading(false);
+        if (r && r.success) { toast(okMsg); refreshData(); return; }
+        const msg = (r && r.message) || 'ดำเนินการไม่สำเร็จ';
+        if (r && r.conflict) alert(msg); else toast(msg, 'error');
+      }).catch(() => { showLoading(false); toast('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ กรุณาลองใหม่', 'error'); });
+    }
+
+    function approveBk(code) {
       if (!confirm('อนุมัติคำขอจอง?')) return;
-      callApi('approveBooking', row, CURRENT_USER.name).then(r => { if (r.success) { toast('อนุมัติสำเร็จ'); refreshData(); } });
+      setBookingStatus(code, 'อนุมัติแล้ว', '', 'อนุมัติสำเร็จ');
+    }
+
+    function rejectBk(code) {
+      const reason = prompt('ระบุเหตุผลที่ไม่อนุมัติ:');
+      if (reason === null) return;
+      if (!reason.trim()) { toast('กรุณาระบุเหตุผล', 'warning'); return; }
+      setBookingStatus(code, 'ไม่อนุมัติ', reason.trim(), 'บันทึกไม่อนุมัติแล้ว');
+    }
+
+    function cancelBk(code) {
+      const reason = prompt('ยกเลิกการจองนี้? ระบุเหตุผล (ไม่บังคับ):');
+      if (reason === null) return;
+      setBookingStatus(code, 'ยกเลิก', reason.trim(), 'ยกเลิกการจองแล้ว');
+    }
+
+    function delBk(code) {
+      if (!requireAdmin()) return;
+      const reason = prompt('กรุณาระบุเหตุผลในการลบรายการจอง:');
+      if (reason === null) return;
+      if (!reason.trim()) { toast('กรุณาระบุเหตุผลในการลบข้อมูล', 'warning'); return; }
+      showLoading(true);
+      callApi('deleteBooking', code, ADMIN_PASS, reason.trim()).then(r => {
+        showLoading(false);
+        if (r && r.success) { toast('ลบสำเร็จ'); refreshData(); } else toast((r && r.message) || 'ลบไม่สำเร็จ', 'error');
+      }).catch(() => { showLoading(false); toast('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ กรุณาลองใหม่', 'error'); });
     }
 
     // ============== INSPECTION ==============
@@ -9607,6 +9716,10 @@ input, select, textarea, button {
     window.delDriver = delDriver;
     window.addBooking = addBooking;
     window.approveBk = approveBk;
+    window.rejectBk = rejectBk;
+    window.cancelBk = cancelBk;
+    window.delBk = delBk;
+    window.checkBookingConflict = checkBookingConflict;
     window.addInspection = addInspection;
     window.runOverdueCheck = runOverdueCheck;
     window.runSyncFromFirebase = runSyncFromFirebase;

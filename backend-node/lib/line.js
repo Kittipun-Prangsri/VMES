@@ -308,7 +308,8 @@ async function sendVehicleUsageFlex(data, targetId) {
 }
 
 async function sendBookingFlex(data, status, targetId) {
-  const statusColor = status === 'อนุมัติแล้ว' ? '#10b981' : '#f59e0b';
+  const statusColor = status === 'อนุมัติแล้ว' ? '#10b981'
+    : (status === 'ไม่อนุมัติ' || status === 'ยกเลิก') ? '#ef4444' : '#f59e0b';
   const flex = {
     type: 'bubble',
     size: 'mega',
@@ -351,6 +352,7 @@ async function sendBookingFlex(data, status, targetId) {
             flexRow('📅 วันที่ใช้', String(data['วันที่ใช้'] || '-')),
             flexRow('🕐 เวลา', String(data['เวลาเริ่ม'] || '-') + ' - ' + String(data['เวลาสิ้นสุด'] || '-')),
             flexRow('👨‍✈️ พนักงานขับรถ', String(data['พนักงานขับรถ'] || '-')),
+            ...(data['เหตุผล'] ? [flexRow('📝 เหตุผล', String(data['เหตุผล']))] : []),
           ],
         },
       ],

@@ -167,4 +167,28 @@ async function updateUserProfile(username, profileData) {
   }
 }
 
-module.exports = { login, verifyAdmin, getAdminCode, changeUserPassword, updateUserProfile };
+// บัญชีพิเศษจาก login() ที่ไม่มีอยู่ในตาราง users
+const BUILTIN_SESSION_USERS = {
+  'UR-SUPERADMIN-001': { code: 'UR-SUPERADMIN-001', name: 'Kittipun (Super Admin)', role: 'superadmin' },
+  'ADMIN-001': { code: 'ADMIN-001', name: 'ผู้ดูแลระบบ', role: 'superadmin' },
+};
+
+// อ่านผู้ใช้จาก session token ใหม่จาก Firestore ทุกครั้ง — บทบาทที่ frontend ส่งมาเชื่อไม่ได้
+async function getSessionUser(session) {
+  const uid = session && session.uid;
+  if (!uid) return null;
+  if (BUILTIN_SESSION_USERS[uid]) return BUILTIN_SESSION_USERS[uid];
+  const users = await listDocs(SHEETS.USERS);
+  const u = users.find((x) => String(x['รหัส'] || '') === String(uid));
+  if (!u) return null;
+  return { code: u['รหัส'], name: u['ชื่อ-นามสกุล'], role: u['บทบาท'] || '' };
+}
+
+// รายชื่อบทบาทเดียวกับ updateBorrowingStatus (handlers/borrowing.js)
+function isStaffRole(role) {
+  const r = String(role || '').trim().toLowerCase();
+  return ['superadmin', 'admin', 'manager', 'ผู้ดูแลระบบ', 'ผู้ดูแลระบบสูงสุด', 'ผู้ดูแล', 'ผู้จัดการ'].includes(r)
+    || r.includes('admin') || r.includes('manager');
+}
+
+module.exports = { login, verifyAdmin, getAdminCode, changeUserPassword, updateUserProfile, getSessionUser, isStaffRole };
