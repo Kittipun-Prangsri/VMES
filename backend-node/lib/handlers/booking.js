@@ -6,6 +6,9 @@ const { SHEETS, setDoc, deleteDoc, getDoc, listDocs } = require('../firestore');
 const { newId, nowStr, todayStr, logAudit } = require('../util');
 const { verifyAdmin, getSessionUser, isStaffRole } = require('../auth');
 const { sendBookingFlex } = require('../line');
+const { getUsers, getUserLineId } = require('./users');
+const { getVehicles } = require('./vehicles');
+const { getDrivers } = require('./drivers');
 
 // สถานะที่ยังกันรถ/คนขับไว้ — ไม่อนุมัติ/ยกเลิกแล้วไม่นับว่าชน
 const ACTIVE_STATUSES = ['รออนุมัติ', 'อนุมัติแล้ว'];
@@ -54,6 +57,13 @@ function validateBooking(data) {
   return null;
 }
 
+// แจ้งกลุ่ม (มีปุ่มอนุมัติให้เจ้าหน้าที่) + แจ้งผู้ขอจองทาง LINE ส่วนตัว (มีปุ่มยกเลิก/ดูการจองของฉัน)
+async function notifyBooking(item, status) {
+  await sendBookingFlex(item, status, null, 'staff');
+  const lineId = item['LINE_USER_ID'] || (await getUserLineId(item['ผู้ขอจอง']));
+  if (lineId) await sendBookingFlex(item, status, lineId, 'requester');
+}
+
 async function saveBooking(data, user) {
   data = { ...(data || {}) };
   delete data._row;
@@ -71,7 +81,7 @@ async function saveBooking(data, user) {
   data['วันที่บันทึก'] = nowStr();
   await setDoc(SHEETS.BOOKING, data['รหัส'], data);
   await logAudit('จองรถล่วงหน้า', user || 'system', data['ทะเบียน']);
-  await sendBookingFlex(data, data['สถานะ']);
+  await notifyBooking(data, data['สถานะ']);
   return { success: true, code: data['รหัส'] };
 }
 
@@ -80,12 +90,18 @@ async function saveBooking(data, user) {
 async function updateBookingStatus(code, newStatus, reason) {
   const me = await getSessionUser(this && this.session);
   if (!me) return { success: false, message: 'กรุณาเข้าสู่ระบบใหม่' };
+  return changeBookingStatus(me, code, newStatus, reason);
+}
+
+// me = { name, role, lineUserId? } — มาจาก session (เว็บ) หรือจาก LINE userId ที่ผูกบัญชีไว้ (webhook/LIFF)
+async function changeBookingStatus(me, code, newStatus, reason) {
   const staff = isStaffRole(me.role);
 
   const item = await getDoc(SHEETS.BOOKING, String(code));
   if (!item) return { success: false, message: 'ไม่พบคำขอจอง' };
 
-  const isOwner = String(item['ผู้ขอจอง'] || '').trim() === String(me.name || '').trim();
+  const isOwner = String(item['ผู้ขอจอง'] || '').trim() === String(me.name || '').trim()
+    || (!!me.lineUserId && String(item['LINE_USER_ID'] || '') === me.lineUserId);
   if (newStatus === 'อนุมัติแล้ว' || newStatus === 'ไม่อนุมัติ') {
     if (!staff) return { success: false, message: 'เฉพาะผู้ดูแลระบบหรือผู้จัดการเท่านั้นที่อนุมัติได้' };
     if (item['สถานะ'] !== 'รออนุมัติ') return { success: false, message: 'คำขอนี้ไม่ได้อยู่ในสถานะรออนุมัติ' };
@@ -116,8 +132,8 @@ async function updateBookingStatus(code, newStatus, reason) {
   if (reason) item['เหตุผล'] = String(reason).trim();
   await setDoc(SHEETS.BOOKING, item['รหัส'], item);
   await logAudit('การจองรถ: ' + newStatus, me.name, item['ทะเบียน'] + ' ' + item['วันที่ใช้'] + (reason ? ' | เหตุผล: ' + reason : ''));
-  await sendBookingFlex(item, newStatus);
-  return { success: true };
+  await notifyBooking(item, newStatus);
+  return { success: true, item };
 }
 
 // คงชื่อเดิมไว้ให้ frontend รุ่นเก่าที่ยังเปิดค้างอยู่เรียกได้ (approver จาก client ไม่ใช้แล้ว)
@@ -133,4 +149,78 @@ async function deleteBooking(code, adminCode, reason) {
   return { success: true };
 }
 
-module.exports = { getBooking, saveBooking, approveBooking, updateBookingStatus, deleteBooking, findConflicts };
+// ============== LINE / LIFF ==============
+// ตัวตนฝั่ง LINE ยึด LINE User ID ที่ผูกกับตาราง users ไว้แล้ว (แบบเดียวกับ LIFF ยืม-คืนอุปกรณ์)
+
+async function getUserByLineId(lineUserId) {
+  const id = String(lineUserId || '').trim();
+  if (!id) return null;
+  const users = await getUsers();
+  const u = users.find((x) => x['LINE ID'] === id);
+  if (!u) return null;
+  return { name: u['ชื่อ-นามสกุล'] || '', role: u['บทบาท'] || '', dept: u['หน่วยงาน'] || '', phone: u['เบอร์ติดต่อ'] || '', lineUserId: id };
+}
+
+// ข้อมูลสำหรับฟอร์มจองใน LIFF — ตารางที่ถูกจองแล้วไม่มีชื่อผู้จอง (endpoint นี้เป็น public)
+async function getLiffBookingInfo(lineUserId) {
+  const me = await getUserByLineId(lineUserId);
+  const [vehicles, drivers, bookings] = await Promise.all([getVehicles(), getDrivers(), getBooking()]);
+  const today = todayStr();
+  return {
+    success: true,
+    registered: !!me,
+    profile: me ? { name: me.name, dept: me.dept, phone: me.phone } : null,
+    vehicles: vehicles
+      .filter((v) => v['ทะเบียน'] && !['ไม่พร้อมใช้', 'ชำรุด'].includes(v['สถานะ']))
+      .map((v) => ({ plate: v['ทะเบียน'], name: [v['ยี่ห้อ'], v['รุ่น']].filter(Boolean).join(' '), type: v['ประเภท'] || '', status: v['สถานะ'] || '' })),
+    drivers: drivers.filter((d) => d['สถานะ'] === 'ปฏิบัติงาน').map((d) => d['ชื่อ-นามสกุล']).filter(Boolean),
+    schedule: bookings
+      .filter((b) => ACTIVE_STATUSES.includes(b['สถานะ']) && String(b['วันที่ใช้'] || '') >= today)
+      .map((b) => ({ plate: b['ทะเบียน'], driver: b['พนักงานขับรถ'] || '', date: b['วันที่ใช้'], start: b['เวลาเริ่ม'], end: b['เวลาสิ้นสุด'], status: b['สถานะ'] })),
+    myBookings: me ? await getMyBookings(lineUserId) : [],
+  };
+}
+
+async function getMyBookings(lineUserId) {
+  const me = await getUserByLineId(lineUserId);
+  if (!me) return [];
+  const all = await getBooking();
+  return all
+    .filter((b) => String(b['LINE_USER_ID'] || '') === me.lineUserId || String(b['ผู้ขอจอง'] || '').trim() === me.name)
+    .sort((a, b) => String(b['วันที่ใช้'] || '').localeCompare(String(a['วันที่ใช้'] || '')) || String(b['เวลาเริ่ม'] || '').localeCompare(String(a['เวลาเริ่ม'] || '')))
+    .slice(0, 20);
+}
+
+async function saveLiffBooking(lineUserId, data) {
+  const me = await getUserByLineId(lineUserId);
+  if (!me) return { success: false, message: 'บัญชี LINE นี้ยังไม่ได้ลงทะเบียน กรุณาลงทะเบียนก่อนจองรถ' };
+  const d = data || {};
+  const booking = {
+    'ผู้ขอจอง': me.name,
+    'หน่วยงาน': String(d['หน่วยงาน'] || me.dept || '').trim(),
+    'เบอร์ติดต่อ': String(d['เบอร์ติดต่อ'] || me.phone || '').trim(),
+    'ทะเบียน': String(d['ทะเบียน'] || '').trim(),
+    'วันที่ใช้': String(d['วันที่ใช้'] || '').trim(),
+    'เวลาเริ่ม': String(d['เวลาเริ่ม'] || '').trim(),
+    'เวลาสิ้นสุด': String(d['เวลาสิ้นสุด'] || '').trim(),
+    'สถานที่ไป': String(d['สถานที่ไป'] || '').trim(),
+    'วัตถุประสงค์': String(d['วัตถุประสงค์'] || '').trim(),
+    'จำนวนผู้โดยสาร': Math.max(1, parseInt(d['จำนวนผู้โดยสาร'], 10) || 1),
+    'พนักงานขับรถ': String(d['พนักงานขับรถ'] || '').trim(),
+    'หมายเหตุ': String(d['หมายเหตุ'] || '').trim(),
+    'ช่องทาง': 'LINE',
+    'LINE_USER_ID': me.lineUserId,
+  };
+  return saveBooking(booking, me.name);
+}
+
+async function cancelLiffBooking(lineUserId, code, reason) {
+  const me = await getUserByLineId(lineUserId);
+  if (!me) return { success: false, message: 'บัญชี LINE นี้ยังไม่ได้ลงทะเบียน' };
+  return changeBookingStatus(me, code, 'ยกเลิก', reason);
+}
+
+module.exports = {
+  getBooking, saveBooking, approveBooking, updateBookingStatus, changeBookingStatus, deleteBooking, findConflicts,
+  getUserByLineId, getLiffBookingInfo, getMyBookings, saveLiffBooking, cancelLiffBooking,
+};

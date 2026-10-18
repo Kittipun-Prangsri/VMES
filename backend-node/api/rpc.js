@@ -30,6 +30,10 @@ const PUBLIC_FUNCTIONS = new Set([
   'registerLiffUser',
   'getMyActiveBorrowings',
   'requestReturnViaLiff',
+  // LIFF จองรถ — ตัวตนยึด LINE User ID ที่ผูกกับตาราง users (handlers/booking.js)
+  'getLiffBookingInfo',
+  'saveLiffBooking',
+  'cancelLiffBooking',
 ]);
 
 function readRawBody(req) {

@@ -28,7 +28,7 @@ const {
 } = require('./handlers/borrowing');
 const { saveUser, deleteUser, requestPasswordResetNotification, autoLinkLineUser, bindLineByCitizenId, getLiffUserProfile, registerLiffUser } = require('./handlers/users');
 const { saveDriver, deleteDriver } = require('./handlers/drivers');
-const { saveBooking, approveBooking, updateBookingStatus, deleteBooking } = require('./handlers/booking');
+const { saveBooking, approveBooking, updateBookingStatus, deleteBooking, getLiffBookingInfo, saveLiffBooking, cancelLiffBooking } = require('./handlers/booking');
 const { saveInspection, deleteInspection } = require('./handlers/inspection');
 const { saveDepartment, deleteDepartment } = require('./handlers/departments');
 const { saveEquipmentHandover, deleteEquipmentHandover } = require('./handlers/equipmentHandover');
@@ -107,6 +107,9 @@ const API_WHITELIST = {
   saveBooking,
   approveBooking,
   updateBookingStatus,
+  getLiffBookingInfo,
+  saveLiffBooking,
+  cancelLiffBooking,
   deleteBooking,
 
   // Inspection

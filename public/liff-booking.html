@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>จองรถผ่าน LINE - ระบบ VMES</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="icon" type="image/png" sizes="64x64" href="/favicon.png">
+  <link rel="shortcut icon" href="/favicon.ico">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <!-- LINE LIFF SDK -->
+  <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <!-- Tailwind CSS v3 -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: { extend: { fontFamily: { sans: ['"IBM Plex Sans Thai"', 'sans-serif'] } } }
+    }
+  </script>
+  <style>
+    * { box-sizing: border-box; font-family: 'IBM Plex Sans Thai', -apple-system, BlinkMacSystemFont, sans-serif; }
+    .field-input {
+      width: 100%; padding: 12px 14px; border: 1.5px solid #e2e8f0; border-radius: 12px;
+      font-size: 0.925rem; color: #0f172a; background: #f8fafc; outline: none; transition: all .2s ease;
+    }
+    .field-input:focus { border-color: #2563eb; background: #fff; box-shadow: 0 0 0 3px rgba(37, 99, 235, .15); }
+    .field-label { display: block; font-size: .85rem; font-weight: 700; color: #334155; margin-bottom: 6px; }
+    .req { color: #ef4444; }
+    .tab-btn { flex: 1; padding: 10px; font-size: .85rem; font-weight: 700; border-radius: 12px; color: #475569; transition: all .2s ease; }
+    .tab-btn.active { background: #fff; color: #1e40af; box-shadow: 0 1px 4px rgba(15, 23, 42, .12); }
+    .loading-overlay {
+      display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, .6); backdrop-filter: blur(4px);
+      justify-content: center; align-items: center; flex-direction: column; z-index: 99; color: #fff;
+    }
+    .spinner { width: 40px; height: 40px; border: 4px solid rgba(255, 255, 255, .3); border-top-color: #fff; border-radius: 50%; animation: spin .8s linear infinite; margin-bottom: 12px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body class="bg-slate-900 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-blue-950 via-slate-900 to-slate-950 text-slate-100 min-h-screen p-3 sm:p-6 flex justify-center items-start">
+
+  <div class="max-w-md w-full bg-white/95 backdrop-blur-2xl rounded-3xl shadow-2xl border border-white/30 overflow-hidden text-slate-800">
+    <div class="bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 text-white p-6 text-center shadow-lg">
+      <img src="/logo-main.png" alt="VMES" class="w-20 h-20 rounded-full mx-auto mb-2 border-4 border-white/90 shadow-2xl bg-white object-contain p-1">
+      <h1 class="text-xl font-extrabold tracking-tight mt-1">🚗 จองรถล่วงหน้าออนไลน์</h1>
+      <p class="text-xs text-blue-100 mt-1 font-medium opacity-90">ระบบบริหารยานพาหนะ — VMES V2.0</p>
+      <div id="userBadge" class="inline-flex items-center gap-2 bg-white/20 px-3.5 py-1.5 rounded-full mt-3 text-xs text-white font-medium" style="display:none;">
+        <img id="userAvatar" class="w-6 h-6 rounded-full object-cover border border-white" src="" alt="">
+        <span id="userName">กำลังโหลดโปรไฟล์...</span>
+      </div>
+    </div>
+
+    <div id="initState" class="text-center py-12 text-slate-400">
+      <p class="text-sm font-medium">กำลังโหลดข้อมูล...</p>
+    </div>
+
+    <!-- ลงทะเบียนครั้งแรก (ใช้ registerLiffUser เดียวกับหน้ายืมอุปกรณ์) -->
+    <div id="registerCard" class="p-5 sm:p-6 space-y-4" style="display:none;">
+      <div class="text-center">
+        <p class="text-sm font-bold text-slate-700">👋 ยินดีต้อนรับ! เป็นการใช้งานครั้งแรกของคุณ</p>
+        <p class="text-xs text-slate-500 mt-1">ลงทะเบียนชื่อ-เบอร์โทรครั้งเดียว ครั้งต่อไปไม่ต้องกรอกซ้ำ</p>
+      </div>
+      <div><label class="field-label" for="reg_name">ชื่อ-นามสกุล <span class="req">*</span></label><input id="reg_name" class="field-input" placeholder="ระบุชื่อ-นามสกุล"></div>
+      <div><label class="field-label" for="reg_phone">เบอร์โทรศัพท์ <span class="req">*</span></label><input id="reg_phone" type="tel" class="field-input" placeholder="เช่น 0812345678"></div>
+      <div><label class="field-label" for="reg_dept">หน่วยงาน/สังกัด</label><input id="reg_dept" class="field-input" placeholder="เช่น งานบริหาร"></div>
+      <button type="button" class="w-full py-3.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-700 text-white font-extrabold shadow-lg active:scale-[0.98] transition-all" onclick="submitRegistration()">✅ ลงทะเบียนและดำเนินการต่อ</button>
+    </div>
+
+    <div id="mainArea" style="display:none;">
+      <div class="px-5 pt-4">
+        <div class="flex gap-1 bg-slate-100 p-1 rounded-2xl">
+          <button type="button" id="tabNew" class="tab-btn active" onclick="switchTab('new')">📅 จองรถ</button>
+          <button type="button" id="tabMine" class="tab-btn" onclick="switchTab('mine')">📋 การจองของฉัน <span id="mineCount" class="text-[11px]"></span></button>
+        </div>
+      </div>
+
+      <!-- ฟอร์มจอง -->
+      <form id="bookingForm" class="p-5 sm:p-6 space-y-4" onsubmit="submitBooking(event)">
+        <div>
+          <label class="field-label" for="bk_plate">เลือกรถ <span class="req">*</span></label>
+          <select id="bk_plate" class="field-input" onchange="refreshAvailability()"></select>
+          <p id="carInfo" class="text-xs text-slate-500 mt-1.5"></p>
+        </div>
+
+        <div>
+          <label class="field-label" for="bk_date">วันที่ใช้รถ <span class="req">*</span></label>
+          <input id="bk_date" type="date" class="field-input" onchange="refreshAvailability()">
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div><label class="field-label" for="bk_start">เวลาออก <span class="req">*</span></label><input id="bk_start" type="time" value="08:00" class="field-input" onchange="refreshAvailability()"></div>
+          <div><label class="field-label" for="bk_end">เวลากลับ <span class="req">*</span></label><input id="bk_end" type="time" value="17:00" class="field-input" onchange="refreshAvailability()"></div>
+        </div>
+
+        <!-- คิวรถคันนี้ในวันที่เลือก + เตือนชน -->
+        <div id="daySchedule" class="bg-slate-50 border border-slate-200 rounded-2xl p-3.5 text-xs space-y-1.5"></div>
+        <div id="conflictBox" class="bg-rose-50 border border-rose-200 text-rose-700 rounded-2xl p-3.5 text-xs font-semibold" style="display:none;"></div>
+
+        <div><label class="field-label" for="bk_place">📍 สถานที่ไป <span class="req">*</span></label><input id="bk_place" class="field-input" placeholder="เช่น สสจ., รพ.ศูนย์"></div>
+        <div><label class="field-label" for="bk_purpose">🎯 วัตถุประสงค์ <span class="req">*</span></label><textarea id="bk_purpose" rows="2" class="field-input" placeholder="เช่น ประชุม, ส่งผู้ป่วย, รับเอกสาร"></textarea></div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div><label class="field-label" for="bk_pax">👥 ผู้โดยสาร</label><input id="bk_pax" type="number" min="1" value="1" class="field-input"></div>
+          <div><label class="field-label" for="bk_phone">📞 เบอร์ติดต่อ</label><input id="bk_phone" type="tel" class="field-input"></div>
+        </div>
+
+        <div>
+          <label class="field-label" for="bk_driver">👨‍✈️ พนักงานขับรถ</label>
+          <select id="bk_driver" class="field-input" onchange="refreshAvailability()"></select>
+        </div>
+        <div><label class="field-label" for="bk_dept">🏢 หน่วยงาน</label><input id="bk_dept" class="field-input"></div>
+        <div><label class="field-label" for="bk_note">หมายเหตุ</label><textarea id="bk_note" rows="2" class="field-input"></textarea></div>
+
+        <button type="submit" id="submitBtn" class="w-full py-3.5 rounded-xl bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-700 text-white font-extrabold shadow-lg shadow-blue-500/30 active:scale-[0.98] transition-all disabled:from-slate-300 disabled:to-slate-300 disabled:shadow-none">🚀 ส่งคำขอจองรถ</button>
+      </form>
+
+      <!-- การจองของฉัน -->
+      <div id="mineSection" class="p-5 sm:p-6 space-y-3" style="display:none;">
+        <div id="mineList" class="space-y-3"></div>
+      </div>
+
+      <!-- จองสำเร็จ -->
+      <div id="successCard" class="text-center px-6 py-10" style="display:none;">
+        <div class="w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-3xl mx-auto mb-4">✓</div>
+        <h2 class="text-xl font-extrabold text-emerald-800 mb-1">ส่งคำขอจองรถแล้ว!</h2>
+        <p class="text-sm text-slate-500 mb-1">รหัสการจอง <strong id="successCode" class="text-slate-700"></strong></p>
+        <p class="text-xs text-slate-500 mb-6">สถานะ: รออนุมัติ — ระบบจะแจ้งผลการอนุมัติทางแชท LINE ของคุณ</p>
+        <div class="space-y-2">
+          <button type="button" class="w-full py-3 rounded-xl bg-blue-600 text-white font-bold" onclick="switchTab('mine')">📋 ดูการจองของฉัน</button>
+          <button type="button" class="w-full py-3 rounded-xl bg-slate-100 text-slate-600 font-bold" onclick="closeLiff()">ปิดหน้าต่างนี้</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="loadingOverlay" class="loading-overlay">
+    <div class="spinner"></div>
+    <p id="loadingMsg">กำลังโหลด...</p>
+  </div>
+
+  <!-- ไม่ใช้ window.confirm() เพราะ LINE in-app browser มักบล็อก dialog กำเนิดเบราว์เซอร์ (ดู liff-return.html) -->
+  <div id="cancelModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4" style="display:none; z-index:100;">
+    <div class="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-6 space-y-4 text-slate-800">
+      <div class="text-center">
+        <div class="text-4xl mb-1">↩️</div>
+        <h3 class="text-base font-extrabold">ยืนยันยกเลิกการจอง</h3>
+        <p id="cancelSummary" class="text-xs text-slate-500 mt-1"></p>
+      </div>
+      <input id="cancelReason" class="field-input" placeholder="เหตุผล (ไม่บังคับ)">
+      <div class="flex gap-3">
+        <button type="button" class="flex-1 py-3 rounded-xl text-sm font-bold bg-slate-100 text-slate-600" onclick="closeCancelModal()">กลับ</button>
+        <button type="button" class="flex-1 py-3 rounded-xl text-sm font-bold bg-rose-600 text-white active:scale-[0.98]" onclick="confirmCancel()">ยืนยันยกเลิก</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = 'https://vmes-backend.vercel.app/api/rpc';
+    const LIFF_ID = '2011083425-G0pup6PQ';
+    const ACTIVE = ['รออนุมัติ', 'อนุมัติแล้ว'];
+    const STATUS_BADGE = {
+      'รออนุมัติ': 'bg-amber-100 text-amber-700',
+      'อนุมัติแล้ว': 'bg-emerald-100 text-emerald-700',
+      'ไม่อนุมัติ': 'bg-rose-100 text-rose-700',
+      'ยกเลิก': 'bg-slate-200 text-slate-600',
+    };
+
+    let lineProfile = null;
+    let info = { vehicles: [], drivers: [], schedule: [], myBookings: [] };
+    let pendingCancel = null;
+
+    const $ = id => document.getElementById(id);
+
+    function escHtml(s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
+    function api(fn, ...args) {
+      return fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fn, args }) }).then(r => r.json());
+    }
+
+    // วันที่ตามเวลาเครื่อง — toISOString() เป็น UTC ช่วง 00:00-07:00 จะได้วันก่อนหน้า
+    function localDateStr(offsetDays) {
+      const d = new Date();
+      d.setDate(d.getDate() + (offsetDays || 0));
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    }
+
+    function thaiDate(iso) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(String(iso || ''))) return iso || '-';
+      const d = new Date(iso + 'T00:00:00');
+      return d.toLocaleDateString('th-TH', { weekday: 'short', day: 'numeric', month: 'short', year: '2-digit' });
+    }
+
+    function showLoading(show, msg) {
+      $('loadingMsg').textContent = msg || 'กำลังโหลด...';
+      $('loadingOverlay').style.display = show ? 'flex' : 'none';
+    }
+
+    function closeLiff() {
+      if (typeof liff !== 'undefined' && liff.isInClient && liff.isInClient()) liff.closeWindow();
+      else window.close();
+    }
+
+    function showInitMessage(msg) {
+      $('initState').style.display = 'block';
+      $('initState').innerHTML = `<p class="text-sm font-medium px-6">${escHtml(msg)}</p>`;
+    }
+
+    document.addEventListener('DOMContentLoaded', initLiff);
+
+    async function initLiff() {
+      try {
+        await liff.init({ liffId: LIFF_ID });
+        if (!liff.isLoggedIn()) {
+          if (liff.isInClient()) { liff.login(); return; }
+          liff.login({ redirectUri: window.location.href });
+          return;
+        }
+        lineProfile = await liff.getProfile();
+        $('userBadge').style.display = 'inline-flex';
+        $('userName').textContent = lineProfile.displayName || 'ผู้ใช้งาน LINE';
+        if (lineProfile.pictureUrl) $('userAvatar').src = lineProfile.pictureUrl; else $('userAvatar').style.display = 'none';
+        api('autoLinkLineUser', lineProfile.userId, lineProfile.displayName, lineProfile.displayName).catch(() => {});
+        await loadInfo();
+      } catch (err) {
+        console.error('LIFF init error:', err);
+        showInitMessage('⚠️ กรุณาเปิดหน้านี้ผ่านแอป LINE (เมนู "จองรถ")');
+      }
+    }
+
+    async function loadInfo() {
+      try {
+        const res = await api('getLiffBookingInfo', lineProfile.userId);
+        if (!res || !res.success) throw new Error((res && res.message) || 'โหลดข้อมูลไม่สำเร็จ');
+        info = res;
+        $('initState').style.display = 'none';
+        if (!res.registered) {
+          $('reg_name').value = lineProfile.displayName || '';
+          $('registerCard').style.display = 'block';
+          $('mainArea').style.display = 'none';
+          return;
+        }
+        $('registerCard').style.display = 'none';
+        $('mainArea').style.display = 'block';
+        fillForm();
+        renderMine();
+        const tab = new URLSearchParams(window.location.search).get('view');
+        switchTab(tab === 'mine' ? 'mine' : 'new');
+      } catch (err) {
+        showInitMessage('โหลดข้อมูลไม่สำเร็จ: ' + err.message);
+      }
+    }
+
+    async function submitRegistration() {
+      const name = $('reg_name').value.trim();
+      const phone = $('reg_phone').value.trim();
+      const dept = $('reg_dept').value.trim();
+      if (!name) { alert('กรุณากรอกชื่อ-นามสกุล'); return; }
+      if (!phone) { alert('กรุณากรอกเบอร์โทรศัพท์'); return; }
+      showLoading(true, 'กำลังลงทะเบียน...');
+      try {
+        const r = await api('registerLiffUser', lineProfile.userId, lineProfile.displayName, name, phone, dept);
+        showLoading(false);
+        if (r && r.success) await loadInfo();
+        else alert('ลงทะเบียนไม่สำเร็จ: ' + ((r && r.message) || 'ไม่สามารถเชื่อมต่อระบบได้'));
+      } catch (err) {
+        showLoading(false);
+        alert('เกิดข้อผิดพลาดในการเชื่อมต่อระบบ: ' + err.message);
+      }
+    }
+
+    function fillForm() {
+      const cars = info.vehicles || [];
+      $('bk_plate').innerHTML = cars.length
+        ? cars.map(v => `<option value="${escHtml(v.plate)}">${escHtml(v.plate)}${v.name ? ' · ' + escHtml(v.name) : ''}</option>`).join('')
+        : '<option value="">— ไม่มีรถที่เปิดให้จอง —</option>';
+      $('bk_driver').innerHTML = '<option value="">— ไม่ระบุ (ให้ผู้อนุมัติจัด) —</option>'
+        + (info.drivers || []).map(d => `<option>${escHtml(d)}</option>`).join('');
+      $('bk_date').min = localDateStr(0);
+      if (!$('bk_date').value) $('bk_date').value = localDateStr(1);
+      const p = info.profile || {};
+      if (!$('bk_phone').value) $('bk_phone').value = p.phone || '';
+      if (!$('bk_dept').value) $('bk_dept').value = p.dept || '';
+      refreshAvailability();
+    }
+
+    function switchTab(tab) {
+      $('tabNew').classList.toggle('active', tab === 'new');
+      $('tabMine').classList.toggle('active', tab === 'mine');
+      $('bookingForm').style.display = tab === 'new' ? 'block' : 'none';
+      $('mineSection').style.display = tab === 'mine' ? 'block' : 'none';
+      $('successCard').style.display = 'none';
+    }
+
+    function readForm() {
+      return {
+        'ทะเบียน': $('bk_plate').value,
+        'วันที่ใช้': $('bk_date').value,
+        'เวลาเริ่ม': $('bk_start').value,
+        'เวลาสิ้นสุด': $('bk_end').value,
+        'สถานที่ไป': $('bk_place').value.trim(),
+        'วัตถุประสงค์': $('bk_purpose').value.trim(),
+        'จำนวนผู้โดยสาร': parseInt($('bk_pax').value, 10) || 1,
+        'เบอร์ติดต่อ': $('bk_phone').value.trim(),
+        'พนักงานขับรถ': $('bk_driver').value,
+        'หน่วยงาน': $('bk_dept').value.trim(),
+        'หมายเหตุ': $('bk_note').value.trim(),
+      };
+    }
+
+    // ตรรกะเดียวกับ findConflicts ใน backend-node/lib/handlers/booking.js (backend เป็นตัวตัดสินจริง)
+    function findConflicts(d) {
+      return (info.schedule || []).filter(b => {
+        if (b.date !== d['วันที่ใช้']) return false;
+        const sameCar = d['ทะเบียน'] && b.plate === d['ทะเบียน'];
+        const sameDriver = d['พนักงานขับรถ'] && b.driver === d['พนักงานขับรถ'];
+        if (!sameCar && !sameDriver) return false;
+        return d['เวลาเริ่ม'] < (b.end || '23:59') && (b.start || '00:00') < d['เวลาสิ้นสุด'];
+      });
+    }
+
+    // แสดงคิวของรถคันที่เลือกในวันนั้น และเตือนทันทีถ้าช่วงเวลาที่เลือกชน — คืน true ถ้ามีปัญหา
+    function refreshAvailability() {
+      const d = readForm();
+      const car = (info.vehicles || []).find(v => v.plate === d['ทะเบียน']);
+      $('carInfo').textContent = car ? [car.type, car.status && car.status !== 'พร้อมใช้งาน' ? 'สถานะตอนนี้: ' + car.status : ''].filter(Boolean).join(' · ') : '';
+
+      const day = (info.schedule || [])
+        .filter(b => b.date === d['วันที่ใช้'] && b.plate === d['ทะเบียน'])
+        .sort((a, b) => String(a.start).localeCompare(String(b.start)));
+      $('daySchedule').innerHTML = `<div class="font-bold text-slate-700">🗓️ คิวรถ ${escHtml(d['ทะเบียน'] || '-')} วันที่ ${escHtml(thaiDate(d['วันที่ใช้']))}</div>`
+        + (day.length
+          ? day.map(b => `<div class="flex justify-between"><span>⏰ ${escHtml(b.start)} - ${escHtml(b.end)}</span><span class="font-bold ${b.status === 'อนุมัติแล้ว' ? 'text-emerald-600' : 'text-amber-600'}">${escHtml(b.status)}</span></div>`).join('')
+          : '<div class="text-emerald-600 font-semibold">✅ ยังว่างทั้งวัน</div>');
+
+      let problem = '';
+      if (d['วันที่ใช้'] && d['วันที่ใช้'] < localDateStr(0)) problem = 'ไม่สามารถจองย้อนหลังได้';
+      else if (d['เวลาเริ่ม'] && d['เวลาสิ้นสุด'] && d['เวลาเริ่ม'] >= d['เวลาสิ้นสุด']) problem = 'เวลากลับต้องหลังเวลาออก';
+      else {
+        const c = findConflicts(d);
+        if (c.length) {
+          problem = 'ช่วงเวลานี้ถูกจองแล้ว:<br>' + c.map(b => '• ' + (b.plate === d['ทะเบียน'] ? 'รถ ' + escHtml(b.plate) : 'คนขับ ' + escHtml(b.driver)) + ` ${escHtml(b.start)}-${escHtml(b.end)} (${escHtml(b.status)})`).join('<br>');
+        }
+      }
+      $('conflictBox').style.display = problem ? 'block' : 'none';
+      $('conflictBox').innerHTML = problem ? '⚠️ ' + problem : '';
+      $('submitBtn').disabled = !!problem || !d['ทะเบียน'];
+      return !!problem;
+    }
+
+    async function submitBooking(e) {
+      e.preventDefault();
+      const d = readForm();
+      if (!d['ทะเบียน']) { alert('กรุณาเลือกรถ'); return; }
+      if (!d['วันที่ใช้'] || !d['เวลาเริ่ม'] || !d['เวลาสิ้นสุด']) { alert('กรุณาระบุวันและเวลาให้ครบ'); return; }
+      if (!d['สถานที่ไป']) { alert('กรุณาระบุสถานที่ไป'); return; }
+      if (!d['วัตถุประสงค์']) { alert('กรุณาระบุวัตถุประสงค์'); return; }
+      if (refreshAvailability()) return;
+
+      showLoading(true, 'กำลังส่งคำขอจอง...');
+      try {
+        const r = await api('saveLiffBooking', lineProfile.userId, d);
+        showLoading(false);
+        if (r && r.success) {
+          $('successCode').textContent = r.code || '';
+          $('bookingForm').style.display = 'none';
+          $('successCard').style.display = 'block';
+          $('bk_place').value = ''; $('bk_purpose').value = ''; $('bk_note').value = '';
+          reloadQuietly();
+        } else {
+          alert('❌ ' + ((r && r.message) || 'จองไม่สำเร็จ'));
+          if (r && r.conflict) reloadQuietly();
+        }
+      } catch (err) {
+        showLoading(false);
+        alert('เกิดข้อผิดพลาดในการเชื่อมต่อระบบ: ' + err.message);
+      }
+    }
+
+    // โหลดคิว/การจองของฉันใหม่โดยไม่สลับหน้าจอที่ผู้ใช้เห็นอยู่
+    async function reloadQuietly() {
+      try {
+        const res = await api('getLiffBookingInfo', lineProfile.userId);
+        if (res && res.success) { info = res; refreshAvailability(); renderMine(); }
+      } catch (e) {}
+    }
+
+    function renderMine() {
+      const list = info.myBookings || [];
+      const activeCount = list.filter(b => ACTIVE.includes(b['สถานะ'])).length;
+      $('mineCount').textContent = activeCount ? `(${activeCount})` : '';
+      if (!list.length) {
+        $('mineList').innerHTML = '<div class="text-center py-10 text-slate-400"><div class="text-4xl mb-2">📭</div><p class="text-sm font-medium">ยังไม่มีการจองรถ</p></div>';
+        return;
+      }
+      $('mineList').innerHTML = list.map(b => {
+        const st = b['สถานะ'] || '';
+        const canCancel = ACTIVE.includes(st) && String(b['วันที่ใช้'] || '') >= localDateStr(0);
+        return `
+          <div class="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-2">
+            <div class="flex justify-between items-start gap-2">
+              <div>
+                <div class="font-extrabold text-sm text-slate-800">🚗 ${escHtml(b['ทะเบียน'] || '-')}</div>
+                <div class="text-[11px] text-slate-400">${escHtml(b['รหัส'] || '')}</div>
+              </div>
+              <span class="shrink-0 text-xs font-bold px-2.5 py-1 rounded-full ${STATUS_BADGE[st] || 'bg-slate-100 text-slate-600'}">${escHtml(st)}</span>
+            </div>
+            <div class="text-xs text-slate-600 space-y-0.5">
+              <div>📅 ${escHtml(thaiDate(b['วันที่ใช้']))} · ⏰ ${escHtml(b['เวลาเริ่ม'] || '-')} - ${escHtml(b['เวลาสิ้นสุด'] || '-')}</div>
+              <div>📍 ${escHtml(b['สถานที่ไป'] || '-')}</div>
+              <div>👨‍✈️ ${escHtml(b['พนักงานขับรถ'] || 'ไม่ระบุคนขับ')}</div>
+              ${b['เหตุผล'] ? `<div class="text-rose-600">📝 ${escHtml(b['เหตุผล'])}</div>` : ''}
+            </div>
+            ${canCancel ? `<button type="button" class="w-full py-2.5 rounded-xl text-xs font-bold bg-white border border-rose-200 text-rose-600 active:scale-[0.98]" onclick="openCancelModal('${escHtml(b['รหัส'])}')">↩️ ยกเลิกการจองนี้</button>` : ''}
+          </div>`;
+      }).join('');
+    }
+
+    function openCancelModal(code) {
+      const b = (info.myBookings || []).find(x => String(x['รหัส']) === String(code));
+      if (!b) return;
+      pendingCancel = b;
+      $('cancelSummary').textContent = `${b['ทะเบียน']} · ${thaiDate(b['วันที่ใช้'])} ${b['เวลาเริ่ม']}-${b['เวลาสิ้นสุด']}`;
+      $('cancelReason').value = '';
+      $('cancelModal').style.display = 'flex';
+    }
+
+    function closeCancelModal() {
+      $('cancelModal').style.display = 'none';
+      pendingCancel = null;
+    }
+
+    async function confirmCancel() {
+      if (!pendingCancel) return;
+      const code = pendingCancel['รหัส'];
+      const reason = $('cancelReason').value.trim();
+      closeCancelModal();
+      showLoading(true, 'กำลังยกเลิกการจอง...');
+      try {
+        const r = await api('cancelLiffBooking', lineProfile.userId, code, reason);
+        showLoading(false);
+        if (r && r.success) { alert('✅ ยกเลิกการจองเรียบร้อยแล้ว'); reloadQuietly(); }
+        else alert('❌ ' + ((r && r.message) || 'ยกเลิกไม่สำเร็จ'));
+      } catch (err) {
+        showLoading(false);
+        alert('เกิดข้อผิดพลาดในการเชื่อมต่อระบบ: ' + err.message);
+      }
+    }
+  </script>
+</body>
+</html>

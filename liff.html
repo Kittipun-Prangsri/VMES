@@ -572,6 +572,11 @@
                 window.location.replace('/liff-return.html');
                 return;
               }
+              if (postInitParams.get('tab') === 'booking') {
+                const view = postInitParams.get('view');
+                window.location.replace('/liff-booking.html' + (view ? '?view=' + encodeURIComponent(view) : ''));
+                return;
+              }
             }
           } else if (liff.isInClient && liff.isInClient()) {
             liff.login();

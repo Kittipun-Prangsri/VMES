@@ -4,7 +4,10 @@
 // ที่แก้ตามที่ยืนยันแล้ว (ดูกิ่งที่ 6 ด้านล่าง)
 
 const { SYSTEM_NAME, safeTruncate, safeGet, nowStr } = require('../lib/util');
-const { replyLineFlex, flexRow } = require('../lib/line');
+const { replyLineFlex, flexRow, buildBookingBubble, LIFF_BOOKING_URL } = require('../lib/line');
+const { SHEETS, getDoc } = require('../lib/firestore');
+const { isStaffRole } = require('../lib/auth');
+const { getUserByLineId, getMyBookings, changeBookingStatus } = require('../lib/handlers/booking');
 const { getVehicles } = require('../lib/handlers/vehicles');
 const { getEquipment } = require('../lib/handlers/equipment');
 const { getBorrowing, updateBorrowingStatus, getMyActiveBorrowings } = require('../lib/handlers/borrowing');
@@ -748,6 +751,13 @@ async function handleHelpMenu(replyToken) {
             },
             {
               type: 'button',
+              style: 'primary',
+              color: '#1e40af',
+              height: 'sm',
+              action: { type: 'uri', label: '📅 จองรถล่วงหน้า (LIFF)', uri: LIFF_BOOKING_URL },
+            },
+            {
+              type: 'button',
               style: 'secondary',
               height: 'sm',
               action: { type: 'message', label: '🚗 เช็คสถานะรถยนต์', text: 'เช็ครถ' },
@@ -1221,6 +1231,117 @@ async function handleReturnBorrowing(replyToken, userMessage) {
   }
 }
 
+// ============== จองรถ (BOOKING) ==============
+// เมนูจองรถ → เปิด LIFF ?tab=booking (liff.html redirect ต่อไป liff-booking.html)
+// เจ้าหน้าที่กดปุ่มในการ์ดกลุ่ม → "อนุมัติจอง BK-xxx" / "ไม่อนุมัติจอง BK-xxx <เหตุผล>"
+// ผู้ขอจองกดปุ่มในการ์ดส่วนตัว → "ยกเลิกจอง BK-xxx"
+
+const BK_CODE_RE = /BK-[A-Z0-9-]+/i;
+
+async function handleBookingMenu(replyToken) {
+  const flexContent = {
+    type: 'bubble',
+    size: 'mega',
+    header: {
+      type: 'box',
+      layout: 'vertical',
+      backgroundColor: '#1e40af',
+      paddingAll: '20px',
+      contents: [
+        { type: 'text', text: '🚗 จองรถล่วงหน้า', color: '#ffffff', size: 'lg', weight: 'bold' },
+        { type: 'text', text: 'เลือกรถ วันเวลา และปลายทางได้ในหน้าเดียว ระบบเช็คคิวชนให้อัตโนมัติ', color: '#dbeafe', size: 'xs', margin: 'xs', wrap: true },
+      ],
+    },
+    body: {
+      type: 'box',
+      layout: 'vertical',
+      spacing: 'sm',
+      paddingAll: '20px',
+      contents: [
+        { type: 'button', style: 'primary', color: '#1e40af', height: 'sm', action: { type: 'uri', label: '📅 จองรถ (LIFF)', uri: LIFF_BOOKING_URL } },
+        { type: 'button', style: 'secondary', height: 'sm', action: { type: 'message', label: '📋 การจองของฉัน', text: 'การจองของฉัน' } },
+        { type: 'button', style: 'secondary', height: 'sm', action: { type: 'message', label: '🚗 เช็คสถานะรถยนต์', text: 'เช็ครถ' } },
+      ],
+    },
+    footer: {
+      type: 'box',
+      layout: 'vertical',
+      paddingAll: '12px',
+      backgroundColor: '#f1f5f9',
+      contents: [{ type: 'text', text: SYSTEM_NAME, size: 'xxs', color: '#94a3b8', align: 'center' }],
+    },
+  };
+  await replyLineFlex(replyToken, '🚗 เมนูจองรถ', flexContent);
+}
+
+async function handleMyBookings(replyToken, userId) {
+  const me = await getUserByLineId(userId);
+  if (!me) {
+    const flexContent = simpleErrorBubble('#f59e0b', '👋 ยังไม่ได้ลงทะเบียน', 'บัญชี LINE นี้ยังไม่ได้ผูกกับระบบ กรุณาเปิดเมนู "จองรถ (LIFF)" เพื่อลงทะเบียนครั้งแรก');
+    await replyLineFlex(replyToken, '👋 ยังไม่ได้ลงทะเบียน', flexContent);
+    return;
+  }
+  // โชว์รายการที่ยังไม่จบก่อน แล้วค่อยตามด้วยรายการล่าสุดที่ปิดไปแล้ว (carousel รับได้สูงสุด 12)
+  const list = await getMyBookings(userId);
+  const active = list.filter((b) => b['สถานะ'] === 'รออนุมัติ' || b['สถานะ'] === 'อนุมัติแล้ว');
+  const closed = list.filter((b) => !active.includes(b));
+  const shown = active.concat(closed).slice(0, 10);
+  if (!shown.length) {
+    const flexContent = simpleErrorBubble('#64748b', '📭 ยังไม่มีการจองรถ', 'คุณยังไม่มีรายการจองรถ กดเมนู "จองรถ" เพื่อจองได้เลย');
+    await replyLineFlex(replyToken, '📭 ยังไม่มีการจองรถ', flexContent);
+    return;
+  }
+  const flexContent = { type: 'carousel', contents: shown.map((b) => buildBookingBubble(b, b['สถานะ'], 'requester')) };
+  await replyLineFlex(replyToken, '📋 การจองรถของฉัน (' + shown.length + ' รายการ)', flexContent);
+}
+
+async function handleBookingAction(replyToken, userId, userMessage, newStatus, actionLabel) {
+  const match = userMessage.match(BK_CODE_RE);
+  if (!match) {
+    const flexContent = simpleErrorBubble('#ef4444', '❌ ไม่ระบุรหัสการจอง', `กรุณาระบุรหัสการจอง เช่น "${actionLabel} BK-20261018090000-123"`);
+    await replyLineFlex(replyToken, '❌ ไม่ระบุรหัสการจอง', flexContent);
+    return;
+  }
+  const code = match[0].toUpperCase();
+  const me = await getUserByLineId(userId);
+  if (!me) {
+    const flexContent = simpleErrorBubble('#ef4444', '🚫 ไม่มีสิทธิ์ดำเนินการ', 'บัญชี LINE นี้ยังไม่ได้ผูกกับบัญชีผู้ใช้ในระบบ กรุณาติดต่อผู้ดูแลระบบ');
+    await replyLineFlex(replyToken, '🚫 ไม่มีสิทธิ์', flexContent);
+    return;
+  }
+
+  // ข้อความหลังรหัสคือเหตุผล เช่น "ไม่อนุมัติจอง BK-xxx รถติดภารกิจ"
+  const reason = userMessage.slice(userMessage.toUpperCase().indexOf(code) + code.length).trim();
+  if (newStatus === 'ไม่อนุมัติ' && !reason) {
+    const flexContent = simpleErrorBubble('#f59e0b', '📝 กรุณาระบุเหตุผล', `พิมพ์คำสั่งพร้อมเหตุผลต่อท้าย เช่น\n"ไม่อนุมัติจอง ${code} รถติดภารกิจ"`);
+    await replyLineFlex(replyToken, '📝 กรุณาระบุเหตุผลที่ไม่อนุมัติ', flexContent);
+    return;
+  }
+
+  // แจ้งกลุ่มและผู้ขอจองผ่าน push อยู่แล้วใน changeBookingStatus — reply นี้เป็นการยืนยันให้คนกด
+  const res = await changeBookingStatus(me, code, newStatus, reason);
+  if (res.success) {
+    await replyLineFlex(replyToken, actionLabel + 'สำเร็จ ' + code, buildBookingBubble(res.item, newStatus, 'none'));
+  } else {
+    const flexContent = simpleErrorBubble('#ef4444', '❌ ' + actionLabel + 'ไม่สำเร็จ', res.message || 'เกิดข้อผิดพลาดในการเปลี่ยนสถานะ');
+    await replyLineFlex(replyToken, '❌ ' + actionLabel + 'ไม่สำเร็จ', flexContent);
+  }
+}
+
+async function handleBookingLookup(replyToken, userId, userMessage) {
+  const code = userMessage.match(BK_CODE_RE)[0].toUpperCase();
+  const item = await getDoc(SHEETS.BOOKING, code);
+  if (!item) {
+    const flexContent = simpleErrorBubble('#ef4444', '🔍 ไม่พบการจอง', 'ไม่พบรหัสการจอง ' + code + ' ในระบบ');
+    await replyLineFlex(replyToken, '🔍 ไม่พบการจอง ' + code, flexContent);
+    return;
+  }
+  const me = await getUserByLineId(userId);
+  const isOwner = me && (String(item['LINE_USER_ID'] || '') === me.lineUserId || String(item['ผู้ขอจอง'] || '').trim() === me.name);
+  const audience = me && isStaffRole(me.role) ? 'staff' : isOwner ? 'requester' : 'none';
+  await replyLineFlex(replyToken, '📅 การจอง ' + code, buildBookingBubble(item, item['สถานะ'], audience));
+}
+
 function readRawBody(req) {
   return new Promise((resolve, reject) => {
     let data = '';
@@ -1296,7 +1417,8 @@ module.exports = async function handler(req, res) {
       // เลข 13 หลักติดกันอยู่ในนั้นพอดี — ถ้าไม่กันไว้ ทุกข้อความที่มีรหัส BR-/EQ- (รวมถึง
       // "รับเรื่อง BR-...", "ส่งมอบ BR-...", "คืน BR-..." ด้านล่างทั้งหมด) จะโดนกิ่งนี้ตัดหน้า
       // ไปตีความเป็นเลขบัตรประชาชนผิดๆ ก่อนเสมอ ไม่มีทางไปถึงกิ่งที่ตั้งใจจะเข้าเลย
-      else if (/\d{13}/.test(userMessage) && msgLower.indexOf('br-') === -1 && msgLower.indexOf('eq-') === -1) {
+      // (รหัส BK- ของการจองรถก็มีไทม์สแตมป์ 14 หลักเหมือนกัน ต้องกันไว้ด้วย)
+      else if (/\d{13}/.test(userMessage) && msgLower.indexOf('br-') === -1 && msgLower.indexOf('eq-') === -1 && msgLower.indexOf('bk-') === -1) {
         await handleAutoBind13Digit(replyToken, userId, userMessage);
       }
       // 1.6 รับเรื่องคำขอยืม (เฉพาะเจ้าหน้าที่ — เช็คสิทธิ์จาก LINE userId ข้างใน handler)
@@ -1315,6 +1437,25 @@ module.exports = async function handler(req, res) {
       }
       else if (msgLower.indexOf('ยืนยันคืน br-') !== -1) {
         await handleConfirmReturn(replyToken, userId, userMessage);
+      }
+      // 1.10 จองรถ — "ไม่อนุมัติจอง" ต้องมาก่อน "อนุมัติจอง" เพราะมีคำนั้นเป็น substring อยู่ในตัว
+      else if (msgLower.indexOf('ไม่อนุมัติจอง') !== -1) {
+        await handleBookingAction(replyToken, userId, userMessage, 'ไม่อนุมัติ', 'ไม่อนุมัติจอง');
+      }
+      else if (msgLower.indexOf('อนุมัติจอง') !== -1) {
+        await handleBookingAction(replyToken, userId, userMessage, 'อนุมัติแล้ว', 'อนุมัติจอง');
+      }
+      else if (msgLower.indexOf('ยกเลิกจอง') !== -1) {
+        await handleBookingAction(replyToken, userId, userMessage, 'ยกเลิก', 'ยกเลิกจอง');
+      }
+      else if (msgLower.indexOf('การจองของฉัน') !== -1 || msgLower.indexOf('สถานะจองรถ') !== -1) {
+        await handleMyBookings(replyToken, userId);
+      }
+      else if (/^bk-/i.test(userMessage)) {
+        await handleBookingLookup(replyToken, userId, userMessage);
+      }
+      else if (msgLower.indexOf('จองรถ') !== -1 || msgLower === 'จอง') {
+        await handleBookingMenu(replyToken);
       }
       // 2. แจ้งคืนอุปกรณ์ (ระบุรหัสคำขอมาด้วย)
       else if (msgLower.indexOf('คืน br-') !== -1 || msgLower.indexOf('แจ้งคืน br-') !== -1) {

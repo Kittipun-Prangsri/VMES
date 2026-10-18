@@ -307,20 +307,65 @@ async function sendVehicleUsageFlex(data, targetId) {
   return sendLineFlex('🚗 แจ้งเตือนการใช้รถ ' + data['ทะเบียน'], flex, targetId);
 }
 
-async function sendBookingFlex(data, status, targetId) {
-  const statusColor = status === 'อนุมัติแล้ว' ? '#10b981'
-    : (status === 'ไม่อนุมัติ' || status === 'ยกเลิก') ? '#ef4444' : '#f59e0b';
-  const flex = {
+const LIFF_URL = 'https://liff.line.me/2011083425-G0pup6PQ';
+const LIFF_BOOKING_URL = LIFF_URL + '?tab=booking';
+
+const BOOKING_STATUS_META = {
+  'รออนุมัติ': { color: '#f59e0b', icon: '📥', title: 'คำขอจองรถใหม่', desc: 'รอผู้มีสิทธิ์อนุมัติ' },
+  'อนุมัติแล้ว': { color: '#10b981', icon: '✅', title: 'อนุมัติการจองรถแล้ว', desc: 'พร้อมใช้รถตามวันเวลาที่จอง' },
+  'ไม่อนุมัติ': { color: '#ef4444', icon: '❌', title: 'ไม่อนุมัติการจองรถ', desc: 'คำขอนี้ไม่ได้รับการอนุมัติ' },
+  'ยกเลิก': { color: '#64748b', icon: '↩️', title: 'ยกเลิกการจองรถ', desc: 'คำขอนี้ถูกยกเลิกแล้ว' },
+};
+
+// bubble เดียวใช้ทั้งแจ้งเตือน push, ตอบกลับใน webhook และ carousel "การจองของฉัน"
+// audience: 'staff' = กลุ่มเจ้าหน้าที่ (ปุ่มอนุมัติ/ไม่อนุมัติ), 'requester' = ผู้ขอจอง (ปุ่มยกเลิก/จองใหม่)
+function buildBookingBubble(data, status, audience) {
+  const st = status || data['สถานะ'] || 'รออนุมัติ';
+  const meta = BOOKING_STATUS_META[st] || { color: '#3b82f6', icon: '📅', title: 'การจองรถ: ' + st, desc: '' };
+  const code = String(data['รหัส'] || '');
+  const active = st === 'รออนุมัติ' || st === 'อนุมัติแล้ว';
+
+  const buttons = [];
+  if (audience === 'staff' && st === 'รออนุมัติ') {
+    buttons.push(
+      { type: 'button', style: 'primary', color: '#10b981', height: 'sm', action: { type: 'message', label: '✅ อนุมัติ (เจ้าหน้าที่)', text: 'อนุมัติจอง ' + code } },
+      { type: 'button', style: 'secondary', height: 'sm', action: { type: 'message', label: '✖ ไม่อนุมัติ (เจ้าหน้าที่)', text: 'ไม่อนุมัติจอง ' + code } }
+    );
+  }
+  if (audience === 'requester') {
+    if (active) {
+      buttons.push({ type: 'button', style: 'secondary', height: 'sm', action: { type: 'message', label: '↩️ ยกเลิกการจองนี้', text: 'ยกเลิกจอง ' + code } });
+    }
+    buttons.push({ type: 'button', style: 'primary', color: '#1e40af', height: 'sm', action: { type: 'uri', label: '📋 การจองของฉัน / จองใหม่', uri: LIFF_BOOKING_URL } });
+  } else {
+    buttons.push({ type: 'button', style: 'link', height: 'sm', action: { type: 'uri', label: '🌐 เปิดดูในระบบ (vmes.web.app)', uri: 'https://vmes.web.app/' } });
+  }
+
+  const rows = [
+    flexRow('👤 ผู้ขอจอง', String(data['ผู้ขอจอง'] || '-')),
+    flexRow('🏢 หน่วยงาน', String(data['หน่วยงาน'] || '-')),
+    flexRow('📅 วันที่ใช้', String(data['วันที่ใช้'] || '-')),
+    flexRow('🕐 เวลา', String(data['เวลาเริ่ม'] || '-') + ' - ' + String(data['เวลาสิ้นสุด'] || '-')),
+    flexRow('📍 สถานที่ไป', String(data['สถานที่ไป'] || '-')),
+  ];
+  if (data['วัตถุประสงค์']) rows.push(flexRow('🎯 วัตถุประสงค์', String(data['วัตถุประสงค์'])));
+  rows.push(flexRow('👥 ผู้โดยสาร', String(data['จำนวนผู้โดยสาร'] || 1) + ' คน'));
+  rows.push(flexRow('👨‍✈️ พนักงานขับรถ', String(data['พนักงานขับรถ'] || 'ไม่ระบุ')));
+  if (data['ผู้อนุมัติ'] && (st === 'อนุมัติแล้ว' || st === 'ไม่อนุมัติ')) rows.push(flexRow('🖊 ผู้พิจารณา', String(data['ผู้อนุมัติ'])));
+  if (data['ผู้ยกเลิก'] && st === 'ยกเลิก') rows.push(flexRow('🖊 ผู้ยกเลิก', String(data['ผู้ยกเลิก'])));
+  if (data['เหตุผล']) rows.push(flexRow('📝 เหตุผล', String(data['เหตุผล'])));
+
+  return {
     type: 'bubble',
     size: 'mega',
     header: {
       type: 'box',
       layout: 'vertical',
-      backgroundColor: statusColor,
+      backgroundColor: meta.color,
       paddingAll: '20px',
       contents: [
-        { type: 'text', text: '📅 แจ้งเตือนการจองรถ: ' + status, color: '#ffffff', size: 'xl', weight: 'bold' },
-        { type: 'text', text: 'Vehicle Booking Notification', color: '#ffffff', size: 'sm', margin: 'sm' },
+        { type: 'text', text: meta.icon + ' ' + meta.title, color: '#ffffff', size: 'lg', weight: 'bold', wrap: true },
+        { type: 'text', text: (code ? 'รหัส ' + code + ' · ' : '') + (meta.desc || st), color: '#ffffff', size: 'xs', margin: 'sm', wrap: true },
       ],
     },
     body: {
@@ -341,20 +386,7 @@ async function sendBookingFlex(data, status, targetId) {
           ],
         },
         { type: 'separator', margin: 'md' },
-        {
-          type: 'box',
-          layout: 'vertical',
-          spacing: 'sm',
-          contents: [
-            flexRow('👤 ผู้ขอจอง', String(data['ผู้ขอจอง'] || '-')),
-            flexRow('📍 สถานที่ไป', String(data['สถานที่ไป'] || '-')),
-            flexRow('🎯 วัตถุประสงค์', String(data['วัตถุประสงค์'] || '-')),
-            flexRow('📅 วันที่ใช้', String(data['วันที่ใช้'] || '-')),
-            flexRow('🕐 เวลา', String(data['เวลาเริ่ม'] || '-') + ' - ' + String(data['เวลาสิ้นสุด'] || '-')),
-            flexRow('👨‍✈️ พนักงานขับรถ', String(data['พนักงานขับรถ'] || '-')),
-            ...(data['เหตุผล'] ? [flexRow('📝 เหตุผล', String(data['เหตุผล']))] : []),
-          ],
-        },
+        { type: 'box', layout: 'vertical', spacing: 'sm', contents: rows },
       ],
     },
     footer: {
@@ -364,18 +396,17 @@ async function sendBookingFlex(data, status, targetId) {
       paddingAll: '16px',
       backgroundColor: '#f1f5f9',
       contents: [
-        {
-          type: 'button',
-          style: 'primary',
-          color: '#1e40af',
-          height: 'sm',
-          action: { type: 'uri', label: '🚗 ตรวจสอบการจอง (vmes.web.app)', uri: 'https://vmes.web.app/#vehicle' },
-        },
+        ...buttons,
         { type: 'text', text: '⏱ ' + nowStr() + ' | ' + SYSTEM_NAME, size: 'xxs', color: '#94a3b8', align: 'center', margin: 'sm' },
       ],
     },
   };
-  return sendLineFlex('📅 แจ้งเตือนการจองรถ: ' + status, flex, targetId);
+}
+
+async function sendBookingFlex(data, status, targetId, audience) {
+  const meta = BOOKING_STATUS_META[status] || { title: 'แจ้งเตือนการจองรถ: ' + status };
+  const flex = buildBookingBubble(data, status, audience || 'staff');
+  return sendLineFlex('📅 ' + meta.title + ' ' + String(data['ทะเบียน'] || ''), flex, targetId);
 }
 
 async function sendSmartSystemAlertFlex(maintAlerts, driverAlerts) {
@@ -647,6 +678,9 @@ module.exports = {
   sendBorrowingFlex,
   sendVehicleUsageFlex,
   sendBookingFlex,
+  buildBookingBubble,
+  LIFF_URL,
+  LIFF_BOOKING_URL,
   sendSmartSystemAlertFlex,
   sendServiceRequestFlex,
   sendTelegramServiceNotify,
