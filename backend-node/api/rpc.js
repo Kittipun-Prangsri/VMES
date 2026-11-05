@@ -6,6 +6,7 @@
 
 const { API_WHITELIST } = require('../lib/whitelist');
 const { verifySessionToken } = require('../lib/session');
+const { adminCtx, getSessionUser, isStaffRole } = require('../lib/auth');
 
 const PUBLIC_FUNCTIONS = new Set([
   'login',
@@ -106,7 +107,13 @@ module.exports = async function handler(req, res) {
 
     try {
       // handler ที่ต้องเช็คสิทธิ์อ่าน session ผ่าน this.session (handler อื่นไม่ได้ใช้ this)
-      const result = await fn.apply({ session }, body.args || []);
+      // สิทธิ์ admin ตัดสินจากบทบาทใน DB ของ session นี้ ไม่ใช่รหัสที่ client ส่งมา
+      let isStaff = false;
+      if (session) {
+        const me = await getSessionUser(session);
+        isStaff = !!me && isStaffRole(me.role);
+      }
+      const result = await adminCtx.run({ isStaff }, () => fn.apply({ session }, body.args || []));
       res.status(200).json(result);
     } catch (err) {
       console.error(`Error executing RPC function ${fnName}:`, err);

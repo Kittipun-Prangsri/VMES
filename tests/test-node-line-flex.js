@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 // Mock environmental variables
 process.env.LINE_TOKEN = 'test-token-12345';
 process.env.LINE_GROUP_ID = 'test-group-67890';
+process.env.LINE_CHANNEL_SECRET = 'test-channel-secret';
 process.env.FIREBASE_PROJECT_ID = 'dummy-project-id';
 
 // Mock firebase-admin modules in require.cache before firestore.js loading
@@ -103,8 +104,20 @@ const {
 async function runTests() {
   console.log('🚀 Starting LINE Flex Reply & Push payload validation tests...');
 
-  const createReq = (text, userId = 'U1234567890abcdef') => ({
-    body: {
+  // Signature gate: ไม่มี/ผิด signature ต้องโดน 401 และไม่มีการตอบกลับ LINE
+  {
+    let code = 0;
+    const res = { status(c) { code = c; return this; }, send() { return this; } };
+    await webhookHandler({ body: '{"events":[]}', headers: {} }, res);
+    assert.equal(code, 401, 'missing signature must be rejected');
+    code = 0;
+    await webhookHandler({ body: '{"events":[]}', headers: { 'x-line-signature': 'AAAA' } }, res);
+    assert.equal(code, 401, 'bad signature must be rejected');
+  }
+
+
+  const createReq = (text, userId = 'U1234567890abcdef') => {
+    const raw = JSON.stringify({
       events: [
         {
           replyToken: 'dummy-reply-token-999',
@@ -112,8 +125,10 @@ async function runTests() {
           message: { type: 'text', text },
         },
       ],
-    },
-  });
+    });
+    const sig = require('crypto').createHmac('sha256', process.env.LINE_CHANNEL_SECRET).update(raw).digest('base64');
+    return { body: raw, headers: { 'x-line-signature': sig } };
+  };
 
   const createRes = () => {
     let statusCode = 0;

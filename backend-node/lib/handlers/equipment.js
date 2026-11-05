@@ -19,6 +19,12 @@ async function saveEquipment(data, adminCode) {
   try {
     const isNew = !data['รหัส'];
     if (isNew) data['รหัส'] = newId('EQ');
+    // ตอนแก้ไข: รวมกับเอกสารเดิมก่อน เพราะ setDoc ฝั่ง Supabase เป็น full replace — ฟอร์มแก้ไขส่งมาแค่บางฟิลด์
+    // ถ้าไม่รวม รูปภาพ/เชื่อมกับ/สถานะป้ายครุภัณฑ์/ข้อมูลสำรวจภาคสนาม จะหายทุกครั้งที่กดบันทึก
+    if (!isNew) {
+      const existing = await getDoc(SHEETS.EQUIPMENT, String(data['รหัส']));
+      if (existing) data = { ...existing, ...data };
+    }
     data['วันที่บันทึก'] = nowStr();
     delete data._row;
     await setDoc(SHEETS.EQUIPMENT, data['รหัส'], data);

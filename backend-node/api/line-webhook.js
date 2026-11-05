@@ -3,6 +3,7 @@
 // (Flex JSON สี/ข้อความ/ปุ่ม/เงื่อนไขตรงต้นฉบับทุกจุด) ยกเว้นบั๊กปุ่มเมนูช่วยเหลือ 4 ปุ่ม
 // ที่แก้ตามที่ยืนยันแล้ว (ดูกิ่งที่ 6 ด้านล่าง)
 
+const crypto = require('crypto');
 const { SYSTEM_NAME, safeTruncate, safeGet, nowStr } = require('../lib/util');
 const { replyLineFlex, flexRow, buildBookingBubble, LIFF_BOOKING_URL } = require('../lib/line');
 const { SHEETS, getDoc } = require('../lib/firestore');
@@ -1344,46 +1345,44 @@ async function handleBookingLookup(replyToken, userId, userMessage) {
 
 function readRawBody(req) {
   return new Promise((resolve, reject) => {
-    let data = '';
-    req.on('data', (chunk) => (data += chunk));
-    req.on('end', () => resolve(data));
+    const chunks = [];
+    req.on('data', (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
+    req.on('end', () => resolve(Buffer.concat(chunks)));
     req.on('error', reject);
   });
 }
 
-async function parseBody(req) {
-  if (req.body && typeof req.body === 'object' && !Buffer.isBuffer(req.body)) {
-    return req.body;
+// LINE เซ็น raw body ด้วย HMAC-SHA256 (key = channel secret) ส่งมาใน X-Line-Signature
+// ต้องตรวจจาก byte จริงก่อน parse จึงปิด bodyParser ของ Vercel (ดู module.exports.config ท้ายไฟล์)
+function verifyLineSignature(rawBody, signature) {
+  const secret = process.env.LINE_CHANNEL_SECRET;
+  if (!secret || !signature) return false;
+  const expected = crypto.createHmac('sha256', secret).update(rawBody).digest();
+  let actual;
+  try { actual = Buffer.from(String(signature), 'base64'); } catch (e) { return false; }
+  return actual.length === expected.length && crypto.timingSafeEqual(actual, expected);
+}
+
+// อ่าน body ทั้งแบบ raw stream (production) และแบบที่ parse มาแล้ว (unit test เรียก handler ตรงๆ)
+async function readBody(req) {
+  if (req.body !== undefined && req.body !== null && req.body !== '' && !req.readable) {
+    const raw = Buffer.isBuffer(req.body) ? req.body
+      : Buffer.from(typeof req.body === 'string' ? req.body : JSON.stringify(req.body));
+    return raw;
   }
-  if (req.body === undefined || req.body === null || req.body === '') {
-    const raw = await readRawBody(req);
-    if (!raw) return {};
-    try {
-      return JSON.parse(raw);
-    } catch (e) {
-      return {};
-    }
-  }
-  if (typeof req.body === 'string') {
-    try {
-      return JSON.parse(req.body);
-    } catch (e) {
-      return {};
-    }
-  }
-  if (Buffer.isBuffer(req.body)) {
-    try {
-      return JSON.parse(req.body.toString('utf8'));
-    } catch (e) {
-      return {};
-    }
-  }
-  return req.body;
+  return readRawBody(req);
 }
 
 module.exports = async function handler(req, res) {
   try {
-    const body = await parseBody(req);
+    const rawBody = await readBody(req);
+    if (!verifyLineSignature(rawBody, req.headers && (req.headers['x-line-signature'] || req.headers['X-Line-Signature']))) {
+      console.warn('LINE webhook rejected: invalid or missing signature (or LINE_CHANNEL_SECRET not set)');
+      res.status(401).send('Invalid signature');
+      return;
+    }
+    let body = {};
+    try { body = JSON.parse(rawBody.toString('utf8') || '{}'); } catch (e) { body = {}; }
     const events = body.events;
 
     if (!events || !Array.isArray(events) || events.length === 0) {
@@ -1494,3 +1493,6 @@ module.exports = async function handler(req, res) {
     res.status(200).send('OK');
   }
 };
+
+// ปิด bodyParser เพื่อให้ได้ raw body ไปตรวจลายเซ็น LINE
+module.exports.config = { api: { bodyParser: false } };

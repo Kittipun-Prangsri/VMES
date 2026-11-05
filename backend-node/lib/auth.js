@@ -6,13 +6,22 @@
 const { SHEETS, listDocs } = require('./firestore');
 const { hashPassword, logAudit } = require('./util');
 const { createSessionToken } = require('./session');
+const { AsyncLocalStorage } = require('async_hooks');
 
+// บริบทต่อ request: rpc.js ตั้งค่า isStaff จากบทบาทใน DB (ไม่ใช่ค่าที่ client ส่งมา)
+const adminCtx = new AsyncLocalStorage();
+
+// ไม่มีค่า default — ถ้าไม่ตั้ง ADMIN_CODE ใน env จะไม่มีรหัส admin ที่ใช้ได้เลย
 function getAdminCode() {
-  return process.env.ADMIN_CODE || '11192';
+  return String(process.env.ADMIN_CODE || '').trim();
 }
 
+// ผ่านเมื่อ (ก) request นี้มี session ของผู้ใช้บทบาท admin/manager หรือ (ข) รหัสตรงกับ ADMIN_CODE ใน env
 function verifyAdmin(code) {
-  return String(code || '').trim() === getAdminCode();
+  const ctx = adminCtx.getStore();
+  if (ctx && ctx.isStaff) return true;
+  const expected = getAdminCode();
+  return expected !== '' && String(code || '').trim() === expected;
 }
 
 async function login(username, password) {
@@ -48,29 +57,6 @@ async function login(username, password) {
     });
 
     if (!user) {
-      if (cleanUsername === 'kittipun' && (cleanPassword === 'TT1122' || cleanPassword === 'tt1122')) {
-        await logAudit('Login SuperAdmin', 'Kittipun', 'เข้าระบบด้วยบัญชี SuperAdmin Kittipun');
-        const superAdminUser = {
-          code: 'UR-SUPERADMIN-001',
-          username: 'Kittipun',
-          name: 'Kittipun (Super Admin)',
-          role: 'superadmin',
-          dept: 'งานเทคโนโลยีสารสนเทศ',
-          phone: '-',
-          email: 'kittipun@vmes.local'
-        };
-        let token = null;
-        try { token = createSessionToken('UR-SUPERADMIN-001'); } catch (e) {}
-        return { success: true, user: { ...superAdminUser, token }, token };
-      }
-
-      if (verifyAdmin(cleanPassword)) {
-        await logAudit('Login Admin', 'admin', 'เข้าระบบด้วยรหัส admin');
-        const adminUser = { code: 'ADMIN-001', username: 'admin', name: 'ผู้ดูแลระบบ', role: 'superadmin', dept: 'IT', phone: '-', email: 'admin@vmes.local' };
-        let token = null;
-        try { token = createSessionToken('ADMIN-001'); } catch (e) {}
-        return { success: true, user: { ...adminUser, token }, token };
-      }
       return { success: false, message: 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง' };
     }
 
@@ -191,4 +177,4 @@ function isStaffRole(role) {
     || r.includes('admin') || r.includes('manager');
 }
 
-module.exports = { login, verifyAdmin, getAdminCode, changeUserPassword, updateUserProfile, getSessionUser, isStaffRole };
+module.exports = { adminCtx, login, verifyAdmin, getAdminCode, changeUserPassword, updateUserProfile, getSessionUser, isStaffRole };

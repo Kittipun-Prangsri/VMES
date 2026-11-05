@@ -56,6 +56,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="ptouch-label.js"></script>
   <style>
 :root {
   --primary: #1e40af;
@@ -2334,7 +2335,7 @@ input, select, textarea, button {
     // ข้อมูลเปลี่ยนจริงไหมก่อน re-render มิเช่นนั้นหน้าที่มีตารางเยอะๆ จะกระพริบทุก 30 วิ
     // โดยไม่จำเป็น (เห็นเหมือนหน้ารีโหลดตลอดเวลา)
     let LAST_COLLECTIONS_SNAPSHOT = '';
-    const ADMIN_PASS = '11192'; // Internal admin code for authorized actions
+    const ADMIN_PASS = 'session'; // placeholder เท่านั้น — server ตัดสินสิทธิ์จากบทบาทของ session ไม่ใช่ค่านี้
 
     // ============== AUTH ==============
     function doLogin() {
@@ -2621,6 +2622,9 @@ input, select, textarea, button {
 
     // ============== UTILS ==============
     const $ = id => document.getElementById(id);
+    // ใส่ค่าลงใน onclick="fn(...)" อย่างปลอดภัย: JSON.stringify กัน ' " \ ใน string ของ JS แล้ว esc กันตัวแบ่ง attribute
+    // (ห้ามใช้ '${esc(x)}' ใน onclick เพราะ &#39; ถูกเบราว์เซอร์แปลงกลับเป็น ' ก่อนรัน JS -> ชื่อที่มี ' ทำให้ปุ่มพังและแทรกโค้ดได้)
+    const jsArg = v => esc(JSON.stringify(String(v == null ? '' : v)));
     const fmt = n => new Intl.NumberFormat('th-TH').format(n || 0);
     const money = n => '฿' + fmt(Math.round((+n || 0) * 100) / 100);
     const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -3311,8 +3315,9 @@ input, select, textarea, button {
 
     function requireAdmin() {
       if (isAdmin()) return true;
-      const code = prompt('กรอกรหัส Admin (11192) เพื่อดำเนินการ:');
-      return code === ADMIN_PASS;
+      if (isManager()) return true;
+      toast('ต้องใช้สิทธิ์ผู้ดูแลระบบ', 'error');
+      return false;
     }
 
     function runSetup() {
@@ -4579,7 +4584,7 @@ input, select, textarea, button {
       if (!data['ทะเบียน']) { toast('กรอกทะเบียนรถ', 'warning'); return; }
       if (row) { data['รหัส'] = row; }
       showLoading(true);
-      callApi('saveVehicle', data, '11192')
+      callApi('saveVehicle', data, ADMIN_PASS)
         .then(r => { showLoading(false); if (r.success) { toast('บันทึกสำเร็จ'); closeModal(); refreshData(); } else toast(r.message, 'error'); })
         .catch(e => { showLoading(false); toast(e.message, 'error'); });
     }
@@ -4590,7 +4595,7 @@ input, select, textarea, button {
       if (reason === null) return;
       if (!reason.trim()) { toast('กรุณาระบุเหตุผลในการลบข้อมูล', 'warning'); return; }
       showLoading(true);
-      callApi('deleteVehicle', row, '11192', reason.trim()).then(r => { showLoading(false); if (r.success) { toast('ลบสำเร็จ'); refreshData(); } else toast(r.message, 'error'); });
+      callApi('deleteVehicle', row, ADMIN_PASS, reason.trim()).then(r => { showLoading(false); if (r.success) { toast('ลบสำเร็จ'); refreshData(); } else toast(r.message, 'error'); });
     }
 
     // ============== USAGE ==============
@@ -4744,7 +4749,7 @@ input, select, textarea, button {
     function delMaint(row) {
       if (!requireAdmin()) return;
       if (!confirm('ลบรายการนี้?')) return;
-      callApi('deleteMaintenance', row, '11192').then(r => { if (r.success) { toast('ลบสำเร็จ'); refreshData(); } });
+      callApi('deleteMaintenance', row, ADMIN_PASS).then(r => { if (r.success) { toast('ลบสำเร็จ'); refreshData(); } });
     }
 
     // ============== FUEL ==============
@@ -4850,7 +4855,7 @@ input, select, textarea, button {
         };
         if (!data['จำนวนลิตร']) { toast('กรอกจำนวนลิตร', 'warning'); return; }
         showLoading(true);
-        callApi('saveFuel', data, '11192').then(r => { showLoading(false); if (r.success) { toast('บันทึกสำเร็จ'); closeModal(); refreshData(); } else toast(r.message, 'error'); });
+        callApi('saveFuel', data, ADMIN_PASS).then(r => { showLoading(false); if (r.success) { toast('บันทึกสำเร็จ'); closeModal(); refreshData(); } else toast(r.message, 'error'); });
       }, true);
     }
 
@@ -4862,7 +4867,7 @@ input, select, textarea, button {
     function delFuel(row) {
       if (!requireAdmin()) return;
       if (!confirm('ลบรายการนี้?')) return;
-      callApi('deleteFuel', row, '11192').then(r => { if (r.success) { toast('ลบสำเร็จ'); refreshData(); } });
+      callApi('deleteFuel', row, ADMIN_PASS).then(r => { if (r.success) { toast('ลบสำเร็จ'); refreshData(); } });
     }
 
     // ============== EQUIPMENT ==============
@@ -4877,7 +4882,7 @@ input, select, textarea, button {
       let filterStatus = window.EQUIPMENT_FILTER_STATE.status || '';
       let filterLoc = window.EQUIPMENT_FILTER_STATE.loc || '';
 
-      const render = () => {
+      const getFiltered = () => {
         let items = DATA.equipment;
         if (filterText) {
           // ค่าจาก Excel/Firestore อาจเป็นตัวเลข (เช่น Serial, รหัสครุภัณฑ์) — ต้องแปลงเป็น String ก่อน
@@ -4889,6 +4894,19 @@ input, select, textarea, button {
         if (filterCat) items = items.filter(e => e['หมวดหมู่'] === filterCat);
         if (filterStatus) items = items.filter(e => e['สถานะ'] === filterStatus);
         if (filterLoc) items = items.filter(e => (e['ที่เก็บ'] || '').trim() === filterLoc);
+        return items;
+      };
+
+      // พิมพ์ป้ายสติกเกอร์ของรายการที่กรองอยู่ (ไม่เกิน 100 ชิ้นต่อครั้ง กันสั่งพิมพ์พลาดทั้งคลัง)
+      window._efPrintLabels = () => {
+        const list = getFiltered();
+        if (!list.length) { toast('ไม่มีรายการให้พิมพ์', 'warning'); return; }
+        if (list.length > 100) { toast('รายการมากกว่า 100 ชิ้น กรุณากรองให้แคบลงก่อน (' + list.length + ')', 'warning'); return; }
+        openLabelPrintModal(list);
+      };
+
+      const render = () => {
+        const items = getFiltered();
 
         const valAll = DATA.equipment.length;
         const valReady = DATA.equipment.filter(e => e['สถานะ'] === 'พร้อมยืม').length;
@@ -4931,6 +4949,7 @@ input, select, textarea, button {
             <button class="btn btn-sm" onclick="addEquip()" style="background:#10b981; border:none; color:#fff; font-weight:700; border-radius:10px; padding:8px 14px; box-shadow:0 4px 12px rgba(16,185,129,0.35);">➕ เพิ่มอุปกรณ์ใหม่</button>
             <button class="btn btn-sm" onclick="openImportEquipmentModal()" style="background:rgba(255,255,255,0.18); border:1px solid rgba(255,255,255,0.35); color:#fff; font-weight:600; border-radius:10px; padding:8px 14px;">📥 นำเข้า</button>
           ` : ''}
+          ${isAdmin() ? `<button class="btn btn-sm" onclick="window._efPrintLabels()" title="พิมพ์ป้ายสติกเกอร์ Brother PT-P710BT ของรายการที่แสดงอยู่" style="background:rgba(255,255,255,0.18); border:1px solid rgba(255,255,255,0.35); color:#fff; font-weight:600; border-radius:10px; padding:8px 14px;">🏷️ พิมพ์ป้าย (${items.length})</button>` : ''}
           <button class="btn btn-sm" onclick="exportSheet('อุปกรณ์')" style="background:rgba(255,255,255,0.18); border:1px solid rgba(255,255,255,0.35); color:#fff; font-weight:600; border-radius:10px; padding:8px 14px;">📊 Export</button>
         </div>
       </div>
@@ -5025,7 +5044,7 @@ input, select, textarea, button {
               </tr>
             </thead>
             <tbody>${items.map(e => {
-              const equipKey = (e._row !== undefined && e._row !== null) ? e._row : `'${esc(e['รหัส'] || e['รหัสครุภัณฑ์'] || e.id || '')}'`;
+              const equipKey = (e._row !== undefined && e._row !== null) ? e._row : jsArg(e['รหัส'] || e['รหัสครุภัณฑ์'] || e.id || '');
               const st = e['สถานะ'] || 'พร้อมยืม';
               const stBadge = st === 'พร้อมยืม' ? `<span style="background:#dcfce7; color:#15803d; border:1px solid #bbf7d0; padding:3px 8px; border-radius:12px; font-weight:700; font-size:11px;">🟢 พร้อมยืม</span>`
                 : st === 'อยู่ระหว่างยืม' ? `<span style="background:#f3e8ff; color:#7e22ce; border:1px solid #e9d5ff; padding:3px 8px; border-radius:12px; font-weight:700; font-size:11px;">📦 อยู่ระหว่างยืม</span>`
@@ -5070,12 +5089,13 @@ input, select, textarea, button {
                 </td>
                 <td data-label="การจัดการ" style="text-align:center;">
                   <div style="display:inline-flex; gap:6px; justify-content:center; align-items:center;">
-                    ${st !== 'ประจำจุด' ? `<button class="btn btn-sm btn-primary" onclick="quickBorrow('${esc(e['รหัส'])}','${esc(e['ชื่ออุปกรณ์'])}')" title="ยืมอุปกรณ์นี้" style="padding:4px 10px; font-weight:600;">📦 ยืม</button>` : ''}
-                    ${isAdmin() ? `<button class="btn btn-sm btn-info" onclick="showQrModal('${esc(e['รหัส'] || e['รหัสครุภัณฑ์'])}', '${esc(e['ชื่ออุปกรณ์'])}')" title="สร้าง QR Code" style="padding:4px 8px;">🔲 QR</button>` : ''}
+                    ${st !== 'ประจำจุด' ? `<button class="btn btn-sm btn-primary" onclick="quickBorrow(${jsArg(e['รหัส'])},${jsArg(e['ชื่ออุปกรณ์'])})" title="ยืมอุปกรณ์นี้" style="padding:4px 10px; font-weight:600;">📦 ยืม</button>` : ''}
+                    ${isAdmin() ? `<button class="btn btn-sm btn-info" onclick="showQrModal(${jsArg(e['รหัส'] || e['รหัสครุภัณฑ์'])}, ${jsArg(e['ชื่ออุปกรณ์'])})" title="สร้าง QR Code" style="padding:4px 8px;">🔲 QR</button>
+                    <button class="btn btn-sm btn-secondary" onclick="openLabelPrintModal([${jsArg(e['รหัส'] || e['รหัสครุภัณฑ์'])}])" title="พิมพ์ป้ายสติกเกอร์ (PT-P710BT)" style="padding:4px 8px;">🏷️</button>` : ''}
                     ${canManageEquipment() ? `
-                      <button class="btn btn-sm btn-secondary" onclick="addEquipmentHandover(null, '${esc(e['รหัส'])}')" title="สร้างใบส่งมอบ/รับคืนสำหรับครุภัณฑ์นี้" style="padding:4px 8px;">📋</button>
+                      <button class="btn btn-sm btn-secondary" onclick="addEquipmentHandover(null, ${jsArg(e['รหัส'])})" title="สร้างใบส่งมอบ/รับคืนสำหรับครุภัณฑ์นี้" style="padding:4px 8px;">📋</button>
                       <button class="btn btn-sm btn-secondary" onclick="editEquip(${equipKey})" title="แก้ไขครุภัณฑ์" style="padding:4px 8px;">✏️</button>
-                      <button class="btn btn-sm btn-danger" onclick="delEquip(${equipKey}, '${esc(e['ชื่ออุปกรณ์'])}')" title="ลบครุภัณฑ์" style="padding:4px 8px;">🗑️</button>
+                      <button class="btn btn-sm btn-danger" onclick="delEquip(${equipKey}, ${jsArg(e['ชื่ออุปกรณ์'])})" title="ลบครุภัณฑ์" style="padding:4px 8px;">🗑️</button>
                     ` : ''}
                   </div>
                 </td>
@@ -5094,7 +5114,7 @@ input, select, textarea, button {
                     <div style="display:flex; justify-content:center; gap:10px; flex-wrap:wrap;">
                       ${isFiltered ? `<button class="btn btn-sm btn-secondary" onclick="window._ef('','','','')" style="border-radius:8px;">🔄 ล้างตัวกรองค้นหา</button>` : ''}
                       ${canManageEquipment() ? `
-                        <button class="btn btn-sm btn-primary" onclick="addEquipWithCode('${esc(filterText)}')" style="border-radius:8px;">
+                        <button class="btn btn-sm btn-primary" onclick="addEquipWithCode(${jsArg(filterText)})" style="border-radius:8px;">
                           ➕ ${isFiltered ? 'เพิ่มอุปกรณ์ใหม่ด้วยชื่อ/รหัสนี้' : 'เพิ่มอุปกรณ์ใหม่รายการแรก'}
                         </button>
                         ${!isFiltered ? `<button class="btn btn-sm btn-info" onclick="openImportEquipmentModal()" style="border-radius:8px;">📥 นำเข้าข้อมูล (Import Excel)</button>` : ''}
@@ -5152,18 +5172,21 @@ input, select, textarea, button {
       }
       return `
     <div class="form-grid">
-      <div class="field"><label>รหัสครุภัณฑ์ *</label><input id="e_code" value="${esc(e['รหัสครุภัณฑ์'] || '')}"></div>
+      <div class="field"><label>รหัสครุภัณฑ์ (เว้นว่างได้ถ้ายังไม่มีป้าย)</label><input id="e_code" value="${esc(e['รหัสครุภัณฑ์'] || '')}"></div>
       <div class="field"><label>ชื่ออุปกรณ์ *</label><input id="e_name" value="${esc(e['ชื่ออุปกรณ์'] || '')}"></div>
       <div class="field"><label>หมวดหมู่</label>
-        <select id="e_cat">${DATA.categories.map(c => `<option ${c['ชื่อหมวด'] === e['หมวดหมู่'] ? 'selected' : ''}>${esc(c['ชื่อหมวด'])}</option>`).join('')}</select>
+        <select id="e_cat">
+          ${(e['หมวดหมู่'] && !DATA.categories.some(c => c['ชื่อหมวด'] === e['หมวดหมู่'])) ? `<option selected>${esc(e['หมวดหมู่'])}</option>` : ''}
+          ${DATA.categories.map(c => `<option ${c['ชื่อหมวด'] === e['หมวดหมู่'] ? 'selected' : ''}>${esc(c['ชื่อหมวด'])}</option>`).join('')}
+        </select>
       </div>
       <div class="field"><label>ยี่ห้อ</label><input id="e_brand" value="${esc(e['ยี่ห้อ'] || '')}"></div>
       <div class="field"><label>รุ่น</label><input id="e_model" value="${esc(e['รุ่น'] || '')}"></div>
       <div class="field"><label>Serial Number</label><input id="e_sn" value="${esc(e['Serial'] || '')}"></div>
-      <div class="field"><label>จำนวน</label><input id="e_qty" type="number" value="${esc(e['จำนวน'] || 1)}"></div>
+      <div class="field"><label>จำนวน</label><input id="e_qty" type="number" min="0" value="${esc(e['จำนวน'] ?? 1)}"></div>
       <div class="field"><label>หน่วยนับ</label><input id="e_unit" value="${esc(e['หน่วยนับ'] || 'เครื่อง')}"></div>
       <div class="field"><label>ที่เก็บ</label><input id="e_loc" value="${esc(e['ที่เก็บ'] || '')}"></div>
-      <div class="field"><label>มูลค่า/หน่วย</label><input id="e_price" type="number" value="${esc(e['มูลค่า'] || '')}"></div>
+      <div class="field"><label>มูลค่า/หน่วย</label><input id="e_price" type="number" min="0" value="${esc(e['มูลค่า'] ?? '')}"></div>
       <div class="field"><label>สถานะ</label>
         <select id="e_status">
           <option ${e['สถานะ'] === 'พร้อมยืม' ? 'selected' : ''}>พร้อมยืม</option>
@@ -5202,7 +5225,15 @@ input, select, textarea, button {
         'มูลค่า': +$('e_price').value, 'สถานะ': $('e_status').value, 'วันที่จัดซื้อ': $('e_buy').value,
         'หมายเหตุ': $('e_note').value
       };
-      if (!data['ชื่ออุปกรณ์']) { toast('กรอกชื่ออุปกรณ์', 'warning'); return; }
+      if (!data['ชื่ออุปกรณ์'].trim()) { toast('กรอกชื่ออุปกรณ์', 'warning'); return; }
+      if (!Number.isFinite(data['จำนวน']) || data['จำนวน'] < 0) { toast('จำนวนต้องเป็นตัวเลขตั้งแต่ 0 ขึ้นไป', 'warning'); return; }
+      if (!Number.isFinite(data['มูลค่า']) || data['มูลค่า'] < 0) { toast('มูลค่าต้องเป็นตัวเลขตั้งแต่ 0 ขึ้นไป', 'warning'); return; }
+      const tag = String(data['รหัสครุภัณฑ์'] || '').trim();
+      if (tag) {
+        const dup = DATA.equipment.find(x => String(x['รหัสครุภัณฑ์'] || '').trim() === tag && String(x['รหัส']) !== String(row || ''));
+        if (dup) { toast('รหัสครุภัณฑ์ ' + tag + ' ซ้ำกับ "' + (dup['ชื่ออุปกรณ์'] || dup['รหัส']) + '" ในระบบ', 'warning'); return; }
+      }
+      data['รหัสครุภัณฑ์'] = tag;
       if (row) {
         data['รหัส'] = row;
       }
@@ -6079,6 +6110,7 @@ input, select, textarea, button {
             <button class="btn btn-sm btn-secondary" onclick="window._qbSelectAllFiltered()">☑️ เลือกทั้งหมดที่กรองอยู่</button>
             <button class="btn btn-sm btn-outline-danger" onclick="window._qbClearSelection()">✕ ล้างการเลือก</button>
             <button class="btn btn-sm btn-primary" style="font-weight:700;" onclick="window._qbPrint()">🖨️ พิมพ์ป้าย QR ที่เลือก (${selectedCount})</button>
+            <button class="btn btn-sm btn-info" style="font-weight:700;" onclick="window._qbPrintLabels()" title="พิมพ์สติกเกอร์ผ่าน Brother PT-P710BT">🏷️ พิมพ์สติกเกอร์ PT-P710BT (${selectedCount})</button>
           </div>
         </div>
         <div class="table-wrap" style="border:none">
@@ -6089,7 +6121,7 @@ input, select, textarea, button {
               const checked = QR_BATCH_STATE.selected.has(code);
               return `
               <tr>
-                <td data-label=""><input type="checkbox" ${checked ? 'checked' : ''} onchange="window._qbToggle('${esc(code)}')" style="width:18px; height:18px; cursor:pointer;"></td>
+                <td data-label=""><input type="checkbox" ${checked ? 'checked' : ''} onchange="window._qbToggle(${jsArg(code)})" style="width:18px; height:18px; cursor:pointer;"></td>
                 <td data-label="รหัส"><code style="font-size:12px;">${esc(code)}</code><div style="font-size:11px; color:#64748b; margin-top:2px;">${esc(e['หมวดหมู่'] || '-')}</div></td>
                 <td data-label="ชื่ออุปกรณ์">${esc(e['ชื่ออุปกรณ์'])}</td>
                 <td data-label="ที่เก็บ">📍 ${esc(e['ที่เก็บ'] || '-')}</td>
@@ -6130,6 +6162,12 @@ input, select, textarea, button {
       window._qbClearSelection = () => {
         QR_BATCH_STATE.selected.clear();
         $('content').innerHTML = render();
+      };
+
+      window._qbPrintLabels = () => {
+        const list = DATA.equipment.filter(e => QR_BATCH_STATE.selected.has(e['รหัส']));
+        if (!list.length) { toast('เลือกอย่างน้อย 1 รายการก่อนพิมพ์', 'warning'); return; }
+        openLabelPrintModal(list);
       };
 
       window._qbPrint = () => {
@@ -6726,7 +6764,7 @@ input, select, textarea, button {
       if (reason === null) return;
       if (!reason.trim()) { toast('กรุณาระบุเหตุผลในการลบข้อมูล', 'warning'); return; }
       showLoading(true);
-      callApi('deleteBorrowing', row, '11192', reason.trim()).then(r => { showLoading(false); if (r.success) { toast('ลบสำเร็จ'); refreshData(); } else toast(r.message, 'error'); });
+      callApi('deleteBorrowing', row, ADMIN_PASS, reason.trim()).then(r => { showLoading(false); if (r.success) { toast('ลบสำเร็จ'); refreshData(); } else toast(r.message, 'error'); });
     }
     window.delBorrow = delBorrow;
 
@@ -7296,7 +7334,7 @@ input, select, textarea, button {
         };
         if (!data['ชื่อ-นามสกุล']) { toast('กรอกชื่อ', 'warning'); return; }
         showLoading(true);
-        callApi('saveUser', data, '11192').then(r => { showLoading(false); if (r.success) { toast('บันทึกสำเร็จ'); closeModal(); refreshData(); } else toast(r.message, 'error'); });
+        callApi('saveUser', data, ADMIN_PASS).then(r => { showLoading(false); if (r.success) { toast('บันทึกสำเร็จ'); closeModal(); refreshData(); } else toast(r.message, 'error'); });
       }, true);
     }
 
@@ -7353,7 +7391,7 @@ input, select, textarea, button {
         };
         if (!data['ชื่อ-นามสกุล']) { toast('กรอกชื่อ', 'warning'); return; }
         showLoading(true);
-        callApi('saveUser', data, '11192').then(r => { showLoading(false); if (r.success) { toast('บันทึกสำเร็จ'); closeModal(); refreshData(); } else toast(r.message, 'error'); });
+        callApi('saveUser', data, ADMIN_PASS).then(r => { showLoading(false); if (r.success) { toast('บันทึกสำเร็จ'); closeModal(); refreshData(); } else toast(r.message, 'error'); });
       }, true);
     }
 
@@ -7365,7 +7403,7 @@ input, select, textarea, button {
       if (reason === null) return;
       if (!reason.trim()) { toast('กรุณาระบุเหตุผลในการลบข้อมูล', 'warning'); return; }
       showLoading(true);
-      callApi('deleteUser', row, '11192', reason.trim()).then(r => { showLoading(false); if (r.success) { toast('ลบสำเร็จ'); refreshData(); } else toast(r.message, 'error'); });
+      callApi('deleteUser', row, ADMIN_PASS, reason.trim()).then(r => { showLoading(false); if (r.success) { toast('ลบสำเร็จ'); refreshData(); } else toast(r.message, 'error'); });
     }
 
     function runTestUserLine() {
@@ -7584,12 +7622,7 @@ input, select, textarea, button {
         toast('กรุณาระบุ ลิงก์ Google Sheets หรือ ID', 'warning');
         return;
       }
-      const adminCode = prompt('กรุณายืนยันรหัสผ่าน Admin (11192) เพื่อดึงข้อมูลจาก Google Sheets:');
-      if (adminCode === null) return;
-      if (adminCode !== '11192') {
-        toast('รหัสผ่าน Admin ไม่ถูกต้อง', 'error');
-        return;
-      }
+      const adminCode = ADMIN_PASS;
 
       showLoading(true);
       callApi('fetchGoogleSheetData', url, sheetName, adminCode)
@@ -7723,12 +7756,7 @@ input, select, textarea, button {
         if (el.checked) strategy = el.value;
       }
 
-      const adminCode = prompt('กรุณายืนยันรหัสผ่าน Admin (11192) เพื่อนำเข้าข้อมูล:');
-      if (adminCode === null) return;
-      if (adminCode !== '11192') {
-        toast('รหัสผ่าน Admin ไม่ถูกต้อง', 'error');
-        return;
-      }
+      const adminCode = ADMIN_PASS;
 
       showLoading(true);
       callApi('importUsers', importDataBuffer, adminCode, strategy)
@@ -7929,12 +7957,7 @@ input, select, textarea, button {
         toast('กรุณาระบุ ลิงก์ Google Sheets หรือ ID', 'warning');
         return;
       }
-      const adminCode = prompt('กรุณายืนยันรหัสผ่าน Admin (11192) เพื่อดึงข้อมูลจาก Google Sheets:');
-      if (adminCode === null) return;
-      if (adminCode !== '11192') {
-        toast('รหัสผ่าน Admin ไม่ถูกต้อง', 'error');
-        return;
-      }
+      const adminCode = ADMIN_PASS;
 
       showLoading(true);
       callApi('fetchGoogleSheetData', url, sheetName, adminCode)
@@ -8066,12 +8089,7 @@ input, select, textarea, button {
         if (el.checked) strategy = el.value;
       }
 
-      const adminCode = prompt('กรุณายืนยันรหัสผ่าน Admin (11192) เพื่อนำเข้าอุปกรณ์:');
-      if (adminCode === null) return;
-      if (adminCode !== '11192') {
-        toast('รหัสผ่าน Admin ไม่ถูกต้อง', 'error');
-        return;
-      }
+      const adminCode = ADMIN_PASS;
 
       showLoading(true);
       callApi('importEquipment', importEquipDataBuffer, adminCode, strategy)
@@ -8272,12 +8290,7 @@ input, select, textarea, button {
         toast('กรุณาระบุ ลิงก์ Google Sheets หรือ ID', 'warning');
         return;
       }
-      const adminCode = prompt('กรุณายืนยันรหัสผ่าน Admin (11192) เพื่อดึงข้อมูลจาก Google Sheets:');
-      if (adminCode === null) return;
-      if (adminCode !== '11192') {
-        toast('รหัสผ่าน Admin ไม่ถูกต้อง', 'error');
-        return;
-      }
+      const adminCode = ADMIN_PASS;
 
       showLoading(true);
       callApi('fetchGoogleSheetData', url, sheetName, adminCode)
@@ -8396,12 +8409,7 @@ input, select, textarea, button {
         if (el.checked) strategy = el.value;
       }
 
-      const adminCode = prompt('กรุณายืนยันรหัสผ่าน Admin (11192) เพื่อนำเข้ายานพาหนะ:');
-      if (adminCode === null) return;
-      if (adminCode !== '11192') {
-        toast('รหัสผ่าน Admin ไม่ถูกต้อง', 'error');
-        return;
-      }
+      const adminCode = ADMIN_PASS;
 
       showLoading(true);
       callApi('importVehicles', importVehiclesDataBuffer, adminCode, strategy)
@@ -8602,12 +8610,7 @@ input, select, textarea, button {
         toast('กรุณาระบุ ลิงก์ Google Sheets หรือ ID', 'warning');
         return;
       }
-      const adminCode = prompt('กรุณายืนยันรหัสผ่าน Admin (11192) เพื่อดึงข้อมูลจาก Google Sheets:');
-      if (adminCode === null) return;
-      if (adminCode !== '11192') {
-        toast('รหัสผ่าน Admin ไม่ถูกต้อง', 'error');
-        return;
-      }
+      const adminCode = ADMIN_PASS;
 
       showLoading(true);
       callApi('fetchGoogleSheetData', url, sheetName, adminCode)
@@ -8718,12 +8721,7 @@ input, select, textarea, button {
         if (el.checked) strategy = el.value;
       }
 
-      const adminCode = prompt('กรุณายืนยันรหัสผ่าน Admin (11192) เพื่อนำเข้าพนักงานขับรถ:');
-      if (adminCode === null) return;
-      if (adminCode !== '11192') {
-        toast('รหัสผ่าน Admin ไม่ถูกต้อง', 'error');
-        return;
-      }
+      const adminCode = ADMIN_PASS;
 
       showLoading(true);
       callApi('importDrivers', importDriversDataBuffer, adminCode, strategy)
@@ -8794,7 +8792,7 @@ input, select, textarea, button {
         };
         if (!data['ชื่อ-นามสกุล']) { toast('กรอกชื่อ', 'warning'); return; }
         showLoading(true);
-        callApi('saveDriver', data, '11192').then(r => { showLoading(false); if (r.success) { toast('บันทึกสำเร็จ'); closeModal(); refreshData(); } });
+        callApi('saveDriver', data, ADMIN_PASS).then(r => { showLoading(false); if (r.success) { toast('บันทึกสำเร็จ'); closeModal(); refreshData(); } });
       }, true);
     }
 
@@ -8806,7 +8804,7 @@ input, select, textarea, button {
       if (reason === null) return;
       if (!reason.trim()) { toast('กรุณาระบุเหตุผลในการลบข้อมูล', 'warning'); return; }
       showLoading(true);
-      callApi('deleteDriver', row, '11192', reason.trim()).then(r => { showLoading(false); if (r.success) { toast('ลบสำเร็จ'); refreshData(); } else toast(r.message, 'error'); });
+      callApi('deleteDriver', row, ADMIN_PASS, reason.trim()).then(r => { showLoading(false); if (r.success) { toast('ลบสำเร็จ'); refreshData(); } else toast(r.message, 'error'); });
     }
 
     // ============== BOOKING ==============
@@ -9169,7 +9167,7 @@ input, select, textarea, button {
         data['รหัส'] = row;
       }
       showLoading(true);
-      callApi('saveDepartment', data, '11192')
+      callApi('saveDepartment', data, ADMIN_PASS)
         .then(r => {
           showLoading(false);
           if (r.success) {
@@ -9192,7 +9190,7 @@ input, select, textarea, button {
       if (reason === null) return;
       if (!reason.trim()) { toast('กรุณาระบุเหตุผลในการลบข้อมูล', 'warning'); return; }
       showLoading(true);
-      callApi('deleteDepartment', row, '11192', reason.trim())
+      callApi('deleteDepartment', row, ADMIN_PASS, reason.trim())
         .then(r => {
           showLoading(false);
           if (r.success) {
@@ -9412,11 +9410,9 @@ input, select, textarea, button {
               </div>
             </div>
             <div>
-              <h4 style="margin-bottom:10px;color:var(--primary)">🔐 รหัสผู้ดูแลระบบ</h4>
+              <h4 style="margin-bottom:10px;color:var(--primary)">🔐 สิทธิ์ผู้ดูแลระบบ</h4>
               <div style="background:var(--gray-50);padding:14px;border-radius:10px">
-                <div style="font-size:12px;color:var(--gray-500)">รหัส Admin (กรณีฉุกเฉิน)</div>
-                <div style="font-size:24px;font-weight:700;color:var(--primary);margin-top:6px;font-family:monospace">11192</div>
-                <div style="font-size:12px;color:var(--gray-500);margin-top:6px">ใช้สำหรับเข้าสู่ระบบและยืนยันการเปลี่ยนแปลง</div>
+                <div style="font-size:12px;color:var(--gray-500)">สิทธิ์ผู้ดูแลระบบกำหนดจากบทบาทของบัญชีที่เข้าสู่ระบบ (ไม่มีรหัสกลาง)</div>
               </div>
             </div>
           </div>
@@ -9561,7 +9557,7 @@ input, select, textarea, button {
       callApi('saveSystemSettings', {
         SYSTEM_ROLES: JSON.stringify(roles),
         ROLE_PERMISSIONS: JSON.stringify(perm)
-      }, '11192')
+      }, ADMIN_PASS)
         .then(r => {
           showLoading(false);
           if (r.success) {
@@ -9593,7 +9589,7 @@ input, select, textarea, button {
       callApi('saveSystemSettings', {
         SYSTEM_ROLES: JSON.stringify(roles),
         ROLE_PERMISSIONS: JSON.stringify(perm)
-      }, '11192')
+      }, ADMIN_PASS)
         .then(r => {
           showLoading(false);
           if (r.success) {
@@ -9628,7 +9624,7 @@ input, select, textarea, button {
       showLoading(true);
       callApi('saveSystemSettings', {
         ROLE_PERMISSIONS: JSON.stringify(perm)
-      }, '11192')
+      }, ADMIN_PASS)
         .then(r => {
           showLoading(false);
           if (r.success) {
@@ -9963,8 +9959,270 @@ input, select, textarea, button {
       if (modal) modal.classList.remove('active');
     }
 
+    // ============== LABEL PRINT (Brother PT-P710BT) ==============
+    // วาดป้าย (QR + รหัส + ชื่อ + วันที่) ด้วย ptouch-label.js แล้วพิมพ์ได้ 3 ทาง:
+    //  1) Bluetooth ตรง (Web Serial — Chrome/Edge บนคอมพิวเตอร์ ต้อง pair เครื่องก่อน)
+    //  2) ผ่านไดรเวอร์/หน้าต่างพิมพ์ของเบราว์เซอร์ (@page ขนาดเท่าป้าย)
+    //  3) ดาวน์โหลด PNG ไปเปิดในแอป Brother iPrint&Label (มือถือ)
+    const PT_PREF_KEY = 'vmes_ptouch_pref';
+    const PT_DEFAULT = { tapeMm: 24, lenMode: 'auto', lenMm: 45, showQr: true, showCode: true, showName: true, showLocation: false, showDate: 'purchase', autoCut: true, flipH: false, flipV: false, copies: 1 };
+    const PT_STATE = { items: [], idx: 0, pref: null, printer: null, busy: false, last: null };
+
+    function ptLoadPref() {
+      let p = {};
+      try { p = JSON.parse(storageGet(PT_PREF_KEY) || '{}') || {}; } catch (e) {}
+      return Object.assign({}, PT_DEFAULT, p);
+    }
+
+    function ptItemData(e, pref) {
+      let date = '';
+      if (pref.showDate === 'purchase') date = PTouch.thaiDate(e['วันที่จัดซื้อ']);
+      else if (pref.showDate === 'print') date = PTouch.thaiDate(new Date());
+      return {
+        name: e['ชื่ออุปกรณ์'], code: e['รหัสครุภัณฑ์'] || e['รหัส'], location: e['ที่เก็บ'],
+        date, qrText: String(e['รหัส'] || e['รหัสครุภัณฑ์'] || ''),
+      };
+    }
+
+    async function ptRender(e, pref) {
+      try {
+        if (document.fonts && document.fonts.load) {
+          await Promise.all(['500', '400'].map(w => document.fonts.load(w + ' 24px "IBM Plex Sans Thai"', 'กขค๑๒๓0')));
+        }
+      } catch (err) {}
+      return PTouch.renderLabel(ptItemData(e, pref), {
+        tapeMm: pref.tapeMm, lengthMm: pref.lenMode === 'custom' ? pref.lenMm : null,
+        showQr: pref.showQr, showCode: pref.showCode, showName: pref.showName,
+        showLocation: pref.showLocation, showDate: pref.showDate !== 'none',
+      });
+    }
+
+    function openLabelPrintModal(list) {
+      if (!isAdmin()) { toast('การพิมพ์ป้ายอนุญาตเฉพาะ Admin', 'warning'); return; }
+      if (typeof PTouch === 'undefined') { toast('โหลดโมดูลพิมพ์ป้ายไม่สำเร็จ กรุณารีเฟรชหน้า', 'error'); return; }
+      // รับได้ทั้ง record หรือรหัส (จากปุ่มในตาราง)
+      const items = (list || []).map(x => (typeof x === 'object' ? x : DATA.equipment.find(e => String(e['รหัส']) === String(x) || String(e['รหัสครุภัณฑ์']) === String(x)))).filter(Boolean);
+      if (!items.length) { toast('ไม่พบรายการที่จะพิมพ์', 'warning'); return; }
+      PT_STATE.items = items;
+      PT_STATE.idx = 0;
+      PT_STATE.pref = ptLoadPref();
+      const p = PT_STATE.pref;
+      const sup = PTouch.Printer.supported();
+      const body = `
+        <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:20px;">
+          <div>
+            ${items.length > 1 ? `<div class="field"><label>ดูตัวอย่างรายการที่ (ทั้งหมด ${items.length} ป้าย)</label>
+              <select id="pt_idx" onchange="ptUpdate()">${items.map((e, i) => `<option value="${i}">${esc(e['รหัสครุภัณฑ์'] || e['รหัส'])} — ${esc(e['ชื่ออุปกรณ์'])}</option>`).join('')}</select></div>` : `<div style="font-weight:700; margin-bottom:10px;">${esc(items[0]['ชื่ออุปกรณ์'])}</div>`}
+            <div class="field"><label>ความกว้างเทป (TZe)</label>
+              <select id="pt_tape" onchange="ptUpdate()">${Object.keys(PTouch.TAPES).map(t => `<option value="${t}" ${+t === +p.tapeMm ? 'selected' : ''}>${t} มม.</option>`).join('')}</select></div>
+            <div class="field"><label>ความยาวป้าย</label>
+              <div style="display:flex; gap:8px; align-items:center;">
+                <select id="pt_lenMode" onchange="ptUpdate()"><option value="auto" ${p.lenMode === 'auto' ? 'selected' : ''}>อัตโนมัติ (ตามข้อความ)</option><option value="custom" ${p.lenMode === 'custom' ? 'selected' : ''}>กำหนดเอง</option></select>
+                <input id="pt_lenMm" type="number" min="15" max="${PTouch.MAX_AUTO_MM * 2}" value="${esc(p.lenMm)}" oninput="ptUpdate()" style="width:80px;"> มม.
+              </div></div>
+            <div style="display:flex; flex-wrap:wrap; gap:6px 16px; margin:8px 0;">
+              <label><input type="checkbox" id="pt_qr" ${p.showQr ? 'checked' : ''} onchange="ptUpdate()"> QR Code</label>
+              <label><input type="checkbox" id="pt_code" ${p.showCode ? 'checked' : ''} onchange="ptUpdate()"> รหัสครุภัณฑ์</label>
+              <label><input type="checkbox" id="pt_name" ${p.showName ? 'checked' : ''} onchange="ptUpdate()"> ชื่ออุปกรณ์</label>
+              <label><input type="checkbox" id="pt_loc" ${p.showLocation ? 'checked' : ''} onchange="ptUpdate()"> ที่เก็บ</label>
+            </div>
+            <div class="field"><label>วันที่บนป้าย (แบบไทย เช่น ๒๖ ตุลาคม ๒๕๖๙)</label>
+              <select id="pt_date" onchange="ptUpdate()">
+                <option value="purchase" ${p.showDate === 'purchase' ? 'selected' : ''}>วันที่จัดซื้อของอุปกรณ์</option>
+                <option value="print" ${p.showDate === 'print' ? 'selected' : ''}>วันที่พิมพ์ป้าย</option>
+                <option value="none" ${p.showDate === 'none' ? 'selected' : ''}>ไม่แสดงวันที่</option></select></div>
+            <div class="field"><label>จำนวนที่พิมพ์ต่อป้าย</label><input id="pt_copies" type="number" min="1" max="20" value="${esc(p.copies)}" oninput="ptUpdate()" style="width:90px;"></div>
+            <details style="margin-top:6px;"><summary style="cursor:pointer; font-size:13px; color:#64748b;">⚙️ ตั้งค่าขั้นสูง</summary>
+              <div style="display:flex; flex-direction:column; gap:6px; margin-top:8px; font-size:13px;">
+                <label><input type="checkbox" id="pt_cut" ${p.autoCut ? 'checked' : ''} onchange="ptUpdate()"> ตัดเทปอัตโนมัติหลังพิมพ์แต่ละป้าย</label>
+                <label><input type="checkbox" id="pt_flipH" ${p.flipH ? 'checked' : ''} onchange="ptUpdate()"> กลับซ้าย-ขวา (ใช้ถ้าป้ายที่พิมพ์ออกมากลับด้านกระจก)</label>
+                <label><input type="checkbox" id="pt_flipV" ${p.flipV ? 'checked' : ''} onchange="ptUpdate()"> กลับบน-ล่าง (ใช้ถ้าป้ายที่พิมพ์ออกมากลับหัว)</label>
+              </div></details>
+          </div>
+          <div>
+            <div style="font-size:13px; color:#64748b; margin-bottom:6px;">ตัวอย่างป้าย <span id="pt_size"></span></div>
+            <div style="background:#e2e8f0; border-radius:10px; padding:14px; overflow:auto;">
+              <div id="pt_preview" style="display:inline-block; background:#fff; box-shadow:0 1px 4px rgba(0,0,0,.25);"></div>
+            </div>
+            <div id="pt_qrwarn" style="display:none; margin-top:8px; font-size:12px; color:#b45309; background:#fffbeb; border:1px solid #fde68a; border-radius:8px; padding:6px 10px;"></div>
+            <div style="margin-top:14px; padding:12px; border:1px solid #e2e8f0; border-radius:10px;">
+              <div style="font-weight:700; font-size:13px; margin-bottom:8px;">🔌 Brother PT-P710BT (Bluetooth)</div>
+              <div id="pt_conn" style="font-size:12px; color:#64748b; margin-bottom:8px;">${sup ? 'ยังไม่ได้เชื่อมต่อ — จับคู่ (pair) บลูทูธของเครื่องกับคอมพิวเตอร์ก่อน แล้วกดเชื่อมต่อ' : '⚠️ เบราว์เซอร์นี้ไม่รองรับ Web Serial (ต้องใช้ Chrome/Edge บนคอมพิวเตอร์) — ใช้ปุ่ม "ไดรเวอร์" หรือ "PNG" แทน'}</div>
+              <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                <button class="btn btn-sm btn-secondary" onclick="ptConnect()" ${sup ? '' : 'disabled'}>🔌 เชื่อมต่อเครื่องพิมพ์</button>
+                <button class="btn btn-sm btn-primary" id="pt_btnBT" onclick="ptPrintBT()" ${sup ? '' : 'disabled'} style="font-weight:700;">🖨️ พิมพ์ผ่านบลูทูธ</button>
+              </div>
+            </div>
+            <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;">
+              <button class="btn btn-sm btn-info" onclick="ptPrintBrowser()">🖨️ พิมพ์ผ่านไดรเวอร์/เบราว์เซอร์</button>
+              <button class="btn btn-sm btn-secondary" onclick="ptDownloadPng()">💾 ดาวน์โหลด PNG (แอป iPrint&amp;Label)</button>
+            </div>
+          </div>
+        </div>`;
+      openModal('🏷️ พิมพ์ป้ายสติกเกอร์ — Brother PT-P710BT', body, null, true);
+      if (PT_STATE.printer && PT_STATE.printer.connected) ptSetConn('✅ เชื่อมต่อเครื่องพิมพ์แล้ว', true);
+      ptUpdate();
+    }
+
+    function ptSetConn(text, ok) {
+      const el = $('pt_conn');
+      if (el) { el.textContent = text; el.style.color = ok ? '#15803d' : '#64748b'; }
+    }
+
+    function ptReadForm() {
+      const g = id => $(id);
+      const p = PT_STATE.pref;
+      p.tapeMm = +g('pt_tape').value;
+      p.lenMode = g('pt_lenMode').value;
+      p.lenMm = Math.max(15, +g('pt_lenMm').value || PT_DEFAULT.lenMm);
+      p.showQr = g('pt_qr').checked; p.showCode = g('pt_code').checked; p.showName = g('pt_name').checked; p.showLocation = g('pt_loc').checked;
+      p.showDate = g('pt_date').value;
+      p.copies = Math.min(20, Math.max(1, Math.floor(+g('pt_copies').value) || 1));
+      p.autoCut = g('pt_cut').checked; p.flipH = g('pt_flipH').checked; p.flipV = g('pt_flipV').checked;
+      PT_STATE.idx = g('pt_idx') ? +g('pt_idx').value : 0;
+      storageSet(PT_PREF_KEY, JSON.stringify(p));
+      return p;
+    }
+
+    let _ptSeq = 0;
+    async function ptUpdate() {
+      const p = ptReadForm();
+      const seq = ++_ptSeq;
+      $('pt_lenMm').disabled = p.lenMode !== 'custom';
+      const e = PT_STATE.items[PT_STATE.idx];
+      const r = await ptRender(e, p);
+      if (seq !== _ptSeq || !$('pt_preview')) return; // มีการเปลี่ยนค่าใหม่กว่านี้แล้ว
+      PT_STATE.last = r;
+      const cv = r.canvas;
+      cv.style.cssText = 'display:block; image-rendering:pixelated; height:' + (cv.height * 2) + 'px; width:' + (cv.width * 2) + 'px;';
+      $('pt_preview').innerHTML = '';
+      $('pt_preview').appendChild(cv);
+      $('pt_size').textContent = '· ' + r.lengthMm.toFixed(1) + ' × ' + PTouch.dotsToMm(cv.height).toFixed(1) + ' มม. (เทป ' + p.tapeMm + ' มม.)';
+      const warn = $('pt_qrwarn');
+      const fit = PTouch.qrFits(p.tapeMm, ptItemData(e, p).qrText);
+      if (p.showQr && !fit.ok) {
+        warn.style.display = '';
+        warn.textContent = '⚠️ เทป ' + p.tapeMm + ' มม. เล็กเกินกว่าจะพิมพ์ QR ให้สแกนติด จึงพิมพ์เฉพาะข้อความ (แนะนำเทป 12 มม. ขึ้นไป)';
+      } else if (r.lengthMm > PTouch.MAX_AUTO_MM + 0.5 && p.lenMode === 'auto') {
+        warn.style.display = '';
+        warn.textContent = 'ℹ️ ข้อความยาว ระบบย่อตัวอักษรให้พอดี ' + PTouch.MAX_AUTO_MM + ' มม.';
+      } else warn.style.display = 'none';
+    }
+
+    async function ptConnect() {
+      try {
+        if (!PT_STATE.printer) PT_STATE.printer = new PTouch.Printer();
+        ptSetConn('กำลังเชื่อมต่อ… เลือกเครื่อง PT-P710BT ในหน้าต่างที่เด้งขึ้นมา', false);
+        const st = await PT_STATE.printer.connect();
+        let msg = '✅ เชื่อมต่อเครื่องพิมพ์แล้ว';
+        if (st) {
+          const mm = st.tapeMm === 4 ? 3.5 : st.tapeMm;
+          if (PTouch.TAPES[mm]) {
+            msg += ' · พบเทปกว้าง ' + mm + ' มม.';
+            $('pt_tape').value = String(mm);
+            ptUpdate();
+          }
+          if (st.errors.length) msg += ' · ⚠️ ' + st.errors.join(', ');
+        } else msg += ' · (เครื่องไม่ตอบสถานะ — ตรวจว่าเปิดเครื่องและใส่เทปแล้ว)';
+        ptSetConn(msg, true);
+      } catch (err) {
+        PT_STATE.printer = null;
+        ptSetConn('❌ เชื่อมต่อไม่สำเร็จ: ' + err.message, false);
+      }
+    }
+
+    async function ptPrintBT() {
+      if (PT_STATE.busy) return;
+      const p = ptReadForm();
+      try {
+        if (!PT_STATE.printer || !PT_STATE.printer.connected) { await ptConnect(); }
+        const pr = PT_STATE.printer;
+        if (!pr || !pr.connected) return;
+        PT_STATE.busy = true;
+        const st = await pr.requestStatus();
+        if (st) {
+          const mm = st.tapeMm === 4 ? 3.5 : st.tapeMm;
+          if (st.errors.length) { toast('เครื่องพิมพ์: ' + st.errors.join(', '), 'error'); return; }
+          if (mm && +mm !== +p.tapeMm) {
+            if (PTouch.TAPES[mm]) { $('pt_tape').value = String(mm); ptUpdate(); }
+            toast('เทปในเครื่องกว้าง ' + mm + ' มม. แต่เลือก ' + p.tapeMm + ' มม. — ปรับให้ตรงแล้ว ตรวจตัวอย่างก่อนกดพิมพ์อีกครั้ง', 'warning');
+            return;
+          }
+        }
+        const total = PT_STATE.items.length * p.copies;
+        let n = 0;
+        for (const e of PT_STATE.items) {
+          const r = await ptRender(e, p);
+          for (let c = 0; c < p.copies; c++) {
+            n++;
+            toast('กำลังพิมพ์ป้าย ' + n + '/' + total + '…', 'info');
+            const res = await pr.printBitmap(r.bitmap, p.tapeMm, { autoCut: p.autoCut, flipH: p.flipH, flipV: p.flipV });
+            if (!res.ok) { toast('พิมพ์ไม่สำเร็จ: ' + res.errors.join(', '), 'error'); return; }
+          }
+        }
+        toast('ส่งพิมพ์ครบ ' + total + ' ป้ายแล้ว');
+      } catch (err) {
+        ptSetConn('❌ ' + err.message, false);
+        toast('พิมพ์ไม่สำเร็จ: ' + err.message, 'error');
+        if (PT_STATE.printer) { try { await PT_STATE.printer.disconnect(); } catch (x) {} PT_STATE.printer = null; }
+      } finally {
+        PT_STATE.busy = false;
+      }
+    }
+
+    async function ptPrintBrowser() {
+      const p = ptReadForm();
+      const w = window.open('', '_blank'); // เปิดทันทีใน call stack ของการคลิก กัน popup blocker
+      if (!w) { toast('เบราว์เซอร์บล็อกหน้าต่างป๊อปอัป กรุณาอนุญาตแล้วลองใหม่', 'error'); return; }
+      w.document.write('<p style="font-family:sans-serif">กำลังเตรียมป้าย…</p>');
+      let css = '', pages = '', k = 0;
+      for (const e of PT_STATE.items) {
+        const r = await ptRender(e, p);
+        const wMm = r.lengthMm.toFixed(2), hMm = PTouch.dotsToMm(r.canvas.height).toFixed(2);
+        const url = r.canvas.toDataURL('image/png');
+        css += '@page l' + k + ' { size: ' + wMm + 'mm ' + p.tapeMm + 'mm; margin: 0; } .l' + k + ' { page: l' + k + '; width:' + wMm + 'mm; height:' + p.tapeMm + 'mm; }\n';
+        for (let c = 0; c < p.copies; c++) pages += '<div class="pg l' + k + '"><img src="' + url + '" style="width:' + wMm + 'mm;height:' + hMm + 'mm;"></div>';
+        k++;
+      }
+      w.document.open();
+      w.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>พิมพ์ป้าย</title><style>' + css +
+        'html,body{margin:0;padding:0}.pg{display:flex;align-items:center;overflow:hidden;page-break-after:always;break-after:page}.pg img{display:block;image-rendering:pixelated}' +
+        '@media screen{body{background:#e2e8f0;padding:12px}.pg{background:#fff;margin:0 0 10px;box-shadow:0 1px 4px rgba(0,0,0,.3)}}' +
+        '</style></head><body>' + pages +
+        '<script>window.onload=function(){setTimeout(function(){window.print()},300)}<\/script></body></html>');
+      w.document.close();
+    }
+
+    function ptDownloadPng() {
+      const r = PT_STATE.last;
+      if (!r) return;
+      const e = PT_STATE.items[PT_STATE.idx];
+      r.canvas.toBlob(blob => {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'label-' + String(e['รหัสครุภัณฑ์'] || e['รหัส']).replace(/[^\w.\-ก-๙]+/g, '_') + '.png';
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+      }, 'image/png');
+    }
+    window.openLabelPrintModal = openLabelPrintModal;
+    window.ptUpdate = ptUpdate; window.ptConnect = ptConnect; window.ptPrintBT = ptPrintBT;
+    window.ptPrintBrowser = ptPrintBrowser; window.ptDownloadPng = ptDownloadPng;
+
+    // เดิมเรียก window.print() ตรงๆ ซึ่งพิมพ์ทั้งหน้าเว็บ (เมนู/ตาราง) — เปลี่ยนเป็นพิมพ์เฉพาะป้าย
     function printQrCode() {
-      window.print();
+      const codeEl = $('qrDisplayCodeText');
+      const code = codeEl ? codeEl.textContent.replace(/^รหัส:\s*/, '').trim() : '';
+      const item = DATA.equipment.find(e => String(e['รหัส']) === code || String(e['รหัสครุภัณฑ์']) === code);
+      if (item) { closeQrDisplayModal(); openLabelPrintModal([item]); return; }
+      const canvas = document.querySelector('#qrCodeContainer canvas');
+      const img = document.querySelector('#qrCodeContainer img');
+      const src = canvas ? canvas.toDataURL('image/png') : (img ? img.src : '');
+      if (!src) { toast('ไม่พบ QR Code ให้พิมพ์', 'warning'); return; }
+      const w = window.open('', '_blank');
+      if (!w) { toast('เบราว์เซอร์บล็อกหน้าต่างป๊อปอัป', 'error'); return; }
+      w.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>QR</title><style>@page{margin:10mm}body{margin:0;text-align:center;font-family:sans-serif}img{width:50mm}</style></head><body><img src="' + src + '"><div>' + esc($('qrDisplaySubText').textContent) + '</div><div style="font-family:monospace">' + esc(code) + '</div>\x3Cscript>window.onload=function(){setTimeout(function(){window.print()},200)}\x3C/script></body></html>');
+      w.document.close();
     }
 
     function openAdminPreviewModal() {
