@@ -115,6 +115,32 @@ async function runTests() {
     assert.equal(code, 401, 'bad signature must be rejected');
   }
 
+  // ความทนทานของการตรวจลายเซ็น (เคสจริงบน Vercel)
+  {
+    const crypto = require('crypto');
+    const sign = (secret, data) => crypto.createHmac('sha256', secret).update(data).digest('base64');
+    let code = 0;
+    const res = { status(c) { code = c; return this; }, send() { return this; } };
+    const raw = '{"events":[],"destination":"Uทดสอบ"}';
+
+    // ค่า env ติดขึ้นบรรทัดใหม่/ช่องว่างตอนวาง -> ต้องยังผ่านถ้า secret จริงตรงกัน
+    const saved = process.env.LINE_CHANNEL_SECRET;
+    process.env.LINE_CHANNEL_SECRET = '  test-channel-secret\n';
+    code = 0; await webhookHandler({ body: raw, headers: { 'x-line-signature': sign('test-channel-secret', raw) } }, res);
+    assert.equal(code, 200, 'trimmed secret accepted');
+
+    // Vercel แปลง body เป็น object ไปแล้ว: ไม่มี byte เดิม -> ตรวจจากการ serialize ซ้ำ (ผ่านเมื่อรู้ secret จริงเท่านั้น)
+    process.env.LINE_CHANNEL_SECRET = 'test-channel-secret';
+    const obj = { events: [], destination: 'Uทดสอบ' };
+    code = 0; await webhookHandler({ body: obj, headers: { 'x-line-signature': sign('test-channel-secret', JSON.stringify(obj)) } }, res);
+    assert.equal(code, 200, 'parsed body verified via re-serialisation');
+    code = 0; await webhookHandler({ body: obj, headers: { 'x-line-signature': sign('wrong-secret', JSON.stringify(obj)) } }, res);
+    assert.equal(code, 401, 'wrong secret still rejected');
+    code = 0; await webhookHandler({ body: raw, headers: { 'x-line-signature': sign('test-channel-secret', raw + ' ') } }, res);
+    assert.equal(code, 401, 'tampered body rejected');
+    process.env.LINE_CHANNEL_SECRET = saved;
+  }
+
 
   const createReq = (text, userId = 'U1234567890abcdef') => {
     const raw = JSON.stringify({

@@ -1398,30 +1398,53 @@ function readRawBody(req) {
 
 // LINE เซ็น raw body ด้วย HMAC-SHA256 (key = channel secret) ส่งมาใน X-Line-Signature
 // ต้องตรวจจาก byte จริงก่อน parse จึงปิด bodyParser ของ Vercel (ดู module.exports.config ท้ายไฟล์)
-function verifyLineSignature(rawBody, signature) {
-  const secret = process.env.LINE_CHANNEL_SECRET;
-  if (!secret || !signature) return false;
-  const expected = crypto.createHmac('sha256', secret).update(rawBody).digest();
+function hmacB64(secret, data) {
+  return crypto.createHmac('sha256', secret).update(data).digest();
+}
+function sigEquals(expected, signature) {
   let actual;
   try { actual = Buffer.from(String(signature), 'base64'); } catch (e) { return false; }
   return actual.length === expected.length && crypto.timingSafeEqual(actual, expected);
 }
 
-// อ่าน body ทั้งแบบ raw stream (production) และแบบที่ parse มาแล้ว (unit test เรียก handler ตรงๆ)
+// body: { raw: Buffer, source: 'stream' | 'parsed' , alt?: Buffer }
+// - ค่า env มักติดช่องว่าง/ขึ้นบรรทัดใหม่มาตอนวาง -> ลองทั้งค่าตัดช่องว่างและค่าดิบ
+// - ถ้า Vercel แปลง body เป็น object ไปแล้ว (stream ถูกอ่านหมด) ไม่เหลือ byte เดิม -> ลองเซ็นจาก JSON.stringify ของ object นั้น
+//   (ปลอดภัย: ต้องรู้ secret จึงจะสร้างลายเซ็นที่ตรงได้ ไม่ว่าจะเซ็นจากรูปแบบไหน)
+function checkLineSignature(body, signature) {
+  const secretRaw = process.env.LINE_CHANNEL_SECRET || '';
+  const secret = secretRaw.trim();
+  const diag = { hasSignature: !!signature, secretSet: !!secret, secretLen: secret.length, secretHadWhitespace: secretRaw !== secret, bodyLen: body.raw.length, bodySource: body.source, matched: 'none' };
+  if (!secret || !signature) return { ok: false, diag };
+  const candidates = [['raw+trimmed', body.raw, secret]];
+  if (secretRaw !== secret) candidates.push(['raw+untrimmed', body.raw, secretRaw]);
+  if (body.alt) candidates.push(['reserialized+trimmed', body.alt, secret]);
+  for (const [name, data, key] of candidates) {
+    if (sigEquals(hmacB64(key, data), signature)) { diag.matched = name; return { ok: true, diag }; }
+  }
+  return { ok: false, diag };
+}
+
+// อ่าน body ทั้งแบบ raw stream (production) และแบบที่ parse มาแล้ว (unit test เรียก handler ตรงๆ / Vercel parse ให้)
 async function readBody(req) {
   if (req.body !== undefined && req.body !== null && req.body !== '' && !req.readable) {
-    const raw = Buffer.isBuffer(req.body) ? req.body
-      : Buffer.from(typeof req.body === 'string' ? req.body : JSON.stringify(req.body));
-    return raw;
+    if (Buffer.isBuffer(req.body)) return { raw: req.body, source: 'parsed' };
+    if (typeof req.body === 'string') return { raw: Buffer.from(req.body), source: 'parsed' };
+    const alt = Buffer.from(JSON.stringify(req.body));
+    return { raw: alt, alt, source: 'parsed' };
   }
-  return readRawBody(req);
+  return { raw: await readRawBody(req), source: 'stream' };
 }
 
 module.exports = async function handler(req, res) {
   try {
-    const rawBody = await readBody(req);
-    if (!verifyLineSignature(rawBody, req.headers && (req.headers['x-line-signature'] || req.headers['X-Line-Signature']))) {
-      console.warn('LINE webhook rejected: invalid or missing signature (or LINE_CHANNEL_SECRET not set)');
+    const bodyInfo = await readBody(req);
+    const rawBody = bodyInfo.raw;
+    const sig = req.headers && (req.headers['x-line-signature'] || req.headers['X-Line-Signature']);
+    const check = checkLineSignature(bodyInfo, sig);
+    if (!check.ok) {
+      // ไม่ log ค่า secret/ลายเซ็น — เก็บเฉพาะข้อมูลที่ช่วยไล่สาเหตุ (ความยาว, มาจาก stream หรือ parsed, มี header ไหม)
+      console.warn('LINE webhook rejected: invalid or missing signature', JSON.stringify(check.diag), 'ua=' + String((req.headers && req.headers['user-agent']) || '').slice(0, 40));
       res.status(401).send('Invalid signature');
       return;
     }
