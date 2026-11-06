@@ -4574,7 +4574,7 @@ input, select, textarea, button {
         <select id="f_status"><option>พร้อมใช้งาน</option><option>อยู่ระหว่างซ่อม</option><option>ไม่พร้อมใช้</option></select>
       </div>
       <div class="field"><label>หน่วยงาน</label>
-        <select id="f_dept">${DATA.departments.map(d => `<option ${d['ชื่อหน่วยงาน'] === v['หน่วยงาน'] ? 'selected' : ''}>${esc(d['ชื่อหน่วยงาน'])}</option>`).join('')}</select>
+        ${eqDeptInputHtml('f_dept', v['หน่วยงาน'], '', 'พิมพ์เพื่อค้นหา หรือเว้นว่าง')}
       </div>
       <div class="field full"><label>หมายเหตุ</label><textarea id="f_note" rows="2">${esc(v['หมายเหตุ'] || '')}</textarea></div>
     </div>
@@ -4594,7 +4594,8 @@ input, select, textarea, button {
       setTimeout(() => { $('f_type').value = v['ประเภท'] || 'รถเก๋ง'; $('f_status').value = v['สถานะ'] || 'พร้อมใช้งาน'; }, 50);
     }
 
-    function saveVehicle(row) {
+    async function saveVehicle(row) {
+      if (!(await eqDeptEnsure('f_dept'))) return;
       const data = {
         'ทะเบียน': $('f_plate').value, 'ยี่ห้อ': $('f_brand').value, 'รุ่น': $('f_model').value,
         'สี': $('f_color').value, 'ประเภท': $('f_type').value, 'ปีที่ใช้งาน': +$('f_year').value,
@@ -5357,7 +5358,7 @@ input, select, textarea, button {
       <div class="field"><label>จำนวน</label><input id="b_qty" type="number" value="1" min="1"></div>
       <div class="field"><label>ผู้ขอยืม *</label><input id="b_user" value="${esc(CURRENT_USER.name)}"></div>
       <div class="field"><label>หน่วยงาน *</label>
-        <select id="b_dept">${DATA.departments.map(d => `<option ${d['ชื่อหน่วยงาน'] === CURRENT_USER.dept ? 'selected' : ''}>${esc(d['ชื่อหน่วยงาน'])}</option>`).join('')}</select>
+        ${eqDeptInputHtml('b_dept', CURRENT_USER.dept)}
       </div>
       <div class="field"><label>เบอร์ติดต่อ</label><input id="b_phone" placeholder="08x-xxx-xxxx" value="${esc(CURRENT_USER.phone || '')}"></div>
       <div class="field full"><label>วัตถุประสงค์ *</label><input id="b_purpose" placeholder="เช่น ใช้ในการประชุมประจำสัปดาห์"></div>
@@ -5382,7 +5383,9 @@ input, select, textarea, button {
     <div style="margin-top:14px;padding:12px;background:#dbeafe;border-radius:10px;font-size:12px;color:var(--primary-dark)">
       📲 เมื่อบันทึกแล้วจะส่ง LINE Flex Card แจ้งเตือนทันที (สถานะ: รอรับเรื่อง)
     </div>
-    `, () => {
+    `, async () => {
+        if (!$('b_dept').value.trim()) { toast('กรุณาระบุหน่วยงาน', 'warning'); return; }
+        if (!(await eqDeptEnsure('b_dept'))) return;
         const eq = $('b_eq').value.split('|');
         const avail = getAvail(eq[0]);
         const reqQty = +$('b_qty').value;
@@ -5691,9 +5694,7 @@ input, select, textarea, button {
       <div class="field"><label>จำนวน</label><input id="eb_qty" type="number" value="${esc(b['จำนวน'] || 1)}" min="1"></div>
       <div class="field"><label>ผู้ขอยืม *</label><input id="eb_user" value="${esc(b['ผู้ขอยืม'] || '')}"></div>
       <div class="field"><label>หน่วยงาน *</label>
-        <select id="eb_dept">
-          ${DATA.departments.map(d => `<option ${d['ชื่อหน่วยงาน'] === b['หน่วยงาน'] ? 'selected' : ''}>${esc(d['ชื่อหน่วยงาน'])}</option>`).join('')}
-        </select>
+        ${eqDeptInputHtml('eb_dept', b['หน่วยงาน'])}
       </div>
       <div class="field"><label>เบอร์ติดต่อ</label><input id="eb_phone" value="${esc(b['เบอร์ติดต่อ'] || '')}"></div>
       <div class="field"><label>วันที่ขอยืม</label><input id="eb_date" type="date" value="${esc(b['วันที่ขอยืม'] || '')}"></div>
@@ -5703,7 +5704,9 @@ input, select, textarea, button {
       <div class="field full"><label>วัตถุประสงค์ *</label><input id="eb_purpose" value="${esc(b['วัตถุประสงค์'] || '')}"></div>
       <div class="field full"><label>หมายเหตุ</label><textarea id="eb_note" rows="2">${esc(b['หมายเหตุ'] || '')}</textarea></div>
     </div>
-      `, () => {
+      `, async () => {
+        if (!$('eb_dept').value.trim()) { toast('กรุณาระบุหน่วยงาน', 'warning'); return; }
+        if (!(await eqDeptEnsure('eb_dept'))) return;
         const eqVal = $('eb_eq').value.split('|');
         const updated = Object.assign({}, b, {
           'รหัส': b['รหัส'],
@@ -6209,7 +6212,7 @@ input, select, textarea, button {
     <div class="form-grid">
       <div class="field"><label>ชื่อ-นามสกุล *</label><input id="us_name"></div>
       <div class="field"><label>ตำแหน่ง</label><input id="us_pos"></div>
-      <div class="field"><label>หน่วยงาน</label><select id="us_dept">${DATA.departments.map(d => `<option>${esc(d['ชื่อหน่วยงาน'])}</option>`).join('')}</select></div>
+      <div class="field"><label>หน่วยงาน</label>${eqDeptInputHtml('us_dept', '')}</div>
       <div class="field"><label>เบอร์</label><input id="us_phone"></div>
       <div class="field"><label>อีเมล</label><input id="us_email" type="email"></div>
       <div class="field"><label>รหัสผ่าน</label><input id="us_pass" value="12345"></div>
@@ -6220,7 +6223,9 @@ input, select, textarea, button {
       <div class="field"><label>Telegram Chat ID</label><input id="us_tg_id" placeholder="Chat ID (เช่น 12345678)"></div>
       <div class="field"><label>Telegram Bot Token</label><input id="us_tg_token" placeholder="Bot Token ของ Telegram"></div>
     </div>
-  `, () => {
+  `, async () => {
+        if (!$('us_dept').value.trim()) { toast('กรุณาระบุหน่วยงาน', 'warning'); return; }
+        if (!(await eqDeptEnsure('us_dept'))) return;
         const data = {
           'ชื่อ-นามสกุล': $('us_name').value, 'ตำแหน่ง': $('us_pos').value, 'หน่วยงาน': $('us_dept').value,
           'เบอร์ติดต่อ': $('us_phone').value, 'อีเมล': $('us_email').value, 'รหัสผ่าน': $('us_pass').value,
@@ -6243,7 +6248,7 @@ input, select, textarea, button {
     <div class="form-grid">
       <div class="field"><label>ชื่อ-นามสกุล *</label><input id="us_name" value="${esc(u['ชื่อ-นามสกุล'] || '')}"></div>
       <div class="field"><label>ตำแหน่ง</label><input id="us_pos" value="${esc(u['ตำแหน่ง'] || '')}"></div>
-      <div class="field"><label>หน่วยงาน</label><select id="us_dept">${DATA.departments.map(d => `<option ${d['ชื่อหน่วยงาน'] === u['หน่วยงาน'] ? 'selected' : ''}>${esc(d['ชื่อหน่วยงาน'])}</option>`).join('')}</select></div>
+      <div class="field"><label>หน่วยงาน</label>${eqDeptInputHtml('us_dept', u['หน่วยงาน'])}</div>
       <div class="field"><label>เบอร์</label><input id="us_phone" value="${esc(u['เบอร์ติดต่อ'] || '')}"></div>
       <div class="field"><label>อีเมล</label><input id="us_email" type="email" value="${esc(u['อีเมล'] || '')}"></div>
       <div class="field"><label>รหัสผ่าน</label><input id="us_pass" value="${esc(u['รหัสผ่าน'] || '')}"></div>
@@ -6276,7 +6281,9 @@ input, select, textarea, button {
         </div>
       </div>
     </div>
-  `, () => {
+  `, async () => {
+        if (!$('us_dept').value.trim()) { toast('กรุณาระบุหน่วยงาน', 'warning'); return; }
+        if (!(await eqDeptEnsure('us_dept'))) return;
         const data = {
           'รหัส': u['รหัส'],
           'ชื่อ-นามสกุล': $('us_name').value, 'ตำแหน่ง': $('us_pos').value, 'หน่วยงาน': $('us_dept').value,
@@ -7775,7 +7782,7 @@ input, select, textarea, button {
       openModal('📅 จองรถล่วงหน้า', `
     <div class="form-grid">
       <div class="field"><label>ผู้ขอจอง *</label><input id="bk_user" value="${esc(CURRENT_USER.name)}"></div>
-      <div class="field"><label>หน่วยงาน</label><select id="bk_dept">${DATA.departments.map(d => `<option ${d['ชื่อหน่วยงาน'] === CURRENT_USER.dept ? 'selected' : ''}>${esc(d['ชื่อหน่วยงาน'])}</option>`).join('')}</select></div>
+      <div class="field"><label>หน่วยงาน</label>${eqDeptInputHtml('bk_dept', CURRENT_USER.dept)}</div>
       <div class="field"><label>ทะเบียนรถ *</label><select id="bk_plate" onchange="checkBookingConflict()">${cars.map(v => `<option value="${esc(v['ทะเบียน'])}">${esc(v['ทะเบียน'])}${v['สถานะ'] && v['สถานะ'] !== 'พร้อมใช้งาน' ? ' (' + esc(v['สถานะ']) + ')' : ''}</option>`).join('') || '<option value="">— ไม่มีรถที่จองได้ —</option>'}</select></div>
       <div class="field"><label>วันที่ใช้ *</label><input id="bk_date" type="date" min="${localDateStr(0)}" value="${localDateStr(1)}" onchange="checkBookingConflict()"></div>
       <div class="field"><label>เวลาเริ่ม *</label><input id="bk_start" type="time" value="08:00" onchange="checkBookingConflict()"></div>
@@ -7787,7 +7794,9 @@ input, select, textarea, button {
       <div class="field"><label>พนักงานขับรถ</label><select id="bk_driver" onchange="checkBookingConflict()"><option value="">— ไม่ระบุ (ให้ผู้อนุมัติจัด) —</option>${DATA.drivers.filter(d => d['สถานะ'] === 'ปฏิบัติงาน').map(d => `<option>${esc(d['ชื่อ-นามสกุล'])}</option>`).join('')}</select></div>
       <div class="field full"><label>หมายเหตุ</label><textarea id="bk_note" rows="2"></textarea></div>
     </div>
-  `, () => {
+  `, async () => {
+        if (!$('bk_dept').value.trim()) { toast('กรุณาระบุหน่วยงาน', 'warning'); return; }
+        if (!(await eqDeptEnsure('bk_dept'))) return;
         const data = readBookingForm();
         if (!data['ผู้ขอจอง'].trim()) { toast('กรอกชื่อผู้ขอจอง', 'warning'); return; }
         if (!data['ทะเบียน']) { toast('เลือกรถที่ต้องการจอง', 'warning'); return; }

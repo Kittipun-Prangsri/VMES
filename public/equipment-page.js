@@ -1258,6 +1258,8 @@ function eqDeptCheck(id) {
   const hit = eqDeptFind(typed);
   if (hit) { if (hit !== inp.value) inp.value = hit; hint.innerHTML = ''; return; }
   const canAdd = typeof canManageEquipment === 'function' && canManageEquipment();
+  const own = typeof CURRENT_USER !== 'undefined' && CURRENT_USER ? eqNorm(CURRENT_USER.dept).toLowerCase() : '';
+  if (!canAdd && own && own === typed.toLowerCase()) { hint.innerHTML = ''; return; } // หน่วยงานตามโปรไฟล์ตัวเอง ไม่ต้องเตือน
   hint.innerHTML = `<span style="color:#b45309;">ไม่พบหน่วยงาน “${esc(typed)}” ในระบบ</span>`
     + (canAdd ? ` <button type="button" class="btn btn-sm btn-secondary" onclick="eqDeptAdd('${id}')" style="padding:2px 10px; margin-left:6px;">➕ เพิ่มเป็นหน่วยงานใหม่</button>` : '');
 }
@@ -1290,7 +1292,13 @@ async function eqDeptEnsure(id) {
   if (!typed) return true;
   const hit = eqDeptFind(typed);
   if (hit) { inp.value = hit; return true; }
-  if (typeof canManageEquipment === 'function' && !canManageEquipment()) { toast('ไม่พบหน่วยงาน "' + typed + '" ในระบบ', 'warning'); return false; }
+  if (typeof canManageEquipment === 'function' && !canManageEquipment()) {
+    // ผู้ใช้ทั่วไปเพิ่มหน่วยงานใหม่ไม่ได้ แต่ใช้หน่วยงานตามโปรไฟล์ของตัวเองได้ (กันถูกบล็อกเมื่อโปรไฟล์ยังไม่ตรงกับตารางหน่วยงาน)
+    const own = typeof CURRENT_USER !== 'undefined' && CURRENT_USER ? CURRENT_USER.dept : '';
+    if (own && eqNorm(own).toLowerCase() === typed.toLowerCase()) return true;
+    toast('ไม่พบหน่วยงาน "' + typed + '" ในระบบ — เลือกจากรายการ หรือให้ผู้ดูแลระบบเพิ่มหน่วยงานนี้ก่อน', 'warning');
+    return false;
+  }
   if (!confirm('ไม่พบหน่วยงาน "' + typed + '" ในระบบ\n\nต้องการเพิ่มเป็นหน่วยงานใหม่หรือไม่?\n(กด "ยกเลิก" เพื่อกลับไปแก้ชื่อ)')) return false;
   return eqDeptAdd(id);
 }
