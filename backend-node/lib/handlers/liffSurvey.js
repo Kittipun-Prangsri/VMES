@@ -7,7 +7,7 @@
 const { SHEETS, setDoc, getDoc, listDocs } = require('../firestore');
 const { newId, nowStr, todayStr, logAudit } = require('../util');
 const { isStaffRole } = require('../auth');
-const { verifyLineAccessToken } = require('../lineAuth');
+const { verifyLineAccessTokenDetailed } = require('../lineAuth');
 const { addPhotoToEquipment, readLocations, normLoc, MAX_PHOTOS } = require('./equipment');
 
 const CODE_RE = /^\d{4}$/;
@@ -23,9 +23,24 @@ function tagPrefix(tag) {
 }
 
 // -> { staff:{name,role,dept,code} } หรือ { error, message }
+// ข้อความอธิบายเมื่อยืนยันตัวตนไม่ผ่าน — ถ้าเป็นปัญหาการตั้งค่า (channel ID ไม่ตรง) บอกค่าที่ถูกต้องให้ผู้ดูแลแก้เองได้เลย
+function authFailMessage(r) {
+  const base = 'ยืนยันตัวตน LINE ไม่สำเร็จ — กรุณาเปิดหน้านี้ผ่านแอป LINE อีกครั้ง';
+  if (r.reason === 'client_id_mismatch') {
+    return base + '\n\n[สำหรับผู้ดูแลระบบ] ค่า LINE_LOGIN_CHANNEL_ID บน Vercel (' + r.want + ') ไม่ตรงกับ LINE Login channel ของ LIFF ที่ใช้อยู่ (' + r.got + ') — แก้ค่าเป็น ' + r.got + ' แล้ว deploy ใหม่';
+  }
+  if (r.reason === 'token_expired') return 'เซสชัน LINE หมดอายุ — ปิดหน้านี้แล้วเปิดใหม่จากแชท LINE';
+  return base;
+}
+
+// -> { staff:{name,role,dept,code} } หรือ { error, message }
 async function resolveStaff(token) {
-  const prof = await verifyLineAccessToken(token);
-  if (!prof) return { error: 'unauthorized', message: 'ยืนยันตัวตน LINE ไม่สำเร็จ — กรุณาเปิดหน้านี้ผ่านแอป LINE อีกครั้ง' };
+  const auth = await verifyLineAccessTokenDetailed(token);
+  if (!auth.ok) {
+    console.warn('LIFF survey auth failed:', JSON.stringify({ reason: auth.reason, status: auth.status, got: auth.got, want: auth.want }));
+    return { error: 'unauthorized', message: authFailMessage(auth) };
+  }
+  const prof = auth.profile;
   const users = await listDocs(SHEETS.USERS);
   const u = users.find((x) => String(x['LINE ID'] || '').trim() === prof.userId);
   if (!u) return { error: 'not_registered', message: 'ยังไม่ได้ผูกบัญชี LINE กับระบบ — ส่งเลขบัตรประชาชน 13 หลักในแชท LINE ของโรงพยาบาลเพื่อผูกบัญชี', profile: prof };

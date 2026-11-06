@@ -216,7 +216,7 @@
       let res;
       try { res = await api('getLiffSurveyInfo'); } catch (e) { res = { success: false, message: 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้' }; }
       if (!res || !res.success) { state('<div class="card empty">โหลดข้อมูลไม่สำเร็จ: ' + esc((res && res.message) || '') + '<br><br><button class="btn" onclick="load()">ลองใหม่</button></div>'); return; }
-      if (!res.allowed) { state('<div class="card empty" style="font-size:14px; color:#b45309;">' + esc(res.message || 'ไม่มีสิทธิ์ใช้งาน') + '</div>'); return; }
+      if (!res.allowed) { state('<div class="card empty" style="font-size:14px; color:#b45309; white-space:pre-line;">' + esc(res.message || 'ไม่มีสิทธิ์ใช้งาน') + '</div>'); return; }
       info = res;
       state('');
       $('app').style.display = 'block'; $('savebar').style.display = 'block';

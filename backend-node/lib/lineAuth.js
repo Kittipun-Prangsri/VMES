@@ -6,38 +6,49 @@
 
 const crypto = require('crypto');
 
-const CHANNEL_ID = () => process.env.LINE_LOGIN_CHANNEL_ID || '2011083425'; // ส่วนหน้าของ LIFF ID
+const CHANNEL_ID = () => String(process.env.LINE_LOGIN_CHANNEL_ID || '').trim() || '2011083425'; // ส่วนหน้าของ LIFF ID
 const CACHE_MS = 5 * 60 * 1000;
 const cache = new Map();
 
 function clearCache() { cache.clear(); }
 
-async function verifyLineAccessToken(token, fetchImpl) {
+// คืน { ok:true, profile } หรือ { ok:false, reason, ... } — reason ไว้ให้ผู้ดูแลไล่สาเหตุ (ไม่มีข้อมูลลับ: channel ID ไม่ใช่ความลับ
+// และปรากฏใน LIFF URL อยู่แล้ว)
+async function verifyLineAccessTokenDetailed(token, fetchImpl) {
   const doFetch = fetchImpl || (typeof fetch === 'function' ? fetch : null);
   const t = String(token || '').trim();
-  if (!doFetch || t.length < 20 || t.length > 2000) return null;
+  if (!doFetch) return { ok: false, reason: 'no_fetch' };
+  if (t.length < 20 || t.length > 2000) return { ok: false, reason: 'bad_token_format' };
 
   const key = crypto.createHash('sha256').update(t).digest('hex');
   const hit = cache.get(key);
-  if (hit && hit.exp > Date.now()) return hit.profile;
+  if (hit && hit.exp > Date.now()) return { ok: true, profile: hit.profile };
 
   try {
     const vr = await doFetch('https://api.line.me/oauth2/v2.1/verify?access_token=' + encodeURIComponent(t));
-    if (!vr.ok) return null;
+    if (!vr.ok) return { ok: false, reason: 'line_verify_rejected', status: vr.status };
     const v = await vr.json();
-    if (String(v.client_id) !== String(CHANNEL_ID()) || !(Number(v.expires_in) > 0)) return null;
+    const want = String(CHANNEL_ID()).trim();
+    const got = String(v.client_id);
+    if (got !== want) return { ok: false, reason: 'client_id_mismatch', got, want };
+    if (!(Number(v.expires_in) > 0)) return { ok: false, reason: 'token_expired' };
 
     const pr = await doFetch('https://api.line.me/v2/profile', { headers: { Authorization: 'Bearer ' + t } });
-    if (!pr.ok) return null;
+    if (!pr.ok) return { ok: false, reason: 'line_profile_rejected', status: pr.status };
     const p = await pr.json();
-    if (!p || !p.userId) return null;
+    if (!p || !p.userId) return { ok: false, reason: 'no_user_id' };
     const profile = { userId: String(p.userId), displayName: String(p.displayName || '') };
     cache.set(key, { exp: Date.now() + Math.min(CACHE_MS, Number(v.expires_in) * 1000), profile });
     if (cache.size > 500) cache.delete(cache.keys().next().value);
-    return profile;
+    return { ok: true, profile };
   } catch (e) {
-    return null;
+    return { ok: false, reason: 'network_error' };
   }
 }
 
-module.exports = { verifyLineAccessToken, clearCache };
+async function verifyLineAccessToken(token, fetchImpl) {
+  const r = await verifyLineAccessTokenDetailed(token, fetchImpl);
+  return r.ok ? r.profile : null;
+}
+
+module.exports = { verifyLineAccessToken, verifyLineAccessTokenDetailed, clearCache };

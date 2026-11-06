@@ -40,6 +40,19 @@ const tk = (n) => n + 'x'.repeat(24); // ความยาวพอให้ผ
   assert.equal(calls, 2, 'second call served from cache (verify + profile only once)');
   console.log('  ✅ LINE token verification (channel check, cache)');
 
+
+  // เหตุผลที่ยืนยันไม่ผ่านต้องบอกค่าที่ถูกต้องให้ผู้ดูแล (channel ID ไม่ใช่ความลับ)
+  LA.clearCache();
+  const d1 = await LA.verifyLineAccessTokenDetailed(tk('T_OTHERCH'), mkFetch());
+  assert.equal(d1.ok, false); assert.equal(d1.reason, 'client_id_mismatch'); assert.equal(d1.got, '9999'); assert.equal(d1.want, '2011083425');
+  process.env.LINE_LOGIN_CHANNEL_ID = '  2010178921 \n';
+  const d2 = await LA.verifyLineAccessTokenDetailed(tk('T_STAFF'), mkFetch());
+  assert.equal(d2.reason, 'client_id_mismatch'); assert.equal(d2.want, '2010178921', 'env value is trimmed');
+  delete process.env.LINE_LOGIN_CHANNEL_ID;
+  assert.equal((await LA.verifyLineAccessTokenDetailed(tk('T_NOPE'), mkFetch())).reason, 'line_verify_rejected');
+  assert.equal((await LA.verifyLineAccessTokenDetailed('short', mkFetch())).reason, 'bad_token_format');
+  console.log('  ✅ auth failure reasons (client_id mismatch reports expected/actual, env trimmed)');
+
   // ใช้ fetch ปลอมเป็น global เพื่อให้ handler เรียกผ่าน lineAuth ตามปกติ
   LA.clearCache(); global.fetch = mkFetch();
   const S = require('../backend-node/lib/handlers/liffSurvey');
@@ -54,6 +67,11 @@ const tk = (n) => n + 'x'.repeat(24); // ความยาวพอให้ผ
 
   // สิทธิ์
   const deny = async (name, reason) => { const r = await S.getLiffSurveyInfo(tk(name)); assert.equal(r.allowed, false, name); assert.equal(r.reason, reason, name); };
+  process.env.LINE_LOGIN_CHANNEL_ID = '2010178921'; // ตั้งผิด channel -> ผู้ใช้เห็นข้อความบอกค่าที่ถูกต้อง
+  LA.clearCache();
+  const mis = await S.getLiffSurveyInfo(tk('T_STAFF'));
+  assert.equal(mis.allowed, false); assert.match(mis.message, /LINE_LOGIN_CHANNEL_ID/); assert.match(mis.message, /2011083425/);
+  delete process.env.LINE_LOGIN_CHANNEL_ID; LA.clearCache();
   await deny('T_BAD', 'unauthorized'); await deny('T_NOREG', 'not_registered'); await deny('T_USER', 'not_staff'); await deny('T_SUSP', 'suspended');
   for (const fn of [() => S.saveLiffSurveyItem(tk('T_USER'), { name: 'x', room: 'y' }), () => S.saveLiffSurveyItem(tk('T_BAD'), { name: 'x', room: 'y' }), () => S.uploadLiffSurveyPhoto(tk('T_USER'), 'E0', 'AAAA', 'image/jpeg')]) {
     const r = await fn(); assert.equal(r.success, false);
