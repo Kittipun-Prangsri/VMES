@@ -309,6 +309,7 @@ async function sendVehicleUsageFlex(data, targetId) {
 
 const LIFF_URL = 'https://liff.line.me/2011083425-G0pup6PQ';
 const LIFF_BOOKING_URL = LIFF_URL + '?tab=booking';
+const LIFF_SURVEY_URL = LIFF_URL + '?tab=survey'; // liff.html redirect ต่อไป liff-survey.html
 
 const BOOKING_STATUS_META = {
   'รออนุมัติ': { color: '#f59e0b', icon: '📥', title: 'คำขอจองรถใหม่', desc: 'รอผู้มีสิทธิ์อนุมัติ' },
@@ -681,6 +682,7 @@ module.exports = {
   buildBookingBubble,
   LIFF_URL,
   LIFF_BOOKING_URL,
+  LIFF_SURVEY_URL,
   sendSmartSystemAlertFlex,
   sendServiceRequestFlex,
   sendTelegramServiceNotify,

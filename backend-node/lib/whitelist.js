@@ -31,6 +31,7 @@ const {
   requestReturnViaLiff,
 } = require('./handlers/borrowing');
 const { saveUser, deleteUser, requestPasswordResetNotification, autoLinkLineUser, bindLineByCitizenId, getLiffUserProfile, registerLiffUser } = require('./handlers/users');
+const { getLiffSurveyInfo, saveLiffSurveyItem, saveLiffSurveyPeripheral, uploadLiffSurveyPhoto, resolveLiffSurveyTag } = require('./handlers/liffSurvey');
 const { saveEquipmentCategory, deleteEquipmentCategory, assignEquipmentCategoriesByCode } = require('./handlers/categories');
 const { saveDriver, deleteDriver } = require('./handlers/drivers');
 const { saveBooking, approveBooking, updateBookingStatus, deleteBooking, getLiffBookingInfo, saveLiffBooking, cancelLiffBooking } = require('./handlers/booking');
@@ -94,6 +95,13 @@ const API_WHITELIST = {
   saveEquipmentCategory,
   deleteEquipmentCategory,
   assignEquipmentCategoriesByCode,
+
+  // LIFF สำรวจภาคสนาม (ตรวจสิทธิ์ด้วย LINE access token ในตัวฟังก์ชันเอง)
+  getLiffSurveyInfo,
+  saveLiffSurveyItem,
+  saveLiffSurveyPeripheral,
+  uploadLiffSurveyPhoto,
+  resolveLiffSurveyTag,
 
   // Borrowing
   getBorrowing,

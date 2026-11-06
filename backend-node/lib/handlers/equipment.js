@@ -17,6 +17,7 @@ async function getEquipmentCategories() {
 // ---- ฟิลด์เพิ่มเติมของทะเบียนครุภัณฑ์ ----
 const DEPRECIATION_TYPES = ['ไม่คิดค่าเสื่อม', 'เส้นตรง (Straight-line)', 'ยอดลดลง (Declining balance)', 'ผลผลิตหน่วย (Units of production)'];
 const MAX_PHOTOS = 6;
+const LABEL_MAX = 30; // ชื่อมุมภาพ เช่น ด้านหน้า / ป้ายครุภัณฑ์
 const SHORT_TEXT_MAX = 200;
 const normText = (v, max) => String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, max || SHORT_TEXT_MAX);
 const isUrl = (u) => /^https?:\/\/\S+$/i.test(String(u || ''));
@@ -26,6 +27,17 @@ function photoListOf(doc) {
   const arr = Array.isArray(doc && doc['รูปภาพทั้งหมด']) ? doc['รูปภาพทั้งหมด'].filter(isUrl) : [];
   if (arr.length) return arr;
   return doc && isUrl(doc['รูปภาพ']) ? [doc['รูปภาพ']] : [];
+}
+
+// 'ป้ายกำกับรูป' = { url: ชื่อมุม } เก็บเป็น map (ไม่ใช่ array ขนาน) เพื่อไม่เพี้ยนเมื่อสลับลำดับ/ลบรูป
+function cleanLabelMap(map, urls) {
+  const out = {};
+  if (!map || typeof map !== 'object' || Array.isArray(map)) return out;
+  urls.forEach((u) => {
+    const l = normText(map[u], LABEL_MAX);
+    if (l) out[u] = l;
+  });
+  return out;
 }
 
 // ตรวจ/ทำความสะอาดเฉพาะฟิลด์ใหม่ที่ client ส่งมา (ไม่แตะฟิลด์เดิม เพื่อไม่กระทบการนำเข้า/ฟอร์มอื่น)
@@ -57,6 +69,7 @@ function sanitizeExtraFields(d) {
     if (clean.length > MAX_PHOTOS) return 'แนบรูปได้ไม่เกิน ' + MAX_PHOTOS + ' รูปต่ออุปกรณ์';
     d['รูปภาพทั้งหมด'] = clean;
     d['รูปภาพ'] = clean[0] || ''; // รูปหลัก = รูปแรกเสมอ (ตารางคลัง/ป้าย/หน้าอื่นอ่านจากฟิลด์นี้)
+    d['ป้ายกำกับรูป'] = cleanLabelMap(d['ป้ายกำกับรูป'], clean); // เหลือเฉพาะมุมของรูปที่ยังอยู่
   }
   return '';
 }
@@ -100,25 +113,33 @@ async function deleteEquipment(code, adminCode, reason) {
 // อัปโหลดรูปครุภัณฑ์ "เพิ่มต่อท้าย" รายการรูปของอุปกรณ์ (สูงสุด MAX_PHOTOS รูป; รูปแรกคือรูปหลัก)
 // ดึงเอกสารเดิมมาก่อนแล้วเขียนกลับทั้งฉบับ เพราะ setDoc เป็น full replace ไม่ merge (ดู setDoc ใน
 // ../firestore.js) ถ้าส่งแค่ฟิลด์รูปไปตรงๆ จะเผลอลบฟิลด์อื่นของอุปกรณ์ทิ้งหมด
-async function uploadEquipmentPhoto(code, base64Data, contentType, adminCode) {
+// แกนกลางของการเพิ่มรูป (ไม่ตรวจสิทธิ์ — ผู้เรียกต้องตรวจสิทธิ์เอง): ใช้ร่วมกับ LIFF สำรวจภาคสนาม
+async function addPhotoToEquipment(code, base64Data, contentType, label) {
+  const docId = String(code || '').trim();
+  if (!docId) return { success: false, message: 'ไม่พบรหัสอุปกรณ์' };
+  const existing = await getDoc(SHEETS.EQUIPMENT, docId);
+  if (!existing) return { success: false, message: 'ไม่พบข้อมูลอุปกรณ์นี้แล้ว' };
+  const list = photoListOf(existing);
+  if (list.length >= MAX_PHOTOS) return { success: false, message: 'แนบรูปได้ไม่เกิน ' + MAX_PHOTOS + ' รูปต่ออุปกรณ์' };
+
+  const ext = (contentType || 'image/jpeg').split('/')[1] || 'jpg';
+  const destPath = `equipment-photos/${docId}-${Date.now()}.${ext}`;
+  const url = await uploadBase64Image(base64Data, destPath, contentType);
+
+  const photos = list.concat(url);
+  const labels = cleanLabelMap(existing['ป้ายกำกับรูป'], list);
+  const lbl = normText(label, LABEL_MAX);
+  if (lbl) labels[url] = lbl;
+  const updated = { ...existing, 'รูปภาพทั้งหมด': photos, 'รูปภาพ': photos[0], 'ป้ายกำกับรูป': labels };
+  delete updated._row;
+  await setDoc(SHEETS.EQUIPMENT, docId, updated);
+  return { success: true, url, count: photos.length };
+}
+
+async function uploadEquipmentPhoto(code, base64Data, contentType, adminCode, label) {
   if (!verifyAdmin(adminCode)) return { success: false, message: 'ไม่มีสิทธิ์ดำเนินการ' };
   try {
-    const docId = String(code || '').trim();
-    if (!docId) return { success: false, message: 'ไม่พบรหัสอุปกรณ์' };
-    const existing = await getDoc(SHEETS.EQUIPMENT, docId);
-    if (!existing) return { success: false, message: 'ไม่พบข้อมูลอุปกรณ์นี้แล้ว' };
-    const list = photoListOf(existing);
-    if (list.length >= MAX_PHOTOS) return { success: false, message: 'แนบรูปได้ไม่เกิน ' + MAX_PHOTOS + ' รูปต่ออุปกรณ์' };
-
-    const ext = (contentType || 'image/jpeg').split('/')[1] || 'jpg';
-    const destPath = `equipment-photos/${docId}-${Date.now()}.${ext}`;
-    const url = await uploadBase64Image(base64Data, destPath, contentType);
-
-    const photos = list.concat(url);
-    const updated = { ...existing, 'รูปภาพทั้งหมด': photos, 'รูปภาพ': photos[0] };
-    delete updated._row;
-    await setDoc(SHEETS.EQUIPMENT, docId, updated);
-    return { success: true, url, count: photos.length };
+    return await addPhotoToEquipment(code, base64Data, contentType, label);
   } catch (err) {
     return { success: false, message: err.message };
   }
@@ -262,5 +283,5 @@ async function deleteEquipmentLocation(name, adminCode) {
 module.exports = {
   getEquipment, getEquipmentCategories, saveEquipment, deleteEquipment, uploadEquipmentPhoto,
   addEquipmentLocation, renameEquipmentLocation, deleteEquipmentLocation,
-  sanitizeExtraFields, photoListOf, DEPRECIATION_TYPES, MAX_PHOTOS,
+  sanitizeExtraFields, photoListOf, cleanLabelMap, addPhotoToEquipment, readLocations, normLoc, DEPRECIATION_TYPES, MAX_PHOTOS,
 };

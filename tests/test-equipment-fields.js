@@ -61,5 +61,20 @@ const base = (o) => Object.assign({ 'ชื่ออุปกรณ์': 'เค
   assert.equal((await H.uploadEquipmentPhoto('NEW', 'AAAA', 'image/jpeg', 'wrong')).success, false);
   assert.equal(store.equipment.NEW['ชื่ออุปกรณ์'], 'ใหม่', 'other fields preserved');
   console.log('  ✅ upload appends (legacy single photo, limit 6, auth)');
+
+  // ป้ายชื่อมุมภาพ: เก็บเป็น map ตาม URL, ตัดของรูปที่ถูกลบ, อัปโหลดพร้อมป้ายชื่อ
+  r = await H.saveEquipment(base({ 'รูปภาพทั้งหมด': ['https://x/a.jpg', 'https://x/b.jpg'], 'ป้ายกำกับรูป': { 'https://x/a.jpg': ' ด้านหน้า ', 'https://x/b.jpg': 'ป้ายครุภัณฑ์', 'https://x/gone.jpg': 'ลบแล้ว', 'https://x/x.jpg': '   ' } }), A);
+  assert.deepEqual(store.equipment[r.code]['ป้ายกำกับรูป'], { 'https://x/a.jpg': 'ด้านหน้า', 'https://x/b.jpg': 'ป้ายครุภัณฑ์' }, 'normalised, orphan labels dropped');
+  await H.saveEquipment(base({ 'รหัส': r.code, 'รูปภาพทั้งหมด': ['https://x/b.jpg', 'https://x/a.jpg'] }), A);
+  assert.deepEqual(store.equipment[r.code]['ป้ายกำกับรูป'], { 'https://x/a.jpg': 'ด้านหน้า', 'https://x/b.jpg': 'ป้ายครุภัณฑ์' }, 'labels survive reorder when client omits the map');
+  await H.saveEquipment(base({ 'รหัส': r.code, 'รูปภาพทั้งหมด': ['https://x/b.jpg'] }), A);
+  assert.deepEqual(store.equipment[r.code]['ป้ายกำกับรูป'], { 'https://x/b.jpg': 'ป้ายครุภัณฑ์' }, 'removing a photo drops its label');
+  const up2 = await H.uploadEquipmentPhoto(r.code, 'AAAA', 'image/jpeg', A, '  ด้านข้าง  ');
+  assert.equal(store.equipment[r.code]['ป้ายกำกับรูป'][up2.url], 'ด้านข้าง'); assert.equal(store.equipment[r.code]['ป้ายกำกับรูป']['https://x/b.jpg'], 'ป้ายครุภัณฑ์');
+  const up3 = await H.uploadEquipmentPhoto(r.code, 'AAAA', 'image/jpeg', A);
+  assert.equal(up3.success, true); assert.equal(store.equipment[r.code]['ป้ายกำกับรูป'][up3.url], undefined, 'no label = no entry');
+  const longLbl = await H.uploadEquipmentPhoto(r.code, 'AAAA', 'image/jpeg', A, 'ก'.repeat(80));
+  assert.equal(store.equipment[r.code]['ป้ายกำกับรูป'][longLbl.url].length, 30, 'label capped');
+  console.log('  ✅ photo angle labels (map by url, survives reorder/removal, upload with label)');
   console.log('\n🎉 ALL EQUIPMENT FIELD TESTS PASSED');
 })().catch((e) => { console.error(e); process.exit(1); });

@@ -35,6 +35,12 @@ const PUBLIC_FUNCTIONS = new Set([
   'getLiffBookingInfo',
   'saveLiffBooking',
   'cancelLiffBooking',
+  // LIFF สำรวจภาคสนาม — ไม่มี session เว็บ ตรวจสิทธิ์เองด้วย LINE access token (handlers/liffSurvey.js)
+  'getLiffSurveyInfo',
+  'saveLiffSurveyItem',
+  'saveLiffSurveyPeripheral',
+  'uploadLiffSurveyPhoto',
+  'resolveLiffSurveyTag',
 ]);
 
 function readRawBody(req) {

@@ -5,7 +5,7 @@
 
 const crypto = require('crypto');
 const { SYSTEM_NAME, safeTruncate, safeGet, nowStr } = require('../lib/util');
-const { replyLineFlex, flexRow, buildBookingBubble, LIFF_BOOKING_URL } = require('../lib/line');
+const { replyLineFlex, flexRow, buildBookingBubble, LIFF_BOOKING_URL, LIFF_SURVEY_URL } = require('../lib/line');
 const { SHEETS, getDoc } = require('../lib/firestore');
 const { isStaffRole } = require('../lib/auth');
 const { getUserByLineId, getMyBookings, changeBookingStatus } = require('../lib/handlers/booking');
@@ -759,6 +759,13 @@ async function handleHelpMenu(replyToken) {
             },
             {
               type: 'button',
+              style: 'primary',
+              color: '#0f766e',
+              height: 'sm',
+              action: { type: 'uri', label: '🔎 สำรวจภาคสนาม (เจ้าหน้าที่)', uri: LIFF_SURVEY_URL },
+            },
+            {
+              type: 'button',
               style: 'secondary',
               height: 'sm',
               action: { type: 'message', label: '🚗 เช็คสถานะรถยนต์', text: 'เช็ครถ' },
@@ -1232,6 +1239,43 @@ async function handleReturnBorrowing(replyToken, userMessage) {
   }
 }
 
+// ============== สำรวจภาคสนาม (LIFF) ==============
+// เปิด LIFF ?tab=survey (liff.html redirect ต่อไป liff-survey.html) — หน้านั้นตรวจสิทธิ์เองว่าเป็นเจ้าหน้าที่ที่ผูก LINE แล้ว
+async function handleSurveyMenu(replyToken) {
+  const flexContent = {
+    type: 'bubble',
+    size: 'mega',
+    header: {
+      type: 'box',
+      layout: 'vertical',
+      backgroundColor: '#0f766e',
+      paddingAll: '20px',
+      contents: [
+        { type: 'text', text: '🔎 สำรวจภาคสนาม', color: '#ffffff', size: 'lg', weight: 'bold' },
+        { type: 'text', text: 'บันทึกครุภัณฑ์ที่พบ ถ่ายหลายมุม และให้กล้องอ่านป้ายเลขครุภัณฑ์/ซีเรียลให้ ไม่ต้องพิมพ์เอง', color: '#ccfbf1', size: 'xs', margin: 'xs', wrap: true },
+      ],
+    },
+    body: {
+      type: 'box',
+      layout: 'vertical',
+      spacing: 'sm',
+      paddingAll: '20px',
+      contents: [
+        { type: 'button', style: 'primary', color: '#0f766e', height: 'sm', action: { type: 'uri', label: '🔎 เปิดฟอร์มสำรวจ (LIFF)', uri: LIFF_SURVEY_URL } },
+        { type: 'text', text: 'ใช้ได้เฉพาะผู้ดูแลระบบ/ผู้จัดการที่ผูกบัญชี LINE แล้ว', size: 'xs', color: '#64748b', wrap: true, margin: 'md' },
+      ],
+    },
+    footer: {
+      type: 'box',
+      layout: 'vertical',
+      paddingAll: '12px',
+      backgroundColor: '#f1f5f9',
+      contents: [{ type: 'text', text: SYSTEM_NAME, size: 'xxs', color: '#94a3b8', align: 'center' }],
+    },
+  };
+  await replyLineFlex(replyToken, '🔎 เมนูสำรวจภาคสนาม', flexContent);
+}
+
 // ============== จองรถ (BOOKING) ==============
 // เมนูจองรถ → เปิด LIFF ?tab=booking (liff.html redirect ต่อไป liff-booking.html)
 // เจ้าหน้าที่กดปุ่มในการ์ดกลุ่ม → "อนุมัติจอง BK-xxx" / "ไม่อนุมัติจอง BK-xxx <เหตุผล>"
@@ -1455,6 +1499,9 @@ module.exports = async function handler(req, res) {
       }
       else if (msgLower.indexOf('จองรถ') !== -1 || msgLower === 'จอง') {
         await handleBookingMenu(replyToken);
+      }
+      else if (msgLower.indexOf('สำรวจภาคสนาม') !== -1 || msgLower === 'สำรวจ' || msgLower.indexOf('สำรวจครุภัณฑ์') !== -1) {
+        await handleSurveyMenu(replyToken);
       }
       // 2. แจ้งคืนอุปกรณ์ (ระบุรหัสคำขอมาด้วย)
       else if (msgLower.indexOf('คืน br-') !== -1 || msgLower.indexOf('แจ้งคืน br-') !== -1) {

@@ -257,6 +257,19 @@ async function runTests() {
   assert.equal(capturedReplies[0].body.messages[0].contents.type, 'bubble');
   console.log('  ✅ Test 8: Return Command "คืน BR-20260812-001" -> Valid Return Flex Reply');
 
+  // Test 9: Field survey menu -> Flex with LIFF survey link
+  for (const cmd of ['สำรวจ', 'สำรวจภาคสนาม', 'สำรวจครุภัณฑ์']) {
+    capturedReplies = [];
+    res = createRes();
+    await webhookHandler(createReq(cmd), res);
+    assert.equal(res.statusCode, 200);
+    assert.equal(capturedReplies.length, 1, cmd);
+    assert.match(capturedReplies[0].body.messages[0].altText, /สำรวจภาคสนาม/);
+    const uri = JSON.stringify(capturedReplies[0].body.messages[0].contents);
+    assert.ok(uri.includes('https://liff.line.me/2011083425-G0pup6PQ?tab=survey'), 'survey LIFF link present');
+  }
+  console.log('  ✅ Test 9: Survey command -> Flex with LIFF survey link');
+
   console.log('\n🎉 ALL LINE FLEX TESTS PASSED SUCCESSFULLY!');
 }
 
