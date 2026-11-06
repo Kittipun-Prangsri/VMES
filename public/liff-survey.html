@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>สำรวจภาคสนามผ่าน LINE - ระบบ VMES</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="icon" type="image/png" sizes="64x64" href="/favicon.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <!-- LINE LIFF SDK -->
+  <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <style>
+    :root { --pri:#0f766e; --pri2:#0d9488; --bg:#f1f5f9; --line:#e2e8f0; --txt:#0f172a; --mut:#64748b; }
+    * { box-sizing:border-box; font-family:'IBM Plex Sans Thai',-apple-system,BlinkMacSystemFont,sans-serif; }
+    body { margin:0; background:var(--bg); color:var(--txt); padding-bottom:calc(84px + env(safe-area-inset-bottom)); }
+    .top { background:linear-gradient(135deg,#0e7490,#0891b2 60%,#06b6d4); color:#fff; padding:16px 16px 12px; }
+    .top h1 { margin:0; font-size:18px; font-weight:700; }
+    .top .sub { font-size:12px; opacity:.9; margin-top:2px; }
+    .badge { display:inline-flex; gap:6px; align-items:center; background:rgba(255,255,255,.2); border-radius:20px; padding:4px 10px; font-size:12px; margin-top:8px; }
+    .tabs { display:flex; background:#fff; border-bottom:1px solid var(--line); position:sticky; top:0; z-index:5; }
+    .tabs button { flex:1; padding:12px 6px; border:none; background:none; font-weight:600; font-size:14px; color:var(--mut); border-bottom:3px solid transparent; }
+    .tabs button.on { color:var(--pri); border-color:var(--pri2); }
+    .wrap { max-width:560px; margin:0 auto; padding:12px; }
+    .card { background:#fff; border:1px solid var(--line); border-radius:14px; padding:14px; margin-bottom:12px; }
+    .card h2 { margin:0 0 10px; font-size:15px; }
+    label.l { display:block; font-size:13px; font-weight:600; margin:10px 0 4px; }
+    input.f, select.f, textarea.f { width:100%; padding:11px 12px; border:1.5px solid var(--line); border-radius:10px; font-size:15px; background:#f8fafc; outline:none; }
+    input.f:focus, select.f:focus, textarea.f:focus { border-color:var(--pri2); background:#fff; }
+    .row2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+    .btn { border:none; border-radius:12px; padding:12px 16px; font-weight:700; font-size:15px; background:var(--pri2); color:#fff; }
+    .btn.sec { background:#e2e8f0; color:var(--txt); }
+    .btn.info { background:#0284c7; }
+    .btn.warn { background:#f59e0b; }
+    .btn.sm { padding:7px 12px; font-size:13px; border-radius:9px; }
+    .btn:disabled { opacity:.55; }
+    .hint { font-size:12px; margin-top:4px; min-height:15px; }
+    .chip { display:inline-block; font-size:11px; background:#fff; border:1px solid #cbd5e1; border-radius:10px; padding:2px 8px; margin:0 4px 4px 0; }
+    .angles { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px; }
+    .angle { border:1px solid #99f6e4; background:#f0fdfa; color:var(--pri); border-radius:16px; padding:6px 12px; font-size:12px; font-weight:600; }
+    .angle.done { background:#dcfce7; border-color:#86efac; color:#15803d; }
+    .gal { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+    .frame { position:relative; aspect-ratio:1/1; background:linear-gradient(135deg,#a16207,#78350f); padding:6px; border-radius:4px; box-shadow:0 3px 8px rgba(0,0,0,.25); }
+    .frame.cover { background:linear-gradient(135deg,#facc15,#a16207); }
+    .frame .mat { width:100%; height:100%; background:#f8fafc; padding:4px; box-shadow:inset 0 0 5px rgba(0,0,0,.35); }
+    .frame img { width:100%; height:100%; object-fit:cover; display:block; }
+    .frame .tag { position:absolute; left:4px; top:-8px; background:var(--pri); color:#fff; font-size:9px; font-weight:700; padding:1px 6px; border-radius:8px; }
+    .frame select { position:absolute; left:6px; bottom:3px; max-width:calc(100% - 50px); font-size:10px; border:none; border-radius:5px; background:rgba(15,23,42,.8); color:#fff; padding:1px 2px; }
+    .frame .x { position:absolute; right:3px; bottom:3px; display:flex; gap:3px; }
+    .frame .x button { border:none; border-radius:5px; width:22px; height:22px; background:rgba(15,23,42,.8); color:#fff; font-size:11px; }
+    .slot { aspect-ratio:1/1; border:2px dashed #cbd5e1; border-radius:4px; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#94a3b8; font-size:11px; }
+    .bar { position:fixed; left:0; right:0; bottom:0; background:#fff; border-top:1px solid var(--line); padding:10px 12px calc(10px + env(safe-area-inset-bottom)); z-index:6; }
+    .bar .in { max-width:560px; margin:0 auto; display:flex; gap:8px; }
+    .bar .btn { flex:1; }
+    .toast { position:fixed; left:50%; transform:translateX(-50%); bottom:96px; background:#0f172a; color:#fff; padding:10px 16px; border-radius:12px; font-size:13px; z-index:100002; max-width:90%; text-align:center; }
+    .toast.err { background:#dc2626; } .toast.warn { background:#b45309; } .toast.ok { background:#15803d; }
+    .overlay { display:none; position:fixed; inset:0; background:rgba(15,23,42,.6); z-index:99; align-items:center; justify-content:center; flex-direction:column; color:#fff; }
+    .spin { width:38px; height:38px; border:4px solid rgba(255,255,255,.3); border-top-color:#fff; border-radius:50%; animation:sp .8s linear infinite; margin-bottom:10px; }
+    @keyframes sp { to { transform:rotate(360deg); } }
+    .sheet { position:fixed; inset:0; background:rgba(15,23,42,.55); z-index:50; display:none; align-items:flex-end; justify-content:center; }
+    .sheet .in { background:#fff; width:100%; max-width:560px; border-radius:18px 18px 0 0; padding:16px; max-height:88vh; overflow:auto; }
+    .ocr-filled { outline:2px solid #f59e0b !important; background:#fffbeb !important; }
+    .empty { text-align:center; color:#94a3b8; padding:24px 8px; font-size:13px; }
+  </style>
+</head>
+<body>
+  <div class="top">
+    <h1>🔎 สำรวจภาคสนาม</h1>
+    <div class="sub">บันทึกครุภัณฑ์ที่พบ ถ่ายหลายมุม และอ่านป้ายด้วยกล้อง — ผ่าน LINE</div>
+    <div id="who" class="badge" style="display:none;"></div>
+  </div>
+
+  <div id="state" class="wrap"><div class="empty">กำลังโหลด…</div></div>
+
+  <div id="app" style="display:none;">
+    <div class="tabs">
+      <button id="tab_new" class="on" onclick="showTab('new')">➕ บันทึกเครื่อง</button>
+      <button id="tab_mine" onclick="showTab('mine')">📝 วันนี้ <span id="n_mine"></span></button>
+      <button id="tab_pend" onclick="showTab('pend')">⚠️ รอผูกเลข <span id="n_pend"></span></button>
+    </div>
+
+    <!-- ===== ฟอร์มบันทึกเครื่อง ===== -->
+    <div id="pane_new" class="wrap">
+      <div class="card">
+        <div style="display:flex; justify-content:space-between; gap:8px; align-items:center; margin-bottom:6px;">
+          <h2 style="margin:0;">ข้อมูลเครื่อง</h2>
+          <button class="btn info sm" onclick="openOcr()">📷 ถ่ายป้ายเพื่อเติมข้อมูล</button>
+        </div>
+        <div id="form" oninput="draftSave()" onchange="draftSave()">
+          <label class="l">ห้อง/จุดติดตั้ง <span style="color:#ef4444">*</span></label>
+          <input class="f" id="fs_room" list="dl_room" autocomplete="off" placeholder="เช่น ห้องการเงิน ชั้น 2" oninput="roomChanged()">
+          <datalist id="dl_room"></datalist>
+          <div id="room_panel" class="hint"></div>
+
+          <div class="row2">
+            <div><label class="l">หมวดหมู่</label><select class="f" id="fs_type"></select></div>
+            <div><label class="l">สภาพเครื่อง</label>
+              <select class="f" id="fs_cond"><option value="ok">✅ ใช้งานได้ปกติ</option><option value="bad">🔴 ชำรุด</option></select></div>
+          </div>
+
+          <label class="l">ชื่ออุปกรณ์ <span style="color:#ef4444">*</span></label>
+          <input class="f" id="fs_name" autocomplete="off" placeholder="เช่น คอมพิวเตอร์ตั้งโต๊ะ">
+          <div class="row2">
+            <div><label class="l">ยี่ห้อ</label><input class="f" id="fs_brand" list="dl_brand" autocomplete="off"><datalist id="dl_brand"></datalist></div>
+            <div><label class="l">รุ่น</label><input class="f" id="fs_model" autocomplete="off"></div>
+          </div>
+          <label class="l">Serial Number</label>
+          <input class="f" id="fs_sn" autocomplete="off">
+
+          <label class="l">ป้ายครุภัณฑ์</label>
+          <div style="display:flex; gap:16px; font-size:14px;">
+            <label><input type="radio" name="fs_tag" value="yes" onchange="toggleTag(true)"> มีป้าย เห็นเลข</label>
+            <label><input type="radio" name="fs_tag" value="no" checked onchange="toggleTag(false)"> ไม่มีป้าย / หาไม่พบ</label>
+          </div>
+          <input class="f" id="fs_code" autocomplete="off" placeholder="เลขครุภัณฑ์ เช่น 7440-14-0001/31" style="margin-top:8px; display:none;" oninput="codeInput()">
+          <div id="code_hint" class="hint"></div>
+
+          <details style="margin-top:8px;">
+            <summary style="font-size:13px; font-weight:600; color:var(--pri);">➕ ผู้รับผิดชอบ / หน่วยงาน (ไม่บังคับ)</summary>
+            <label class="l">หน่วยงานที่รับผิดชอบ</label>
+            <input class="f" id="fs_dept" list="dl_dept" autocomplete="off" placeholder="เลือกจากรายการ" onchange="deptChanged()">
+            <datalist id="dl_dept"></datalist>
+            <label class="l">ผู้รับผิดชอบ</label>
+            <input class="f" id="fs_resp" list="dl_staff" autocomplete="off" placeholder="พิมพ์ชื่อเพื่อค้นหา">
+            <datalist id="dl_staff"></datalist>
+          </details>
+
+          <label class="l">รูปถ่าย <span style="color:var(--mut); font-weight:400;">(ได้สูงสุด <span id="maxp">6</span> รูป)</span></label>
+          <div id="angles" class="angles"></div>
+          <div id="gal" class="gal"></div>
+          <div class="hint" style="color:var(--mut);">กดปุ่มมุมเพื่อเปิดกล้อง ระบบติดป้ายชื่อมุมให้ · รูปแรกเป็นรูปหลัก (⭐ เปลี่ยนได้)</div>
+          <input type="file" id="in_cam" accept="image/*" capture="environment" style="display:none" onchange="addFiles(this, true)">
+          <input type="file" id="in_pick" accept="image/*" multiple style="display:none" onchange="addFiles(this, false)">
+
+          <label class="l">หมายเหตุ</label>
+          <input class="f" id="fs_note" autocomplete="off" placeholder="เช่น อยู่มุมห้อง ใกล้หน้าต่าง">
+        </div>
+        <label style="display:flex; gap:8px; align-items:center; margin-top:12px; font-size:13px; color:#475569;">
+          <input type="checkbox" id="fs_keep" onchange="keepChanged()"> คงยี่ห้อ/รุ่น/หมวดไว้สำหรับเครื่องถัดไป
+        </label>
+        <div style="margin-top:8px;"><button class="btn sec sm" onclick="clearForm(true)">🧹 ล้างฟอร์ม</button></div>
+      </div>
+    </div>
+
+    <!-- ===== วันนี้ ===== -->
+    <div id="pane_mine" class="wrap" style="display:none;"><div id="mine_list"></div></div>
+    <!-- ===== รอผูกเลข ===== -->
+    <div id="pane_pend" class="wrap" style="display:none;">
+      <input class="f" id="pend_q" placeholder="🔍 ค้นหาชื่อ/ห้อง/ผู้สำรวจ" oninput="renderPend()" style="margin-bottom:10px;">
+      <div id="pend_list"></div>
+    </div>
+  </div>
+
+  <div id="savebar" class="bar" style="display:none;"><div class="in">
+    <button class="btn sec" style="flex:0 0 28%;" onclick="closeLiff()">ปิด</button>
+    <button class="btn" id="btn_save" onclick="saveItem()">💾 บันทึก แล้วเครื่องถัดไป</button>
+  </div></div>
+
+  <div id="overlay" class="overlay"><div class="spin"></div><div id="ov_msg">กำลังบันทึก…</div></div>
+
+  <!-- แผ่นล่าง: อุปกรณ์เชื่อมต่อ / ผูกเลข -->
+  <div id="sheet" class="sheet" onclick="if(event.target===this) closeSheet()"><div class="in" id="sheet_in"></div></div>
+
+  <script src="/ocr-capture.js"></script>
+  <script src="/ocr-scanner-ui.js"></script>
+  <script>
+    const API_URL = 'https://vmes-backend.vercel.app/api/rpc';
+    const LIFF_ID = '2011083425-G0pup6PQ';
+    const ANGLES = ['ด้านหน้า', 'ด้านหลัง', 'ด้านข้าง', 'ป้ายครุภัณฑ์', 'ซีเรียล/รุ่น'];
+    const DRAFT_KEY = 'vmes_liff_fs_draft', PREF_KEY = 'vmes_liff_fs_pref';
+    const FIELDS = ['fs_room', 'fs_type', 'fs_cond', 'fs_name', 'fs_brand', 'fs_model', 'fs_sn', 'fs_code', 'fs_dept', 'fs_resp', 'fs_note'];
+
+    let info = null, photos = [], pendingLabel = '', busy = false;
+    const $ = id => document.getElementById(id);
+    const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const norm = s => String(s == null ? '' : s).replace(/\s+/g, ' ').trim();
+    const same = (a, b) => !!norm(a) && norm(a).toLowerCase() === norm(b).toLowerCase();
+    const ls = { get: k => { try { return localStorage.getItem(k); } catch (e) { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} } };
+
+    // ใช้ร่วมกับ ocr-scanner-ui.js
+    function toast(msg, type) {
+      const el = document.createElement('div');
+      el.className = 'toast ' + (type === 'error' ? 'err' : type === 'warning' ? 'warn' : type === 'success' ? 'ok' : '');
+      el.textContent = msg;
+      document.body.appendChild(el);
+      setTimeout(() => el.remove(), 3200);
+    }
+    function showLoading(on, msg) { $('ov_msg').textContent = msg || 'กำลังบันทึก…'; $('overlay').style.display = on ? 'flex' : 'none'; }
+    function closeLiff() { if (typeof liff !== 'undefined' && liff.isInClient && liff.isInClient()) liff.closeWindow(); else window.close(); }
+
+    // ส่ง LIFF access token เป็นอาร์กิวเมนต์แรกทุกครั้ง — server ตรวจกับ LINE เองว่าเป็นใคร
+    function api(fn, ...args) {
+      const token = (typeof liff !== 'undefined' && liff.getAccessToken && liff.getAccessToken()) || '';
+      return fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fn, args: [token, ...args] }) }).then(r => r.json());
+    }
+    function state(html) { $('state').style.display = html ? 'block' : 'none'; $('state').innerHTML = html || ''; }
+
+    // ---------------------------------------------------------------- เริ่มต้น
+    document.addEventListener('DOMContentLoaded', init);
+    async function init() {
+      try {
+        await liff.init({ liffId: LIFF_ID });
+        if (!liff.isLoggedIn()) { liff.login({ redirectUri: window.location.href }); return; }
+        const prof = await liff.getProfile();
+        $('who').style.display = 'inline-flex'; $('who').textContent = '👤 ' + (prof.displayName || 'ผู้ใช้งาน LINE');
+        await load();
+      } catch (err) {
+        console.error(err);
+        state('<div class="card empty">⚠️ กรุณาเปิดหน้านี้ผ่านแอป LINE (เมนู/ปุ่ม “สำรวจภาคสนาม”)</div>');
+      }
+    }
+    async function load() {
+      state('<div class="empty">กำลังโหลดข้อมูล…</div>');
+      let res;
+      try { res = await api('getLiffSurveyInfo'); } catch (e) { res = { success: false, message: 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้' }; }
+      if (!res || !res.success) { state('<div class="card empty">โหลดข้อมูลไม่สำเร็จ: ' + esc((res && res.message) || '') + '<br><br><button class="btn" onclick="load()">ลองใหม่</button></div>'); return; }
+      if (!res.allowed) { state('<div class="card empty" style="font-size:14px; color:#b45309;">' + esc(res.message || 'ไม่มีสิทธิ์ใช้งาน') + '</div>'); return; }
+      info = res;
+      state('');
+      $('app').style.display = 'block'; $('savebar').style.display = 'block';
+      $('maxp').textContent = info.maxPhotos || 6;
+      $('who').textContent = '👤 ' + info.staff.name + ' · ' + (info.staff.role || '');
+      fillLists();
+      const pref = (() => { try { return JSON.parse(ls.get(PREF_KEY) || '{}'); } catch (e) { return {}; } })();
+      $('fs_keep').checked = !!pref.keep;
+      restoreDraft();
+      renderPhotos(); renderMine(); renderPend(); roomChanged(); codeInput();
+    }
+    function fillLists() {
+      $('dl_room').innerHTML = info.locations.map(r => '<option value="' + esc(r) + '">').join('');
+      $('dl_brand').innerHTML = info.brands.map(b => '<option value="' + esc(b) + '">').join('');
+      $('dl_dept').innerHTML = info.departments.map(d => '<option value="' + esc(d) + '">').join('');
+      deptChanged();
+      $('fs_type').innerHTML = info.categories.map(c => '<option value="' + esc(c.name) + '">' + esc((c.code ? c.code + ' · ' : '') + c.name) + '</option>').join('') || '<option value="">(ไม่มีหมวดหมู่)</option>';
+    }
+    function deptChanged() {
+      const d = $('fs_dept').value;
+      const list = info.staffList.slice().sort((a, b) => (d && a.dept === d ? 0 : 1) - (d && b.dept === d ? 0 : 1) || a.name.localeCompare(b.name, 'th'));
+      $('dl_staff').innerHTML = list.map(s => '<option value="' + esc(s.name) + '" label="' + esc(s.dept) + '">').join('');
+    }
+
+    // ---------------------------------------------------------------- ร่างฟอร์ม + ตัวเลือก
+    function draftSave() {
+      const d = {};
+      FIELDS.forEach(id => { const el = $(id); if (el) d[id] = el.value; });
+      d.tag = (document.querySelector('input[name="fs_tag"]:checked') || {}).value || 'no';
+      ls.set(DRAFT_KEY, JSON.stringify(d));
+    }
+    function restoreDraft() {
+      let d = {}; try { d = JSON.parse(ls.get(DRAFT_KEY) || '{}'); } catch (e) {}
+      FIELDS.forEach(id => { const el = $(id); if (el && d[id] != null && d[id] !== '') el.value = d[id]; });
+      if (d.tag === 'yes') { document.querySelector('input[name="fs_tag"][value="yes"]').checked = true; $('fs_code').style.display = ''; }
+      if (d.fs_dept) deptChanged();
+    }
+    function keepChanged() { ls.set(PREF_KEY, JSON.stringify({ keep: $('fs_keep').checked })); }
+    function clearForm(ask) {
+      if (ask && !confirm('ล้างข้อมูลที่กรอกไว้ในฟอร์มนี้?')) return;
+      const keep = $('fs_keep').checked ? { fs_room: norm($('fs_room').value), fs_type: $('fs_type').value, fs_brand: $('fs_brand').value, fs_model: $('fs_model').value, fs_dept: $('fs_dept').value, fs_resp: $('fs_resp').value } : { fs_room: norm($('fs_room').value) };
+      FIELDS.forEach(id => { const el = $(id); if (el && id !== 'fs_cond') el.value = keep[id] != null ? keep[id] : ''; });
+      $('fs_cond').value = 'ok';
+      document.querySelector('input[name="fs_tag"][value="no"]').checked = true; $('fs_code').style.display = 'none';
+      photos = []; renderPhotos(); draftSave(); roomChanged(); codeInput();
+    }
+
+    // ---------------------------------------------------------------- ห้อง / เลขครุภัณฑ์
+    function roomChanged() {
+      const r = norm($('fs_room').value);
+      if (!r) { $('room_panel').innerHTML = '<span style="color:#94a3b8;">พิมพ์ห้องเพื่อดูว่าห้องนี้มีอะไรในระบบแล้วบ้าง (กันบันทึกซ้ำ)</span>'; return; }
+      const items = info.items.filter(e => same(e.room, r));
+      if (!items.length) { $('room_panel').innerHTML = '<span style="color:#0f766e;">🆕 ยังไม่มีครุภัณฑ์ใน “' + esc(r) + '” — จะเพิ่มเป็นสถานที่ใหม่เมื่อบันทึก</span>'; return; }
+      $('room_panel').innerHTML = '<details style="background:#f0f9ff; border:1px solid #bae6fd; border-radius:10px; padding:6px 10px;"><summary style="color:#0369a1; font-weight:600; font-size:13px;">📍 ห้องนี้มีในระบบแล้ว ' + items.length + ' รายการ (กดดู)</summary><div style="margin-top:6px;">'
+        + items.slice(0, 14).map(e => '<span class="chip">' + esc(e.name) + ' <b style="color:' + (e.tag ? '#0f766e' : '#b45309') + '">' + esc(e.tag || 'ไม่มีป้าย') + '</b></span>').join('')
+        + (items.length > 14 ? '<span class="chip">… อีก ' + (items.length - 14) + ' รายการ</span>' : '') + '</div></details>';
+    }
+    function toggleTag(on) { $('fs_code').style.display = on ? '' : 'none'; if (on) $('fs_code').focus(); else $('code_hint').innerHTML = ''; draftSave(); }
+    function tagPrefix(t) { const m = /^\s*(\d{4})(?!\d)/.exec(String(t || '')); return m ? m[1] : ''; }
+    function findDup(tag, exceptId) { return tag ? info.items.find(e => same(e.tag, tag) && e.id !== exceptId) : null; }
+    function codeInput() {
+      const tag = norm($('fs_code').value), vis = $('fs_code').style.display !== 'none', h = $('code_hint');
+      if (!vis || !tag) { h.innerHTML = ''; return; }
+      const dup = findDup(tag);
+      if (dup) { h.innerHTML = '<span style="color:#dc2626; font-weight:600;">⛔ เลขนี้มีในระบบแล้ว: ' + esc(dup.name) + (dup.room ? ' (📍' + esc(dup.room) + ')' : '') + '</span>'; return; }
+      const p = tagPrefix(tag), c = p && info.categories.find(x => x.code === p);
+      if (c) { $('fs_type').value = c.name; h.innerHTML = '<span style="color:#0f766e;">✓ รหัส ' + esc(p) + ' = ' + esc(c.name) + '</span>'; draftSave(); }
+      else h.innerHTML = p ? '<span style="color:#b45309;">ยังไม่มีหมวดสำหรับรหัส ' + esc(p) + '</span>' : '';
+    }
+
+    // ---------------------------------------------------------------- รูปภาพ (หลายมุม)
+    function compress(file, maxDim, q) {
+      return new Promise((resolve, reject) => {
+        const rd = new FileReader();
+        rd.onerror = () => reject(new Error('อ่านไฟล์รูปไม่สำเร็จ'));
+        rd.onload = e => {
+          const img = new Image();
+          img.onload = () => {
+            let w = img.width, h = img.height;
+            const k = Math.min(1, maxDim / Math.max(w, h)); w = Math.round(w * k); h = Math.round(h * k);
+            const cv = document.createElement('canvas'); cv.width = w; cv.height = h; cv.getContext('2d').drawImage(img, 0, 0, w, h);
+            const du = cv.toDataURL('image/jpeg', q);
+            resolve({ dataUrl: du, base64: du.slice(du.indexOf(',') + 1) });
+          };
+          img.onerror = () => reject(new Error('เปิดรูปไม่ได้ (ไฟล์ HEIC? ลองถ่ายใหม่)'));
+          img.src = e.target.result;
+        };
+        rd.readAsDataURL(file);
+      });
+    }
+    function capture(label) { pendingLabel = label || ''; if (photos.length >= (info.maxPhotos || 6)) { toast('แนบรูปครบจำนวนสูงสุดแล้ว', 'warning'); return; } $('in_cam').click(); }
+    function pickFiles() { $('in_pick').click(); }
+    async function addFiles(input, fromCam) {
+      const files = Array.from(input.files || []); input.value = '';
+      const max = info.maxPhotos || 6, room = max - photos.length;
+      if (files.length > room) toast('แนบได้อีก ' + room + ' รูป — ข้ามส่วนที่เกิน', 'warning');
+      for (const f of files.slice(0, Math.max(0, room))) {
+        try { const r = await compress(f, 1024, 0.7); r.label = fromCam ? pendingLabel : ''; photos.push(r); }
+        catch (e) { toast(e.message, 'error'); }
+      }
+      renderPhotos();
+    }
+    function renderPhotos() {
+      const have = new Set(photos.map(p => p.label).filter(Boolean)), max = info.maxPhotos || 6, full = photos.length >= max;
+      $('angles').innerHTML = ANGLES.map(a => '<button type="button" class="angle ' + (have.has(a) ? 'done' : '') + '" ' + (full ? 'disabled' : '') + ' onclick="capture(\'' + a + '\')">' + (have.has(a) ? '✓ ' : '📷 ') + esc(a) + '</button>').join('')
+        + '<button type="button" class="angle" ' + (full ? 'disabled' : '') + ' onclick="pickFiles()">🖼️ เลือกรูป</button>';
+      let cells = photos.map((p, i) => '<div class="frame ' + (i === 0 ? 'cover' : '') + '">' + (i === 0 ? '<span class="tag">⭐ หลัก</span>' : '')
+        + '<div class="mat"><img src="' + p.dataUrl + '" alt=""></div>'
+        + '<select onchange="photos[' + i + '].label=this.value; renderPhotos()"><option value="">มุม: ไม่ระบุ</option>' + ANGLES.map(a => '<option ' + (p.label === a ? 'selected' : '') + '>' + esc(a) + '</option>').join('') + '</select>'
+        + '<div class="x">' + (i === 0 ? '' : '<button type="button" onclick="cover(' + i + ')">⭐</button>') + '<button type="button" onclick="photos.splice(' + i + ',1); renderPhotos()">✕</button></div></div>');
+      for (let i = cells.length; i < max; i++) cells.push('<div class="slot"><span>🖼️</span>ว่าง</div>');
+      $('gal').innerHTML = cells.join('');
+    }
+    function cover(i) { const [p] = photos.splice(i, 1); photos.unshift(p); renderPhotos(); }
+
+    // ---------------------------------------------------------------- OCR (อ่านป้าย)
+    function openOcr() {
+      ocrOpenScanner({
+        fields: { tag: 'fs_code', serial: 'fs_sn', model: 'fs_model', brand: 'fs_brand', name: 'fs_name', note: 'fs_note' },
+        onField: f => { if (f === 'tag') { document.querySelector('input[name="fs_tag"][value="yes"]').checked = true; $('fs_code').style.display = ''; } },
+        onApplied: () => { codeInput(); draftSave(); },
+        addPhoto: (dataUrl, label) => { if (photos.length >= (info.maxPhotos || 6)) return false; photos.push({ dataUrl, base64: dataUrl.slice(dataUrl.indexOf(',') + 1), label }); renderPhotos(); return true; },
+      });
+    }
+
+    // ---------------------------------------------------------------- บันทึก
+    function readForm() {
+      return {
+        name: norm($('fs_name').value), category: $('fs_type').value, room: norm($('fs_room').value),
+        brand: norm($('fs_brand').value), model: norm($('fs_model').value), serial: norm($('fs_sn').value),
+        hasTag: (document.querySelector('input[name="fs_tag"]:checked') || {}).value === 'yes', tag: norm($('fs_code').value),
+        cond: $('fs_cond').value, dept: norm($('fs_dept').value), resp: norm($('fs_resp').value), note: $('fs_note').value.trim(),
+      };
+    }
+    // อัปโหลดรูปทีละรูป (รูปหลักก่อน เพราะ server ต่อท้ายตามลำดับที่ส่ง) — คืนจำนวนที่ล้มเหลว
+    async function uploadPhotos(code) {
+      let failed = 0;
+      for (let i = 0; i < photos.length; i++) {
+        $('ov_msg').textContent = 'กำลังอัปโหลดรูป ' + (i + 1) + '/' + photos.length + '…';
+        try {
+          const r = await api('uploadLiffSurveyPhoto', code, photos[i].base64, 'image/jpeg', photos[i].label || '');
+          if (!r.success) { failed++; toast('รูปที่ ' + (i + 1) + ': ' + r.message, 'warning'); }
+        } catch (e) { failed++; }
+      }
+      return failed;
+    }
+    async function saveItem() {
+      if (busy) return;
+      const d = readForm();
+      if (!d.room) { toast('กรอกห้อง/จุดติดตั้งก่อน', 'warning'); $('fs_room').focus(); return; }
+      if (!d.name) { toast('กรอกชื่ออุปกรณ์', 'warning'); $('fs_name').focus(); return; }
+      if (d.hasTag && !d.tag) { toast('กรอกเลขครุภัณฑ์ที่เห็นบนป้าย', 'warning'); $('fs_code').focus(); return; }
+      if (d.hasTag) { const dup = findDup(d.tag); if (dup) { toast('เลขครุภัณฑ์นี้มีในระบบแล้ว (' + dup.name + ') — ไม่บันทึกซ้ำ', 'error'); return; } }
+      busy = true; $('btn_save').disabled = true; showLoading(true, 'กำลังบันทึก…');
+      try {
+        const r = await api('saveLiffSurveyItem', d);
+        if (!r.success) { showLoading(false); toast(r.message || 'บันทึกไม่สำเร็จ', 'error'); return; }
+        const failed = photos.length ? await uploadPhotos(r.code) : 0;
+        showLoading(false);
+        toast(failed ? 'บันทึกแล้ว แต่รูปอัปโหลดไม่สำเร็จ ' + failed + ' รูป' : 'บันทึก “' + d.name + '” แล้ว ✓', failed ? 'warning' : 'success');
+        info.items.push(r.item); info.mine.unshift(r.item); if (r.item.noTag) info.pending.unshift(r.item);
+        if (!info.locations.some(x => same(x, r.item.room))) { info.locations.push(r.item.room); fillLists(); }
+        clearForm(false); ls.set(DRAFT_KEY, '{}');
+        renderMine(); renderPend(); window.scrollTo({ top: 0, behavior: 'smooth' }); $('fs_name').focus();
+      } catch (e) {
+        showLoading(false); toast('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ — ข้อมูลที่กรอกยังอยู่ ลองกดบันทึกอีกครั้ง', 'error');
+      } finally { busy = false; $('btn_save').disabled = false; }
+    }
+
+    // ---------------------------------------------------------------- แท็บ วันนี้ / รอผูกเลข
+    function showTab(t) {
+      ['new', 'mine', 'pend'].forEach(k => { $('pane_' + k).style.display = k === t ? 'block' : 'none'; $('tab_' + k).classList.toggle('on', k === t); });
+      $('savebar').style.display = t === 'new' ? 'block' : 'none';
+    }
+    function renderMine() {
+      $('n_mine').textContent = info.mine.length ? '(' + info.mine.length + ')' : '';
+      $('mine_list').innerHTML = info.mine.length ? info.mine.map(e => {
+        const kids = info.items.filter(c => c.parent === e.id);
+        return '<div class="card"><div style="font-weight:700;">💻 ' + esc(e.name) + '</div><div style="font-size:12px; color:var(--mut);">📍 ' + esc(e.room) + ' · ' + (e.tag ? esc(e.tag) : '<span style="color:#b45309; font-weight:600;">⚠️ ยังไม่มีป้าย</span>') + '</div>'
+          + (kids.length ? '<div style="margin-top:6px;">' + kids.map(k => '<span class="chip">🔌 ' + esc(k.name) + '</span>').join('') + '</div>' : '')
+          + (e.parent ? '' : '<div style="margin-top:8px;"><button class="btn sec sm" onclick="openPeripheral(\'' + esc(e.id) + '\')">🔌 + เพิ่มอุปกรณ์เชื่อมต่อ</button></div>') + '</div>';
+      }).join('') : '<div class="empty">ยังไม่มีรายการที่สำรวจวันนี้</div>';
+    }
+    function renderPend() {
+      const q = norm($('pend_q') ? $('pend_q').value : '').toLowerCase().split(' ').filter(Boolean);
+      const all = info.pending.filter(e => !e.tag);
+      $('n_pend').textContent = all.length ? '(' + all.length + ')' : '';
+      const list = all.filter(e => q.every(w => (e.name + ' ' + e.room + ' ' + e.by).toLowerCase().includes(w)));
+      $('pend_list').innerHTML = list.length ? list.slice(0, 40).map(e => '<div class="card" style="background:#fffbeb; border-color:#fde68a;"><div style="font-weight:700;">' + esc(e.name) + '</div><div style="font-size:12px; color:var(--mut); margin:2px 0 8px;">📍 ' + esc(e.room || '-') + (e.parent ? ' · 🔗 อุปกรณ์เชื่อมต่อ' : '') + ' · โดย ' + esc(e.by || '-') + '</div>'
+        + '<button class="btn warn sm" style="width:100%;" onclick="openResolve(\'' + esc(e.id) + '\')">🏷️ ผูกเลขครุภัณฑ์</button></div>').join('') + (list.length > 40 ? '<div class="empty">แสดง 40 จาก ' + list.length + ' รายการ — ค้นหาเพื่อกรอง</div>' : '')
+        : '<div class="empty">' + (all.length ? 'ไม่พบรายการตามที่ค้นหา' : '🎉 ไม่มีรายการค้าง') + '</div>';
+    }
+
+    // ---------------------------------------------------------------- แผ่นล่าง: อุปกรณ์เชื่อมต่อ / ผูกเลข
+    function openSheet(html) { $('sheet_in').innerHTML = html; $('sheet').style.display = 'flex'; }
+    function closeSheet() { $('sheet').style.display = 'none'; $('sheet_in').innerHTML = ''; }
+    function openPeripheral(parentId) {
+      const p = info.items.find(e => e.id === parentId); if (!p) return;
+      openSheet('<h2 style="margin:0 0 8px;">🔌 เพิ่มอุปกรณ์เชื่อมต่อกับ “' + esc(p.name) + '”</h2>'
+        + '<label class="l">ชนิดอุปกรณ์</label><select class="f" id="pp_type">' + info.peripheralTypes.map(t => '<option>' + esc(t) + '</option>').join('') + '</select>'
+        + '<div class="row2"><div><label class="l">ยี่ห้อ</label><input class="f" id="pp_brand" list="dl_brand" autocomplete="off"></div><div><label class="l">รุ่น</label><input class="f" id="pp_model" autocomplete="off"></div></div>'
+        + '<label class="l">Serial Number</label><input class="f" id="pp_sn" autocomplete="off">'
+        + '<label class="l">เลขครุภัณฑ์ (ถ้ามีป้าย)</label><input class="f" id="pp_tag" autocomplete="off" placeholder="เว้นว่างถ้าไม่มีป้าย">'
+        + '<div style="display:flex; gap:8px; margin-top:14px;"><button class="btn sec" onclick="closeSheet()">ยกเลิก</button><button class="btn" id="pp_save" onclick="savePeripheral(\'' + esc(parentId) + '\')">💾 บันทึก</button></div>');
+    }
+    async function savePeripheral(parentId) {
+      const tag = norm($('pp_tag').value);
+      if (tag && findDup(tag)) { toast('เลขครุภัณฑ์นี้มีในระบบแล้ว', 'error'); return; }
+      $('pp_save').disabled = true; showLoading(true);
+      try {
+        const r = await api('saveLiffSurveyPeripheral', parentId, { type: $('pp_type').value, brand: norm($('pp_brand').value), model: norm($('pp_model').value), serial: norm($('pp_sn').value), hasTag: !!tag, tag });
+        showLoading(false);
+        if (!r.success) { toast(r.message || 'บันทึกไม่สำเร็จ', 'error'); $('pp_save').disabled = false; return; }
+        info.items.push(r.item); if (r.item.noTag) info.pending.unshift(r.item);
+        toast('เพิ่มอุปกรณ์เชื่อมต่อแล้ว ✓', 'success'); closeSheet(); renderMine(); renderPend();
+      } catch (e) { showLoading(false); toast('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้', 'error'); $('pp_save').disabled = false; }
+    }
+    function openResolve(id) {
+      const e = info.items.find(x => x.id === id); if (!e) return;
+      openSheet('<h2 style="margin:0 0 8px;">🏷️ ผูกเลขครุภัณฑ์ให้ “' + esc(e.name) + '”</h2>'
+        + '<label class="l">เลขครุภัณฑ์ที่ตรวจสอบพบ</label><input class="f" id="rs_tag" autocomplete="off" placeholder="เช่น 7440-14-0001/31" oninput="resolveHint(\'' + esc(id) + '\')">'
+        + '<div id="rs_hint" class="hint"></div>'
+        + '<div style="display:flex; gap:8px; margin-top:14px;"><button class="btn sec" onclick="closeSheet()">ยกเลิก</button><button class="btn" id="rs_save" onclick="saveResolve(\'' + esc(id) + '\')">💾 ผูกเลข</button></div>');
+      setTimeout(() => $('rs_tag') && $('rs_tag').focus(), 60);
+    }
+    function resolveHint(id) {
+      const t = norm($('rs_tag').value), h = $('rs_hint'); if (!t) { h.innerHTML = ''; return; }
+      const dup = findDup(t, id); if (dup) { h.innerHTML = '<span style="color:#dc2626; font-weight:600;">⛔ เลขนี้มีในระบบแล้ว: ' + esc(dup.name) + '</span>'; return; }
+      const c = info.categories.find(x => x.code && x.code === tagPrefix(t));
+      h.innerHTML = c ? '<span style="color:#0f766e;">✓ รหัส ' + esc(c.code) + ' = ' + esc(c.name) + ' — จะย้ายหมวดให้อัตโนมัติ</span>' : '';
+    }
+    async function saveResolve(id) {
+      const t = norm($('rs_tag').value);
+      if (!t) { toast('กรอกเลขครุภัณฑ์', 'warning'); return; }
+      if (findDup(t, id)) { toast('เลขครุภัณฑ์นี้มีในระบบแล้ว', 'error'); return; }
+      $('rs_save').disabled = true; showLoading(true);
+      try {
+        const r = await api('resolveLiffSurveyTag', id, t);
+        showLoading(false);
+        if (!r.success) { toast(r.message || 'ไม่สำเร็จ', 'error'); $('rs_save').disabled = false; return; }
+        [info.items, info.mine, info.pending].forEach(arr => { const x = arr.find(e => e.id === id); if (x) { x.tag = r.item.tag; x.noTag = false; if (r.item.cat) x.cat = r.item.cat; } });
+        toast('ผูกเลขครุภัณฑ์แล้ว ✓' + (r.movedCategory ? ' · ย้ายหมวดเป็น ' + r.movedCategory : ''), 'success');
+        closeSheet(); renderMine(); renderPend();
+      } catch (e) { showLoading(false); toast('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้', 'error'); $('rs_save').disabled = false; }
+    }
+  </script>
+</body>
+</html>

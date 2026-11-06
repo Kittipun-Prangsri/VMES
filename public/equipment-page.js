@@ -4,7 +4,7 @@
  * โหลดเป็น <script src> ปกติ (ไม่ใช่ module) จึงแชร์ตัวแปร global กับสคริปต์หลักของ index.html
  * โดยอ้างถึงเฉพาะตอนเรียกใช้ (ไม่ใช่ตอนโหลด): DATA, $, esc, jsArg, fmt, money, toast, openModal,
  * closeModal, callApi, ADMIN_PASS, showLoading, refreshData, isAdmin, canManageEquipment,
- * fsPhotoCell, fsReadAndCompressImage, quickBorrow, showQrModal, addEquipmentHandover,
+ * quickBorrow, showQrModal, addEquipmentHandover,
  * openLabelPrintModal (equipment-labels.js), exportSheet, openImportEquipmentModal
  *
  * โครงไฟล์:
@@ -544,7 +544,10 @@ function eqDatalist(id, field, extra) {
 // ---- รูปภาพหลายรูป: กรอบรูปจำลอง (สูงสุด EQ_PHOTO_MAX รูป, รูปแรก = รูปหลัก) ----
 const EQ_PHOTO_MAX = 6;
 // items: ลำดับที่แสดง/บันทึก; { url } = รูปเดิมที่อัปโหลดแล้ว, { dataUrl, base64, contentType } = รูปใหม่ที่ยังไม่อัปโหลด
-const EQ_PHOTO = { items: [], busy: false };
+const EQ_PHOTO = { items: [], busy: false, pendingLabel: '' };
+// มุมถ่ายที่แนะนำ (ถ่ายตามมุมแล้วระบบติดป้ายชื่อมุมให้ — เปลี่ยนได้ภายหลัง)
+const EQ_ANGLES = ['ด้านหน้า', 'ด้านหลัง', 'ด้านข้าง', 'ป้ายครุภัณฑ์', 'ซีเรียล/รุ่น'];
+function eqPhotoLabels(e) { const m = e && e['ป้ายกำกับรูป']; return m && typeof m === 'object' && !Array.isArray(m) ? m : {}; }
 
 function eqPhotoList(e) {
   const arr = Array.isArray(e && e['รูปภาพทั้งหมด']) ? e['รูปภาพทั้งหมด'].filter(u => /^https?:\/\//i.test(u)) : [];
@@ -568,6 +571,11 @@ function eqEnsureFrameCss() {
     .eq-frame .tools button { border:none; border-radius:6px; width:26px; height:26px; cursor:pointer; background:rgba(15,23,42,.8); color:#fff; font-size:13px; line-height:1; }
     .eq-frame .tools button:hover { background:#0f766e; }
     .eq-frame .tools button.del:hover { background:#dc2626; }
+    .eq-angles { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px; }
+    .eq-angle { border:1px solid #99f6e4; background:#f0fdfa; color:#0f766e; border-radius:16px; padding:5px 12px; font-size:12px; font-weight:600; cursor:pointer; }
+    .eq-angle.done { background:#dcfce7; border-color:#86efac; color:#15803d; }
+    .eq-angle:disabled { opacity:.45; cursor:not-allowed; }
+    .eq-frame .lbl { position:absolute; left:8px; bottom:4px; max-width:calc(100% - 70px); font-size:10px; padding:1px 3px; border-radius:6px; border:none; background:rgba(15,23,42,.8); color:#fff; }
     .eq-slot { aspect-ratio:1/1; border:2px dashed #cbd5e1; border-radius:4px; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#94a3b8; font-size:12px; gap:4px; box-sizing:border-box; }
     .eq-slot.add { cursor:pointer; border-color:#0d9488; color:#0f766e; background:#f0fdfa; }
     .eq-slot.add:hover { background:#ccfbf1; }
@@ -576,38 +584,51 @@ function eqEnsureFrameCss() {
     .eq-viewer .stage { background:linear-gradient(135deg,#a16207,#78350f); padding:14px; border-radius:6px; box-shadow:0 10px 40px rgba(0,0,0,.6); }
     .eq-viewer .stage .mat { background:#f8fafc; padding:12px; box-shadow:inset 0 0 10px rgba(0,0,0,.4); }
     .eq-viewer img { max-width:min(86vw,900px); max-height:68vh; display:block; }
+    .eq-viewer .cap { color:#fde68a; font-size:15px; font-weight:700; }
     .eq-viewer .bar { color:#e2e8f0; font-size:14px; display:flex; gap:14px; align-items:center; }
     .eq-viewer button { background:#334155; color:#fff; border:none; border-radius:8px; padding:8px 14px; cursor:pointer; font-size:14px; }`;
   document.head.appendChild(st);
 }
 
 function eqPhotoInit(e) {
-  EQ_PHOTO.items = eqPhotoList(e).map(url => ({ url }));
+  const labels = eqPhotoLabels(e);
+  EQ_PHOTO.items = eqPhotoList(e).map(url => ({ url, label: labels[url] || '' }));
   EQ_PHOTO.busy = false;
+  EQ_PHOTO.pendingLabel = '';
 }
 
 function eqGalleryHtml() {
   eqEnsureFrameCss();
   const items = EQ_PHOTO.items;
+  const full = items.length >= EQ_PHOTO_MAX;
+  const have = new Set(items.map(it => it.label).filter(Boolean));
+  const angleChips = EQ_ANGLES.map(a => `<button type="button" class="eq-angle ${have.has(a) ? 'done' : ''}" ${full ? 'disabled' : ''} onclick="eqPhotoCapture(${jsArg(a)})" title="ถ่ายภาพมุม “${esc(a)}”">${have.has(a) ? '✓' : '📷'} ${esc(a)}</button>`).join('');
   const cells = [];
   items.forEach((it, i) => {
     cells.push(`
       <div class="eq-frame ${i === 0 ? 'cover' : ''}">
         ${i === 0 ? '<span class="tag">⭐ รูปหลัก</span>' : ''}
         <div class="mat"><img src="${esc(it.url || it.dataUrl)}" alt="รูปที่ ${i + 1}" onclick="eqPhotoPreview(${i})" title="คลิกเพื่อดูรูปใหญ่"></div>
+        <select class="lbl" onchange="eqPhotoSetLabel(${i}, this.value)" aria-label="มุมภาพของรูปที่ ${i + 1}">
+          <option value="">มุม: ไม่ระบุ</option>
+          ${EQ_ANGLES.map(a => `<option ${it.label === a ? 'selected' : ''}>${esc(a)}</option>`).join('')}
+          ${it.label && !EQ_ANGLES.includes(it.label) ? `<option selected>${esc(it.label)}</option>` : ''}
+        </select>
         <div class="tools">
           ${i === 0 ? '' : `<button type="button" title="ตั้งเป็นรูปหลัก" aria-label="ตั้งเป็นรูปหลัก" onclick="eqPhotoMakeCover(${i})">⭐</button>`}
           <button type="button" class="del" title="ลบรูปนี้" aria-label="ลบรูปนี้" onclick="eqPhotoRemove(${i})">✕</button>
         </div>
       </div>`);
   });
-  if (items.length < EQ_PHOTO_MAX) {
-    cells.push(`<div class="eq-slot add" role="button" tabindex="0" onclick="eqPhotoPick()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();eqPhotoPick();}"><span class="plus">＋</span>เพิ่มรูป</div>`);
+  if (!full) {
+    cells.push(`<div class="eq-slot add" role="button" tabindex="0" onclick="eqPhotoPick()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();eqPhotoPick();}"><span class="plus">＋</span>เลือกรูปจากเครื่อง</div>`);
   }
   for (let i = cells.length; i < EQ_PHOTO_MAX; i++) cells.push(`<div class="eq-slot" aria-hidden="true"><span>🖼️</span>ว่าง</div>`);
-  return `<div class="eq-gallery">${cells.join('')}</div>
-    <div style="font-size:12px; color:#64748b; margin-top:8px;">แนบได้สูงสุด ${EQ_PHOTO_MAX} รูป (${items.length}/${EQ_PHOTO_MAX}) · รูปแรกเป็นรูปหลักที่ใช้ในตาราง/ป้าย · กด ⭐ เพื่อเปลี่ยนรูปหลัก · ระบบย่อรูปให้อัตโนมัติ</div>
-    <input type="file" id="e_photos" accept="image/*" multiple style="display:none" onchange="eqPhotoAddFiles(this)">`;
+  return `<div class="eq-angles">${angleChips}</div>
+    <div class="eq-gallery">${cells.join('')}</div>
+    <div style="font-size:12px; color:#64748b; margin-top:8px;">ถ่ายได้หลายมุม สูงสุด ${EQ_PHOTO_MAX} รูป (${items.length}/${EQ_PHOTO_MAX}) · กดปุ่มมุมเพื่อเปิดกล้องแล้วระบบติดป้ายชื่อมุมให้ · รูปแรกเป็นรูปหลัก (กด ⭐ เพื่อเปลี่ยน) · ระบบย่อรูปให้อัตโนมัติ</div>
+    <input type="file" id="e_photos" accept="image/*" multiple style="display:none" onchange="eqPhotoAddFiles(this)">
+    <input type="file" id="e_photo_cam" accept="image/*" capture="environment" style="display:none" onchange="eqPhotoAddFiles(this, EQ_PHOTO.pendingLabel)">`;
 }
 
 function eqPhotoRepaint() {
@@ -644,24 +665,37 @@ function eqCompressFile(file, maxDim, quality) {
   });
 }
 
-async function eqPhotoAddFiles(input) {
+async function eqPhotoAddFiles(input, label) {
   const files = Array.from((input && input.files) || []).filter(f => /^image\//.test(f.type || '') || /\.(heic|heif|jpe?g|png|webp|gif)$/i.test(f.name || ''));
   input.value = '';
   if (!files.length) return;
   const room = EQ_PHOTO_MAX - EQ_PHOTO.items.length;
   if (files.length > room) toast('แนบได้อีก ' + room + ' รูป — ข้ามไฟล์ส่วนที่เกิน', 'warning');
   for (const f of files.slice(0, Math.max(0, room))) {
-    try { EQ_PHOTO.items.push(await eqCompressFile(f, 1024, 0.7)); }
+    try { const it = await eqCompressFile(f, 1024, 0.7); it.label = label || ''; EQ_PHOTO.items.push(it); }
     catch (err) { toast('เพิ่มรูปไม่สำเร็จ: ' + err.message, 'error'); }
   }
   eqPhotoRepaint();
 }
+function eqPhotoCapture(label) {
+  EQ_PHOTO.pendingLabel = label || '';
+  const i = document.getElementById('e_photo_cam');
+  if (i) i.click();
+}
+function eqPhotoSetLabel(i, v) { if (EQ_PHOTO.items[i]) { EQ_PHOTO.items[i].label = v || ''; eqPhotoRepaint(); } }
+// เพิ่มรูปจากแคนวาส/ข้อมูลภาพที่มีอยู่แล้ว (เช่น ภาพที่ใช้อ่านป้ายด้วย OCR) — คืน false ถ้าเต็ม
+function eqPhotoAddDataUrl(dataUrl, label) {
+  if (EQ_PHOTO.items.length >= EQ_PHOTO_MAX) return false;
+  EQ_PHOTO.items.push({ dataUrl, base64: dataUrl.slice(dataUrl.indexOf(',') + 1), contentType: 'image/jpeg', label: label || '' });
+  eqPhotoRepaint();
+  return true;
+}
 function eqPhotoRemove(i) { EQ_PHOTO.items.splice(i, 1); eqPhotoRepaint(); }
 function eqPhotoMakeCover(i) { const [it] = EQ_PHOTO.items.splice(i, 1); EQ_PHOTO.items.unshift(it); eqPhotoRepaint(); }
-function eqPhotoPreview(i) { eqOpenViewer(EQ_PHOTO.items.map(x => x.url || x.dataUrl), i); }
+function eqPhotoPreview(i) { eqOpenViewer(EQ_PHOTO.items.map(x => x.url || x.dataUrl), i, EQ_PHOTO.items.map(x => x.label || '')); }
 
 // ตัวดูรูปเต็ม (กรอบรูปใหญ่) — ใช้ทั้งในฟอร์มและตารางคลัง
-function eqOpenViewer(urls, start) {
+function eqOpenViewer(urls, start, labels) {
   if (!urls || !urls.length) return;
   eqEnsureFrameCss();
   let idx = Math.min(Math.max(0, start || 0), urls.length - 1);
@@ -669,7 +703,9 @@ function eqOpenViewer(urls, start) {
   ov.className = 'eq-viewer';
   const close = () => { document.removeEventListener('keydown', onKey); ov.remove(); };
   const draw = () => {
+    const cap = labels && labels[idx] ? labels[idx] : '';
     ov.innerHTML = `<div class="stage"><div class="mat"><img src="${esc(urls[idx])}" alt="รูปที่ ${idx + 1}"></div></div>
+      ${cap ? `<div class="cap">มุม: ${esc(cap)}</div>` : ''}
       <div class="bar">
         <button type="button" ${urls.length < 2 ? 'disabled' : ''} data-act="prev" aria-label="รูปก่อนหน้า">‹</button>
         <span>${idx + 1} / ${urls.length}${idx === 0 ? ' · ⭐ รูปหลัก' : ''}</span>
@@ -699,7 +735,8 @@ function eqPhotoCell(e) {
 }
 function eqViewEquipPhotos(id) {
   const e = (DATA.equipment || []).find(x => String(x['รหัส']) === String(id));
-  eqOpenViewer(eqPhotoList(e || {}), 0);
+  const list = eqPhotoList(e || {}), lm = eqPhotoLabels(e || {});
+  eqOpenViewer(list, 0, list.map(u => lm[u] || ''));
 }
 
 // ค่าเสื่อมราคาเฉลี่ยต่อปี (เส้นตรง) แสดงเป็นข้อมูลประกอบในฟอร์มเท่านั้น
@@ -758,6 +795,7 @@ function equipForm(e) {
       </div>
 
       ${sec('🖥️ รายละเอียดเครื่องและการจัดซื้อ')}
+      <div class="field full"><button type="button" class="btn btn-sm btn-info" onclick="eqOpenOcr()" title="ถ่ายป้ายบนเครื่อง ระบบอ่านตัวอักษรแล้วเติมให้">📷 ถ่ายป้ายเพื่ออ่านเลขครุภัณฑ์ / Serial / รุ่น / ยี่ห้อ อัตโนมัติ</button></div>
       <div class="field"><label>ยี่ห้อ <small style="color:#94a3b8;">(เลือกจากที่เคยใช้ หรือพิมพ์ใหม่)</small></label><input id="e_brand" list="eq_dl_brand" value="${esc(e['ยี่ห้อ'] || '')}"></div>
       <div class="field"><label>รุ่น</label><input id="e_model" value="${esc(e['รุ่น'] || '')}"></div>
       <div class="field"><label>Serial Number</label><input id="e_sn" value="${esc(e['Serial'] || '')}"></div>
@@ -822,6 +860,15 @@ function eqCatManual() {
 }
 if (typeof window !== 'undefined') { window._eqCodeChanged = eqCodeChanged; window._eqCatManual = eqCatManual; }
 
+// อ่านป้ายด้วยกล้อง (OCR) เติมฟอร์มอุปกรณ์ — เติมเฉพาะช่องว่าง ไฮไลต์ให้ตรวจ
+function eqOpenOcr() {
+  ocrOpenScanner({
+    fields: { tag: 'e_code', serial: 'e_sn', model: 'e_model', brand: 'e_brand', name: 'e_name', note: 'e_note' },
+    onApplied: () => { if (typeof window._eqCodeChanged === 'function') window._eqCodeChanged(); },
+    addPhoto: (dataUrl, label) => eqPhotoAddDataUrl(dataUrl, label),
+  });
+}
+
 function addEquip() {
   if (!canManageEquipment()) return;
   openModal('💻 เพิ่มอุปกรณ์ใหม่', equipForm(), () => saveEquip(), true);
@@ -833,6 +880,31 @@ function editEquip(row) {
   const e = DATA.equipment.find(x => x._row === row || String(x['รหัส']) === String(row));
   openModal('✏️ แก้ไขข้อมูลอุปกรณ์', equipForm(e), () => saveEquip(row), true);
   eqDeprHint();
+}
+
+// อัปโหลดรูปใหม่ทีละรูป (ต่อท้ายรายการฝั่ง server) แล้วจัดลำดับสุดท้ายตามที่ผู้ใช้เรียงไว้ — คืนจำนวนรูปที่อัปโหลดไม่สำเร็จ
+// items = EQ_PHOTO.items ({url} = รูปเดิมที่เหลือ, {base64,...} = รูปใหม่) ใช้ร่วมกับโหมดสำรวจภาคสนาม
+async function eqPersistPhotos(code, items) {
+  const keptUrls = items.filter(it => it.url).map(it => it.url);
+  const added = items.filter(it => !it.url);
+  let failed = 0;
+  const uploaded = new Map();
+  for (let i = 0; i < added.length; i++) {
+    const pr = await callApi('uploadEquipmentPhoto', code, added[i].base64, added[i].contentType, ADMIN_PASS, added[i].label || '');
+    if (pr.success) uploaded.set(added[i], pr.url); else { failed++; toast('อัปโหลดรูปที่ ' + (i + 1) + ' ไม่สำเร็จ: ' + pr.message, 'warning'); }
+  }
+  if (uploaded.size) {
+    const finalOrder = items.map(it => it.url || uploaded.get(it)).filter(Boolean);
+    const serverOrder = keptUrls.concat(added.map(it => uploaded.get(it)).filter(Boolean));
+    if (finalOrder.join('|') !== serverOrder.join('|')) {
+      // ผู้ใช้ตั้งรูปใหม่เป็นรูปหลัก/สลับลำดับ — บันทึกลำดับสุดท้ายอีกครั้ง (ส่งเฉพาะรหัส + รายการรูป)
+      const lm = {};
+      items.forEach(it => { const u = it.url || uploaded.get(it); if (u && it.label) lm[u] = it.label; });
+      const fr = await callApi('saveEquipment', { 'รหัส': code, 'รูปภาพทั้งหมด': finalOrder, 'ป้ายกำกับรูป': lm }, ADMIN_PASS);
+      if (!fr.success) toast('บันทึกข้อมูลสำเร็จ แต่จัดลำดับรูปไม่สำเร็จ: ' + fr.message, 'warning');
+    }
+  }
+  return failed;
 }
 
 async function saveEquip(row) {
@@ -863,6 +935,8 @@ async function saveEquip(row) {
   // รูปเดิมที่เหลืออยู่ (ตามลำดับที่ผู้ใช้จัด) — รูปใหม่จะอัปโหลดทีหลังแล้วค่อยจัดลำดับสุดท้าย
   const keptUrls = EQ_PHOTO.items.filter(it => it.url).map(it => it.url);
   data['รูปภาพทั้งหมด'] = keptUrls;
+  data['ป้ายกำกับรูป'] = {};
+  EQ_PHOTO.items.forEach(it => { if (it.url && it.label) data['ป้ายกำกับรูป'][it.url] = it.label; });
 
   EQ_PHOTO.busy = true;
   showLoading(true);
@@ -870,23 +944,7 @@ async function saveEquip(row) {
     const r = await callApi('saveEquipment', data, ADMIN_PASS);
     if (!r.success) { showLoading(false); toast(r.message, 'error'); return; }
 
-    // อัปโหลดรูปใหม่ทีละรูป (ต่อท้ายรายการฝั่ง server) แล้วเก็บ URL ที่ได้ตามลำดับที่ผู้ใช้จัดไว้
-    const added = EQ_PHOTO.items.filter(it => !it.url);
-    let failed = 0;
-    const uploaded = new Map();
-    for (let i = 0; i < added.length; i++) {
-      const pr = await callApi('uploadEquipmentPhoto', r.code, added[i].base64, added[i].contentType, ADMIN_PASS);
-      if (pr.success) uploaded.set(added[i], pr.url); else { failed++; toast('อัปโหลดรูปที่ ' + (i + 1) + ' ไม่สำเร็จ: ' + pr.message, 'warning'); }
-    }
-    if (uploaded.size) {
-      const finalOrder = EQ_PHOTO.items.map(it => it.url || uploaded.get(it)).filter(Boolean);
-      const serverOrder = keptUrls.concat(added.map(it => uploaded.get(it)).filter(Boolean));
-      if (finalOrder.join('|') !== serverOrder.join('|')) {
-        // ผู้ใช้ตั้งรูปใหม่เป็นรูปหลัก/สลับลำดับ — บันทึกลำดับสุดท้ายอีกครั้ง (ส่งเฉพาะรหัส + รายการรูป)
-        const fr = await callApi('saveEquipment', { 'รหัส': r.code, 'รูปภาพทั้งหมด': finalOrder }, ADMIN_PASS);
-        if (!fr.success) toast('บันทึกข้อมูลสำเร็จ แต่จัดลำดับรูปไม่สำเร็จ: ' + fr.message, 'warning');
-      }
-    }
+    const failed = await eqPersistPhotos(r.code, EQ_PHOTO.items);
 
     showLoading(false);
     toast(failed ? 'บันทึกข้อมูลแล้ว แต่รูปอัปโหลดไม่สำเร็จ ' + failed + ' รูป' : 'บันทึกสำเร็จ', failed ? 'warning' : 'success');
