@@ -47,7 +47,7 @@ function eqFilter(all, st) {
   }
   if (st.cat) items = items.filter(e => e['หมวดหมู่'] === st.cat);
   if (st.status) items = items.filter(e => e['สถานะ'] === st.status);
-  if (st.loc) items = items.filter(e => String(e['ที่เก็บ'] || '').trim() === st.loc);
+  if (st.loc) items = items.filter(e => eqNorm(e['ที่เก็บ']).toLowerCase() === eqNorm(st.loc).toLowerCase());
   return items;
 }
 
@@ -101,7 +101,31 @@ function eqPaginate(entries, page, size) {
 
 // ค่าที่ใช้ซ้ำในฟอร์ม: รวมตัวสะกดต่างกันเฉพาะตัวพิมพ์/ช่องว่าง แล้วเลือกแบบที่พบบ่อยสุดเป็นตัวแทน
 function eqNorm(v) { return String(v == null ? '' : v).replace(/\s+/g, ' ').trim(); }
+// สถานที่จัดเก็บทั้งหมด = ที่ตั้งไว้ล่วงหน้า (settings.EQUIPMENT_LOCATIONS) + ที่อุปกรณ์ใช้อยู่จริง
+// รวมชื่อที่ต่างแค่ตัวพิมพ์/ช่องว่าง; คืน [{ name, count, inMaster }] เรียงแบบไทย
+function eqMasterLocations() {
+  try {
+    const raw = DATA.settings && DATA.settings.EQUIPMENT_LOCATIONS;
+    const arr = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    return Array.isArray(arr) ? arr.map(eqNorm).filter(Boolean) : [];
+  } catch (e) { return []; }
+}
+function eqAllLocations() {
+  const map = new Map();
+  const touch = (name, inMaster, inc) => {
+    const k = name.toLowerCase();
+    const cur = map.get(k) || { name, count: 0, inMaster: false };
+    if (inMaster) { cur.name = name; cur.inMaster = true; } // ชื่อใน master เป็นตัวหลัก
+    cur.count += inc;
+    map.set(k, cur);
+  };
+  eqMasterLocations().forEach(n => touch(n, true, 0));
+  (DATA.equipment || []).forEach(e => { const n = eqNorm(e['ที่เก็บ']); if (n) touch(n, false, 1); });
+  return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name, 'th', { numeric: true }));
+}
+
 function eqDistinct(field) {
+  if (field === 'ที่เก็บ') return eqAllLocations().map(l => l.name);
   const buckets = new Map();
   (DATA.equipment || []).forEach(e => {
     const v = eqNorm(e[field]);
@@ -303,7 +327,7 @@ function renderEquipment() {
       return Object.entries(m).sort((a, b) => a[0].localeCompare(b[0], 'th'));
     };
     const catList = tally('หมวดหมู่');
-    const locList = tally('ที่เก็บ');
+    const locList = eqAllLocations().map(l => [l.name, l.count]);
     const isFiltered = !!(st.text || st.cat || st.status || st.loc);
     const selStyle = 'width:100%; padding:10px 14px; border-radius:10px; border:1px solid #cbd5e1; font-size:14px; outline:none; cursor:pointer; box-sizing:border-box; background:#fff;';
     const heroBtn = 'background:rgba(255,255,255,0.18); border:1px solid rgba(255,255,255,0.35); color:#fff; font-weight:600; border-radius:10px; padding:8px 14px;';
@@ -326,6 +350,7 @@ function renderEquipment() {
             <button class="btn btn-sm" onclick="addEquip()" style="background:#10b981; border:none; color:#fff; font-weight:700; border-radius:10px; padding:8px 14px; box-shadow:0 4px 12px rgba(16,185,129,0.35);">➕ เพิ่มอุปกรณ์ใหม่</button>
             <button class="btn btn-sm" onclick="openImportEquipmentModal()" style="${heroBtn}">📥 นำเข้า</button>
           ` : ''}
+          ${canManageEquipment() ? `<button class="btn btn-sm" onclick="openLocationManager()" title="เพิ่ม/แก้ไขสถานที่จัดเก็บ" style="${heroBtn}">📍 จัดการสถานที่</button>` : ''}
           ${isAdmin() ? `<button class="btn btn-sm" onclick="window._efPrintLabels()" title="พิมพ์ป้ายสติกเกอร์ Brother PT-P710BT ของรายการที่กรองอยู่" style="${heroBtn}">🏷️ พิมพ์ป้าย</button>` : ''}
           <button class="btn btn-sm" onclick="exportSheet('อุปกรณ์')" style="${heroBtn}">📊 Export</button>
         </div>
@@ -592,6 +617,98 @@ function delEquip(row, name) {
       showLoading(false);
       toast('ผิดพลาด: ' + err.message, 'error');
     });
+}
+
+// ------------------------------------------------------------------ 5) จัดการสถานที่จัดเก็บ
+function eqLocManagerHtml() {
+  const locs = eqAllLocations();
+  return `
+    <div style="display:flex; gap:8px; margin-bottom:14px;">
+      <input id="loc_new" placeholder="ชื่อสถานที่ใหม่ เช่น ห้องธุรการ&การเงิน ชั้น2" maxlength="100"
+        onkeydown="if(event.key==='Enter'){event.preventDefault();addLocation();}"
+        style="flex:1; padding:10px 14px; border-radius:10px; border:1px solid #cbd5e1; font-size:14px; box-sizing:border-box;">
+      <button class="btn btn-primary" onclick="addLocation()" style="white-space:nowrap;">➕ เพิ่มสถานที่</button>
+    </div>
+    <div class="table-wrap" style="max-height:50vh; overflow:auto;">
+      <table>
+        <thead><tr><th>สถานที่จัดเก็บ</th><th style="text-align:center; width:110px;">อุปกรณ์</th><th style="text-align:center; width:130px;">จัดการ</th></tr></thead>
+        <tbody>${locs.map(l => `
+          <tr>
+            <td data-label="สถานที่">📍 ${esc(l.name)}${l.inMaster ? '' : ' <span style="font-size:11px; color:#94a3b8;">(มาจากข้อมูลอุปกรณ์)</span>'}</td>
+            <td data-label="อุปกรณ์" style="text-align:center;">${fmt(l.count)}</td>
+            <td data-label="จัดการ" style="text-align:center;">
+              <button class="btn btn-sm btn-secondary" onclick="renameLocation(${jsArg(l.name)})" title="เปลี่ยนชื่อ (อัปเดตอุปกรณ์ทุกชิ้นที่ใช้สถานที่นี้)" style="padding:4px 8px;">✏️</button>
+              <button class="btn btn-sm btn-danger" onclick="deleteLocation(${jsArg(l.name)})" ${l.count ? 'disabled title="มีอุปกรณ์ใช้อยู่ ลบไม่ได้"' : 'title="ลบ"'} style="padding:4px 8px;">🗑️</button>
+            </td>
+          </tr>`).join('') || '<tr><td colspan="3" style="text-align:center; padding:24px; color:#94a3b8;">ยังไม่มีสถานที่จัดเก็บ</td></tr>'}
+        </tbody>
+      </table>
+    </div>
+    <div style="font-size:12px; color:#64748b; margin-top:10px;">การเปลี่ยนชื่อจะอัปเดตอุปกรณ์ทุกชิ้นที่ใช้สถานที่นี้ · ถ้าชื่อใหม่ซ้ำกับสถานที่ที่มีอยู่ ระบบจะควบรวมให้ · ลบได้เฉพาะสถานที่ที่ไม่มีอุปกรณ์ใช้อยู่</div>`;
+}
+
+function openLocationManager() {
+  if (!canManageEquipment()) return;
+  openModal('📍 จัดการสถานที่จัดเก็บ', eqLocManagerHtml(), null, true);
+}
+
+// อัปเดต DATA ในหน่วยความจำทันทีหลังเรียก API สำเร็จ แล้ววาดหน้าต่างจัดการใหม่ (ไม่รอรอบโหลดข้อมูล)
+function eqLocAfter() {
+  const box = document.getElementById('modalBody');
+  if (box) box.innerHTML = eqLocManagerHtml();
+  if (typeof refreshData === 'function') refreshData();
+}
+function eqSetMasterLocal(list) {
+  if (!DATA.settings) DATA.settings = {};
+  DATA.settings.EQUIPMENT_LOCATIONS = JSON.stringify(list);
+}
+
+async function addLocation() {
+  const inp = $('loc_new');
+  const name = eqNorm(inp ? inp.value : '');
+  if (!name) { toast('กรุณาระบุชื่อสถานที่', 'warning'); return; }
+  showLoading(true);
+  try {
+    const r = await callApi('addEquipmentLocation', name, ADMIN_PASS);
+    showLoading(false);
+    if (!r.success) { toast(r.message, 'error'); return; }
+    eqSetMasterLocal(eqMasterLocations().filter(x => x.toLowerCase() !== r.name.toLowerCase()).concat(r.name));
+    toast(r.existed ? 'มีสถานที่ "' + r.name + '" อยู่แล้ว' : 'เพิ่มสถานที่ "' + r.name + '" แล้ว', r.existed ? 'warning' : 'success');
+    eqLocAfter();
+  } catch (err) { showLoading(false); toast('ผิดพลาด: ' + err.message, 'error'); }
+}
+
+async function renameLocation(oldName) {
+  const next = prompt('เปลี่ยนชื่อสถานที่ (อุปกรณ์ทุกชิ้นที่ใช้ "' + oldName + '" จะถูกอัปเดตตาม):', oldName);
+  if (next === null) return;
+  const name = eqNorm(next);
+  if (!name) { toast('กรุณาระบุชื่อสถานที่', 'warning'); return; }
+  if (name === oldName) return;
+  showLoading(true);
+  try {
+    const r = await callApi('renameEquipmentLocation', oldName, name, ADMIN_PASS);
+    showLoading(false);
+    if (!r.success) { toast(r.message, 'error'); return; }
+    // ปรับสำเนาในหน่วยความจำให้ตรงทันที
+    DATA.equipment.forEach(e => { if (eqNorm(e['ที่เก็บ']).toLowerCase() === eqNorm(oldName).toLowerCase()) e['ที่เก็บ'] = r.name; });
+    eqSetMasterLocal(eqMasterLocations().filter(x => x.toLowerCase() !== oldName.toLowerCase() && x.toLowerCase() !== r.name.toLowerCase()).concat(r.name));
+    if (window.EQUIPMENT_FILTER_STATE && eqNorm(window.EQUIPMENT_FILTER_STATE.loc).toLowerCase() === eqNorm(oldName).toLowerCase()) window.EQUIPMENT_FILTER_STATE.loc = r.name;
+    toast('เปลี่ยนชื่อเป็น "' + r.name + '" แล้ว · อัปเดตอุปกรณ์ ' + r.updated + ' รายการ' + (r.merged ? ' (ควบรวมกับสถานที่เดิม)' : ''));
+    eqLocAfter();
+  } catch (err) { showLoading(false); toast('ผิดพลาด: ' + err.message, 'error'); }
+}
+
+async function deleteLocation(name) {
+  if (!confirm('ลบสถานที่ "' + name + '" ออกจากรายการ?')) return;
+  showLoading(true);
+  try {
+    const r = await callApi('deleteEquipmentLocation', name, ADMIN_PASS);
+    showLoading(false);
+    if (!r.success) { toast(r.message, 'error'); return; }
+    eqSetMasterLocal(eqMasterLocations().filter(x => x.toLowerCase() !== name.toLowerCase()));
+    toast('ลบสถานที่ "' + name + '" แล้ว');
+    eqLocAfter();
+  } catch (err) { showLoading(false); toast('ผิดพลาด: ' + err.message, 'error'); }
 }
 
 if (typeof module === 'object' && module.exports) {

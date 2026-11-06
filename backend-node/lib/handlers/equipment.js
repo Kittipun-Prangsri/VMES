@@ -72,4 +72,128 @@ async function uploadEquipmentPhoto(code, base64Data, contentType, adminCode) {
   }
 }
 
-module.exports = { getEquipment, getEquipmentCategories, saveEquipment, deleteEquipment, uploadEquipmentPhoto };
+// ============== สถานที่จัดเก็บ (ที่เก็บ) ==============
+// "ที่เก็บ" ของอุปกรณ์เป็นข้อความอิสระ ไม่มีตาราง master — เก็บรายการสถานที่ที่ตั้งไว้ล่วงหน้า
+// (ยังไม่มีอุปกรณ์ใช้) เป็น JSON array ใน settings คีย์ EQUIPMENT_LOCATIONS (แบบเดียวกับ SYSTEM_ROLES)
+// การเปลี่ยนชื่อจะอัปเดตอุปกรณ์ทุกชิ้นที่ใช้ชื่อเดิมให้ด้วย
+const LOC_KEY = 'EQUIPMENT_LOCATIONS';
+const LOC_MAX_LEN = 100;
+
+function normLoc(v) {
+  return String(v == null ? '' : v).replace(/\s+/g, ' ').trim();
+}
+const sameLoc = (a, b) => normLoc(a).toLowerCase() === normLoc(b).toLowerCase();
+
+async function readLocations() {
+  const rows = await listDocs(SHEETS.SETTINGS);
+  const row = rows.find((r) => String(r['Key'] || '').trim() === LOC_KEY);
+  try {
+    const arr = JSON.parse((row && row['Value']) || '[]');
+    return Array.isArray(arr) ? arr.map(normLoc).filter(Boolean) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+async function writeLocations(list) {
+  const seen = new Set();
+  const clean = list
+    .map(normLoc)
+    .filter((n) => n && !seen.has(n.toLowerCase()) && seen.add(n.toLowerCase()))
+    .sort((a, b) => a.localeCompare(b, 'th', { numeric: true }));
+  await setDoc(SHEETS.SETTINGS, LOC_KEY, { Key: LOC_KEY, Value: JSON.stringify(clean) });
+  return clean;
+}
+
+function validateLocName(n) {
+  if (!n) return 'กรุณาระบุชื่อสถานที่จัดเก็บ';
+  if (n.length > LOC_MAX_LEN) return 'ชื่อสถานที่ยาวเกิน ' + LOC_MAX_LEN + ' ตัวอักษร';
+  return '';
+}
+
+async function addEquipmentLocation(name, adminCode) {
+  if (!verifyAdmin(adminCode)) return { success: false, message: 'ไม่มีสิทธิ์ดำเนินการ' };
+  try {
+    const n = normLoc(name);
+    const bad = validateLocName(n);
+    if (bad) return { success: false, message: bad };
+    const list = await readLocations();
+    const items = await listDocs(SHEETS.EQUIPMENT);
+    const inUse = items.find((e) => sameLoc(e['ที่เก็บ'], n));
+    const existing = list.find((x) => sameLoc(x, n)) || (inUse && normLoc(inUse['ที่เก็บ']));
+    if (existing) {
+      // มีใช้อยู่แล้วในอุปกรณ์แต่ยังไม่อยู่ใน master -> เพิ่มเข้า master ด้วยชื่อที่ใช้จริง
+      if (!list.some((x) => sameLoc(x, existing))) await writeLocations(list.concat(existing));
+      return { success: true, name: existing, existed: true };
+    }
+    await writeLocations(list.concat(n));
+    await logAudit('เพิ่มสถานที่จัดเก็บ', 'admin', n);
+    return { success: true, name: n, existed: false };
+  } catch (err) {
+    return { success: false, message: err.message };
+  }
+}
+
+async function renameEquipmentLocation(oldName, newName, adminCode) {
+  if (!verifyAdmin(adminCode)) return { success: false, message: 'ไม่มีสิทธิ์ดำเนินการ' };
+  try {
+    const o = normLoc(oldName);
+    const n = normLoc(newName);
+    const bad = validateLocName(n);
+    if (bad) return { success: false, message: bad };
+    if (!o) return { success: false, message: 'ไม่พบชื่อสถานที่เดิม' };
+
+    const list = await readLocations();
+    const items = await listDocs(SHEETS.EQUIPMENT);
+    const affected = items.filter((e) => sameLoc(e['ที่เก็บ'], o));
+    if (!affected.length && !list.some((x) => sameLoc(x, o))) {
+      return { success: false, message: 'ไม่พบสถานที่ "' + o + '" ในระบบ' };
+    }
+    // ชื่อใหม่ชนกับสถานที่อื่นที่มีอยู่ = ควบรวม (ยกเว้นเป็นชื่อเดียวกันกับของเดิมที่แค่แก้ตัวพิมพ์/ช่องว่าง)
+    const merged = !sameLoc(o, n) && (list.some((x) => sameLoc(x, n)) || items.some((e) => sameLoc(e['ที่เก็บ'], n)));
+    const finalName = merged ? (list.find((x) => sameLoc(x, n)) || normLoc((items.find((e) => sameLoc(e['ที่เก็บ'], n)) || {})['ที่เก็บ']) || n) : n;
+
+    let updated = 0;
+    for (let i = 0; i < affected.length; i += 10) {
+      await Promise.all(
+        affected.slice(i, i + 10).map(async (item) => {
+          const id = String(item['รหัส'] || item.id || item._id || '').trim();
+          if (!id) return;
+          const doc = { ...item, 'ที่เก็บ': finalName };
+          delete doc._row;
+          await setDoc(SHEETS.EQUIPMENT, id, doc);
+          updated++;
+        })
+      );
+    }
+    await writeLocations(list.filter((x) => !sameLoc(x, o)).concat(finalName));
+    await logAudit('แก้ไขสถานที่จัดเก็บ', 'admin', o + ' -> ' + finalName + ' (อัปเดตอุปกรณ์ ' + updated + ' รายการ' + (merged ? ', ควบรวม' : '') + ')');
+    return { success: true, name: finalName, updated, merged };
+  } catch (err) {
+    return { success: false, message: err.message };
+  }
+}
+
+// ลบได้เฉพาะสถานที่ที่ไม่มีอุปกรณ์ใช้อยู่ (กันอุปกรณ์กลายเป็นไม่มีที่เก็บโดยไม่ตั้งใจ)
+async function deleteEquipmentLocation(name, adminCode) {
+  if (!verifyAdmin(adminCode)) return { success: false, message: 'ไม่มีสิทธิ์ดำเนินการ' };
+  try {
+    const n = normLoc(name);
+    if (!n) return { success: false, message: 'ไม่พบชื่อสถานที่' };
+    const items = await listDocs(SHEETS.EQUIPMENT);
+    const using = items.filter((e) => sameLoc(e['ที่เก็บ'], n)).length;
+    if (using) return { success: false, message: 'ลบไม่ได้: ยังมีอุปกรณ์ ' + using + ' รายการใช้สถานที่นี้อยู่ (ย้ายหรือเปลี่ยนชื่อก่อน)' };
+    const list = await readLocations();
+    if (!list.some((x) => sameLoc(x, n))) return { success: false, message: 'ไม่พบสถานที่ "' + n + '" ในรายการ' };
+    await writeLocations(list.filter((x) => !sameLoc(x, n)));
+    await logAudit('ลบสถานที่จัดเก็บ', 'admin', n);
+    return { success: true };
+  } catch (err) {
+    return { success: false, message: err.message };
+  }
+}
+
+module.exports = {
+  getEquipment, getEquipmentCategories, saveEquipment, deleteEquipment, uploadEquipmentPhoto,
+  addEquipmentLocation, renameEquipmentLocation, deleteEquipmentLocation,
+};

@@ -14,7 +14,10 @@ const { saveVehicle, deleteVehicle } = require('./handlers/vehicles');
 const { saveUsage, returnVehicle } = require('./handlers/usage');
 const { saveMaintenance, deleteMaintenance } = require('./handlers/maintenance');
 const { saveFuel, deleteFuel } = require('./handlers/fuel');
-const { getEquipment, getEquipmentCategories, saveEquipment, deleteEquipment, uploadEquipmentPhoto } = require('./handlers/equipment');
+const {
+  getEquipment, getEquipmentCategories, saveEquipment, deleteEquipment, uploadEquipmentPhoto,
+  addEquipmentLocation, renameEquipmentLocation, deleteEquipmentLocation,
+} = require('./handlers/equipment');
 const {
   getBorrowing,
   saveBorrowing,
@@ -83,6 +86,9 @@ const API_WHITELIST = {
   saveEquipment,
   deleteEquipment,
   uploadEquipmentPhoto,
+  addEquipmentLocation,
+  renameEquipmentLocation,
+  deleteEquipmentLocation,
 
   // Borrowing
   getBorrowing,

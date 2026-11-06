@@ -5447,7 +5447,7 @@ input, select, textarea, button {
         const todayCount = fieldItems.filter(e => (e['วันที่บันทึก'] || '').slice(0, 10) === today).length;
         const pendingTag = DATA.equipment.filter(e => e['สถานะป้ายครุภัณฑ์'] === 'ไม่มีป้าย');
         const roomsSurveyed = new Set(fieldItems.map(e => e['ที่เก็บ']).filter(Boolean)).size;
-        const rooms = Array.from(new Set(DATA.equipment.map(e => e['ที่เก็บ']).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'th'));
+        const rooms = eqAllLocations().map(l => l.name);
         const defaultCat = FIELD_SURVEY_STATE.category || (DATA.categories.find(c => (c['ชื่อหมวด'] || '').includes('คอมพิวเตอร์')) || DATA.categories[0] || {})['ชื่อหมวด'] || '';
 
         return `
@@ -5732,7 +5732,7 @@ input, select, textarea, button {
         );
       }
       if (QR_BATCH_STATE.cat) items = items.filter(e => e['หมวดหมู่'] === QR_BATCH_STATE.cat);
-      if (QR_BATCH_STATE.room) items = items.filter(e => e['ที่เก็บ'] === QR_BATCH_STATE.room);
+      if (QR_BATCH_STATE.room) items = items.filter(e => eqNorm(e['ที่เก็บ']).toLowerCase() === eqNorm(QR_BATCH_STATE.room).toLowerCase());
       if (QR_BATCH_STATE.onlyNoTag) items = items.filter(e => !e['รหัสครุภัณฑ์'] || e['สถานะป้ายครุภัณฑ์'] === 'ไม่มีป้าย');
       if (QR_BATCH_STATE.onlySurveyed) items = items.filter(e => e['บันทึกจากการสำรวจภาคสนาม']);
       return items;
@@ -5741,7 +5741,7 @@ input, select, textarea, button {
     function renderQrBatch() {
       const render = () => {
         const items = qbFilteredItems();
-        const rooms = Array.from(new Set(DATA.equipment.map(e => e['ที่เก็บ']).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'th'));
+        const rooms = eqAllLocations().map(l => l.name);
         const selectedCount = QR_BATCH_STATE.selected.size;
 
         return `
