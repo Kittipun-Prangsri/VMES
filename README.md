@@ -53,15 +53,51 @@
   - [SheetJS XLSX](https://sheetjs.com/) (Excel Exporting)
   - [Html5-QRCode](https://github.com/mebjas/html5-qrcode) & QRCode.js (Camera QR Scanning)
 - **Backend & Database**:
-  - **Firebase Cloud Firestore**: Real-time Database Listener (`onSnapshot`)
-  - **Node.js / Vercel API**: Serverless Web API & Webhook Controller (`backend-node/api/line-webhook.js`)
+  - **Supabase (Postgres)**: ตาราง JSONB แบบเอกสาร (`id`, `data`) ต่อ collection — สร้างด้วย `backend-node/supabase-schema.sql` (เปิด RLS ไม่มี policy เข้าถึงได้เฉพาะ service key ฝั่ง server)
+  - **Firebase**: ใช้เฉพาะ Hosting และ Storage (รูปครุภัณฑ์) — ข้อมูลหลักย้ายมา Supabase แล้ว
+  - **Node.js / Vercel API**: JSON-RPC (`/api/rpc`), LINE webhook (`/api/line-webhook`), MOPH ID login, cron ตรวจเกินกำหนด
 - **Hosting & Deployment**:
   - **Firebase Hosting**: [https://vmes.web.app](https://vmes.web.app)
   - **Vercel**: [https://vmes-backend.vercel.app](https://vmes-backend.vercel.app)
 
 ---
 
+## 🧭 โครงสร้างโปรเจกต์
+
+```
+index.html                  หน้าเว็บหลัก (แหล่งจริง — `npm run build` คัดลอกไป public/)
+public/equipment-page.js    หน้าคลังอุปกรณ์: ค้นหา/เรียง/จัดกลุ่ม/แบ่งหน้า, ฟอร์ม, จัดการสถานที่และหมวดหมู่
+public/equipment-labels.js  หน้าต่างพิมพ์ป้ายสติกเกอร์
+public/ptouch-label.js      วาดป้าย + ส่งคำสั่ง raster ไป Brother PT-P710BT (Web Serial/Bluetooth)
+public/handover-page.js     ใบส่งมอบ-รับคืนครุภัณฑ์
+backend-node/api/           endpoint ของ Vercel
+backend-node/lib/handlers/  ตรรกะต่อโมดูล (equipment, categories, equipmentHandover, data, ...)
+backend-node/lib/whitelist.js  รายชื่อฟังก์ชันที่ /api/rpc เรียกได้
+tests/                      เทสต์ (รันด้วย `npm test`)
+```
+
+## 🏷️ หมวดหมู่ครุภัณฑ์และสถานที่จัดเก็บ
+- **หมวดหมู่ผูกกับ 4 หลักแรกของเลขครุภัณฑ์** เช่น `7440-14-0001/31` → `7440` = อุปกรณ์คอมพิวเตอร์และเครื่องพิมพ์ จัดการที่ปุ่ม 🗂️ จัดการหมวดหมู่ (มีปุ่มจัดหมวดอัตโนมัติจากรหัส พร้อมดูตัวอย่างก่อนบันทึก)
+- **สถานที่จัดเก็บ**: จัดการที่ปุ่ม 📍 จัดการสถานที่ (เปลี่ยนชื่อ = อัปเดตอุปกรณ์ทุกชิ้น, ชื่อซ้ำต้องยืนยันก่อนควบรวม)
+- **พิมพ์ป้าย Brother PT-P710BT**: ปุ่ม 🏷️ ในคลัง/หน้าพิมพ์ QR — พิมพ์ผ่านบลูทูธตรง (Chrome/Edge บนคอมพิวเตอร์), ผ่านไดรเวอร์ หรือดาวน์โหลด PNG
+
+## 🔐 มาตรฐานความปลอดภัย
+- สิทธิ์ admin/manager ตัดสินจากบทบาทใน DB ของ session (ไม่มีรหัส admin ฝังในหน้าเว็บ) — ฟังก์ชันฝั่งเขียนทุกตัวตรวจสิทธิ์ที่ server
+- LINE webhook ตรวจ `X-Line-Signature` (ต้องตั้ง `LINE_CHANNEL_SECRET`)
+- `getAllData` ไม่ส่งเลขบัตรประชาชน/LINE/Telegram token ของผู้อื่นและ audit log ให้ผู้ใช้ทั่วไป
+- ใบส่งมอบ: server ตรวจครุภัณฑ์/หน่วยงาน/ลำดับวันที่ และคำนวณสถานะเอง ผู้บันทึกมาจาก session
+
+## 🛠️ พัฒนา ทดสอบ และ deploy
+```bash
+npm test                 # เทสต์ทั้งหมด (backend + ฟังก์ชันล้วนของหน้าเว็บ)
+npm run build            # คัดลอก index.html/liff*.html ไป public/
+npm run deploy           # Firebase Hosting (frontend)
+cd backend-node && vercel deploy --prod   # backend
+```
+ตัวแปร env ของ backend ดู `backend-node/.env.example` (สำคัญ: `SESSION_SECRET`, `LINE_CHANNEL_SECRET`, `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`)
+ลำดับ deploy: backend ก่อน frontend เสมอเมื่อมีฟังก์ชัน backend ใหม่
+
 ## 📄 ใบอนุญาตและการดูแลรักษา (License & Maintenance)
 
 พัฒนาและสงวนลิขสิทธิ์โดย **หน่วยงานสารสนเทศและสุขภาพดิจิทัล**  
-ระบบได้รับการออกแบบให้ทำงานแบบ High-Availability (HA) บน Cloud Infrastructure ของ Firebase และ Vercel
+ระบบรันบน Firebase Hosting, Vercel และ Supabase

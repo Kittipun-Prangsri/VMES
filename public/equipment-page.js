@@ -76,9 +76,17 @@ function eqBuildEntries(items, st) {
     if (!map.has(name)) map.set(name, []);
     map.get(name).push(e);
   });
+  const catKey = (n) => { // จัดกลุ่มตามหมวด: เรียงตามรหัสหมวดก่อน
+    if (st.group !== 'cat') return null;
+    const c = eqCatByName(n);
+    return c && eqCatCode(c) ? eqCatCode(c) : null;
+  };
   const names = Array.from(map.keys()).sort((a, b) => {
     if (a === '(ไม่ระบุ)') return 1;
     if (b === '(ไม่ระบุ)') return -1;
+    const ka = catKey(a), kb = catKey(b);
+    if (ka && kb) return ka.localeCompare(kb);
+    if (ka || kb) return ka ? -1 : 1;
     return a.localeCompare(b, 'th', { numeric: true });
   });
   const out = [];
@@ -101,6 +109,25 @@ function eqPaginate(entries, page, size) {
 
 // ค่าที่ใช้ซ้ำในฟอร์ม: รวมตัวสะกดต่างกันเฉพาะตัวพิมพ์/ช่องว่าง แล้วเลือกแบบที่พบบ่อยสุดเป็นตัวแทน
 function eqNorm(v) { return String(v == null ? '' : v).replace(/\s+/g, ' ').trim(); }
+
+// ---- หมวดหมู่ที่ผูกกับ 4 หลักแรกของเลขครุภัณฑ์ (เช่น 7440-14-0001/31 -> 7440) ----
+const EQ_KNOWN_CODES = { '7440': 'อุปกรณ์คอมพิวเตอร์และเครื่องพิมพ์' }; // ชื่อที่แนะนำตอนสร้างหมวดจากรหัสที่พบ
+function eqTagPrefix(tag) {
+  const m = /^\s*(\d{4})(?!\d)/.exec(String(tag == null ? '' : tag));
+  return m ? m[1] : '';
+}
+function eqCats() { return (typeof DATA !== 'undefined' && DATA && DATA.categories) || []; }
+function eqCatCode(c) { return String((c && c['รหัสหมวด']) || '').trim(); }
+function eqCatByName(name) { const n = eqNorm(name).toLowerCase(); return eqCats().find(c => eqNorm(c['ชื่อหมวด']).toLowerCase() === n); }
+function eqCatByCode(code) { return code ? eqCats().find(c => eqCatCode(c) === code) : undefined; }
+function eqCatLabel(name) { const c = eqCatByName(name); const code = c ? eqCatCode(c) : ''; return code ? code + ' · ' + name : name; }
+// เรียงหมวด: มีรหัสก่อน (ตามเลขรหัส) แล้วตามด้วยหมวดที่ไม่มีรหัส (ตามชื่อ)
+function eqCatCompare(a, b) {
+  const ca = eqCatCode(a), cb = eqCatCode(b);
+  if (ca && cb) return ca.localeCompare(cb);
+  if (ca || cb) return ca ? -1 : 1;
+  return String(a['ชื่อหมวด']).localeCompare(String(b['ชื่อหมวด']), 'th');
+}
 // สถานที่จัดเก็บทั้งหมด = ที่ตั้งไว้ล่วงหน้า (settings.EQUIPMENT_LOCATIONS) + ที่อุปกรณ์ใช้อยู่จริง
 // รวมชื่อที่ต่างแค่ตัวพิมพ์/ช่องว่าง; คืน [{ name, count, inMaster }] เรียงแบบไทย
 function eqMasterLocations() {
@@ -156,6 +183,8 @@ function eqStatusBadge(st) {
   return `<span style="background:#fee2e2; color:#b91c1c; border:1px solid #fecaca; ${base}">🔴 ${esc(st)}</span>`;
 }
 
+let EQ_HO_MAP = new Map(); // ครุภัณฑ์ -> ใบส่งมอบที่ยังไม่รับคืน (คำนวณใหม่ทุกครั้งที่วาดตาราง)
+
 function eqRowHtml(e) {
   const equipKey = (e._row !== undefined && e._row !== null) ? e._row : jsArg(e['รหัส'] || e['รหัสครุภัณฑ์'] || e.id || '');
   const st = e['สถานะ'] || 'พร้อมยืม';
@@ -168,7 +197,7 @@ function eqRowHtml(e) {
                   ${noTag
                     ? `<span style="font-size:11px; font-weight:700; color:#b45309; background:#fffbeb; padding:3px 8px; border-radius:6px; border:1px solid #fde68a;">⚠️ ยังไม่มีป้าย</span>`
                     : `<code style="font-size:13px; font-weight:700; color:#0f766e; background:#f0fdf4; padding:3px 8px; border-radius:6px; border:1px solid #ccfbf1;">${esc(e['รหัสครุภัณฑ์'] || '-')}</code>`}
-                  <div style="font-size:12px; color:#64748b; margin-top:4px;">🏷️ ${esc(e['หมวดหมู่'] || 'ทั่วไป')}</div>
+                  <div style="font-size:12px; color:#64748b; margin-top:4px;">🏷️ ${esc(e['หมวดหมู่'] ? eqCatLabel(e['หมวดหมู่']) : 'ทั่วไป')}</div>
                 </td>
                 <td data-label="ชื่ออุปกรณ์">
                   <div style="display:flex; align-items:center;">
@@ -188,6 +217,7 @@ function eqRowHtml(e) {
                     ${fmt(e['จำนวน'])} <span style="font-size:12px; color:#64748b; font-weight:500;">${esc(e['หน่วยนับ'] || 'เครื่อง')}</span>
                   </div>
                   ${eqStatusBadge(st)}
+                  ${EQ_HO_MAP.get(String(e['รหัส'])) ? `<div style="margin-top:4px;"><a href="javascript:void(0)" onclick="hoJumpToEquipment(${jsArg(e['รหัส'])})" title="ดูใบส่งมอบ ${esc(EQ_HO_MAP.get(String(e['รหัส']))['รหัส'])}" style="font-size:11px; color:#b45309; font-weight:600; text-decoration:none;">📋 ส่งมอบให้ ${esc(EQ_HO_MAP.get(String(e['รหัส']))['ส่งมอบให้หน่วยงาน'] || '-')} ›</a></div>` : ''}
                 </td>
                 <td data-label="ที่เก็บ">
                   <span style="font-size:13px; color:#334155; font-weight:500;">📍 ${esc(e['ที่เก็บ'] || '-')}</span>
@@ -216,7 +246,7 @@ function eqGroupRowHtml(g, continued) {
   }
   return `<tr class="eq-group" onclick="window._efToggleGroup(${jsArg(g.id)})" style="cursor:pointer;">
     <td colspan="6" style="background:#f0fdfa; border-top:2px solid #99f6e4; padding:10px 20px; font-weight:700; color:#0f766e;">
-      <span style="display:inline-block; width:18px;">${g.collapsed ? '▶' : '▼'}</span>${esc(g.name)}
+      <span style="display:inline-block; width:18px;">${g.collapsed ? '▶' : '▼'}</span>${esc(eqState().group === 'cat' ? eqCatLabel(g.name) : g.name)}
       <span style="font-weight:500; color:#64748b; font-size:12px; margin-left:8px;">${fmt(g.count)} รายการ · มูลค่ารวม ${money(g.sum)}</span>
     </td></tr>`;
 }
@@ -255,6 +285,7 @@ function renderEquipment() {
   };
 
   const resultsHtml = (items) => {
+    EQ_HO_MAP = (typeof hoActiveByEquip === 'function') ? hoActiveByEquip() : new Map();
     const entries = eqBuildEntries(items, st);
     const pg = eqPaginate(entries, st.page, st.pageSize);
     st.page = pg.page; // ถูกบีบให้อยู่ในช่วงถ้าข้อมูลลดลง
@@ -326,7 +357,14 @@ function renderEquipment() {
       all.forEach(e => { const v = String(e[field] || '').trim(); if (v) m[v] = (m[v] || 0) + 1; });
       return Object.entries(m).sort((a, b) => a[0].localeCompare(b[0], 'th'));
     };
-    const catList = tally('หมวดหมู่');
+    const catCounts = new Map(tally('หมวดหมู่'));
+    const catList = [];
+    const seenCat = new Set();
+    eqCats().slice().sort(eqCatCompare).forEach(c => {
+      const n = eqNorm(c['ชื่อหมวด']); if (!n || seenCat.has(n.toLowerCase())) return;
+      seenCat.add(n.toLowerCase()); catList.push([n, catCounts.get(n) || 0]);
+    });
+    catCounts.forEach((n, name) => { if (!seenCat.has(eqNorm(name).toLowerCase())) catList.push([name, n]); });
     const locList = eqAllLocations().map(l => [l.name, l.count]);
     const isFiltered = !!(st.text || st.cat || st.status || st.loc);
     const selStyle = 'width:100%; padding:10px 14px; border-radius:10px; border:1px solid #cbd5e1; font-size:14px; outline:none; cursor:pointer; box-sizing:border-box; background:#fff;';
@@ -350,6 +388,7 @@ function renderEquipment() {
             <button class="btn btn-sm" onclick="addEquip()" style="background:#10b981; border:none; color:#fff; font-weight:700; border-radius:10px; padding:8px 14px; box-shadow:0 4px 12px rgba(16,185,129,0.35);">➕ เพิ่มอุปกรณ์ใหม่</button>
             <button class="btn btn-sm" onclick="openImportEquipmentModal()" style="${heroBtn}">📥 นำเข้า</button>
           ` : ''}
+          ${canManageEquipment() ? `<button class="btn btn-sm" onclick="openCategoryManager()" title="จัดการหมวดหมู่ครุภัณฑ์ (ตามรหัส 4 หลักแรก)" style="${heroBtn}">🗂️ จัดการหมวดหมู่</button>` : ''}
           ${canManageEquipment() ? `<button class="btn btn-sm" onclick="openLocationManager()" title="เพิ่ม/แก้ไขสถานที่จัดเก็บ" style="${heroBtn}">📍 จัดการสถานที่</button>` : ''}
           ${isAdmin() ? `<button class="btn btn-sm" onclick="window._efPrintLabels()" title="พิมพ์ป้ายสติกเกอร์ Brother PT-P710BT ของรายการที่กรองอยู่" style="${heroBtn}">🏷️ พิมพ์ป้าย</button>` : ''}
           <button class="btn btn-sm" onclick="exportSheet('อุปกรณ์')" style="${heroBtn}">📊 Export</button>
@@ -392,7 +431,7 @@ function renderEquipment() {
           <div style="flex:1; min-width:160px; max-width:220px;">
             <select id="eSearchCat" onchange="window._ef(undefined, this.value)" style="${selStyle}">
               <option value="">🏷️ ทุกหมวดหมู่ (${catList.length})</option>
-              ${catList.map(([name, n]) => `<option value="${esc(name)}" ${st.cat === name ? 'selected' : ''}>${esc(name)} (${n})</option>`).join('')}
+              ${catList.map(([name, n]) => `<option value="${esc(name)}" ${st.cat === name ? 'selected' : ''}>${esc(eqCatLabel(name))} (${n})</option>`).join('')}
             </select>
           </div>
           <div style="flex:1; min-width:150px; max-width:200px;">
@@ -510,13 +549,14 @@ function equipForm(e) {
   return `
     <div class="form-grid">
       ${sec('📌 ข้อมูลหลัก')}
-      <div class="field"><label>รหัสครุภัณฑ์ (เว้นว่างได้ถ้ายังไม่มีป้าย)</label><input id="e_code" value="${esc(e['รหัสครุภัณฑ์'] || '')}"></div>
+      <div class="field"><label>รหัสครุภัณฑ์ (เว้นว่างได้ถ้ายังไม่มีป้าย)</label><input id="e_code" value="${esc(e['รหัสครุภัณฑ์'] || '')}" oninput="window._eqCodeChanged()"></div>
       <div class="field"><label>ชื่ออุปกรณ์ *</label><input id="e_name" value="${esc(e['ชื่ออุปกรณ์'] || '')}"></div>
-      <div class="field"><label>หมวดหมู่</label>
-        <select id="e_cat">
-          ${(e['หมวดหมู่'] && !DATA.categories.some(c => c['ชื่อหมวด'] === e['หมวดหมู่'])) ? `<option selected>${esc(e['หมวดหมู่'])}</option>` : ''}
-          ${DATA.categories.map(c => `<option ${c['ชื่อหมวด'] === e['หมวดหมู่'] ? 'selected' : ''}>${esc(c['ชื่อหมวด'])}</option>`).join('')}
+      <div class="field"><label>หมวดหมู่ <small style="color:#94a3b8;">(เลือกอัตโนมัติจาก 4 หลักแรกของรหัสครุภัณฑ์)</small></label>
+        <select id="e_cat" onchange="window._eqCatManual()">
+          ${(e['หมวดหมู่'] && !eqCatByName(e['หมวดหมู่'])) ? `<option value="${esc(e['หมวดหมู่'])}" selected>${esc(e['หมวดหมู่'])}</option>` : ''}
+          ${eqCats().slice().sort(eqCatCompare).map(c => `<option value="${esc(c['ชื่อหมวด'])}" ${eqNorm(c['ชื่อหมวด']).toLowerCase() === eqNorm(e['หมวดหมู่']).toLowerCase() ? 'selected' : ''}>${esc(eqCatLabel(c['ชื่อหมวด']))}</option>`).join('')}
         </select>
+        <div id="e_cat_hint" style="font-size:12px; margin-top:4px; min-height:16px;"></div>
       </div>
       <div class="field"><label>สถานะ</label>
         <select id="e_status">
@@ -547,6 +587,29 @@ function equipForm(e) {
     ${eqDatalist('eq_dl_brand', 'ยี่ห้อ')}${eqDatalist('eq_dl_loc', 'ที่เก็บ')}${eqDatalist('eq_dl_unit', 'หน่วยนับ')}
   `;
 }
+
+// กรอกเลขครุภัณฑ์ -> เลือกหมวดให้อัตโนมัติ (เว้นแต่ผู้ใช้เลือกหมวดเองหลังจากนั้น แล้วค่อยแก้รหัสอีกครั้งจึงเลือกใหม่)
+function eqCodeChanged() {
+  const hint = $('e_cat_hint'), sel = $('e_cat');
+  if (!sel || !hint) return;
+  const prefix = eqTagPrefix($('e_code').value);
+  if (!prefix) { hint.textContent = ''; return; }
+  const c = eqCatByCode(prefix);
+  if (!c) { hint.style.color = '#b45309'; hint.textContent = 'ยังไม่มีหมวดสำหรับรหัส ' + prefix + ' — สร้างได้ที่ปุ่ม 🗂️ จัดการหมวดหมู่'; return; }
+  sel.value = c['ชื่อหมวด'];
+  hint.style.color = '#0f766e';
+  hint.textContent = '✓ รหัส ' + prefix + ' = ' + c['ชื่อหมวด'];
+}
+
+function eqCatManual() {
+  const hint = $('e_cat_hint'), sel = $('e_cat');
+  if (!hint || !sel) return;
+  const prefix = eqTagPrefix($('e_code').value);
+  const c = prefix ? eqCatByCode(prefix) : null;
+  if (c && c['ชื่อหมวด'] !== sel.value) { hint.style.color = '#b45309'; hint.textContent = '⚠️ รหัส ' + prefix + ' ตรงกับหมวด "' + c['ชื่อหมวด'] + '" แต่เลือกหมวดอื่น'; }
+  else { hint.textContent = ''; }
+}
+if (typeof window !== 'undefined') { window._eqCodeChanged = eqCodeChanged; window._eqCatManual = eqCatManual; }
 
 function addEquip() {
   if (!canManageEquipment()) return;
@@ -722,6 +785,154 @@ async function deleteLocation(name) {
   } catch (err) { showLoading(false); toast('ผิดพลาด: ' + err.message, 'error'); }
 }
 
+// ------------------------------------------------------------------ 6) จัดการหมวดหมู่ (ผูกกับ 4 หลักแรกของเลขครุภัณฑ์)
+const EQ_CAT_EDIT = { id: '' }; // id ของหมวดที่กำลังแก้ไข ('' = เพิ่มใหม่)
+
+// รหัส 4 หลักที่พบในเลขครุภัณฑ์ของอุปกรณ์ แต่ยังไม่มีหมวดรองรับ
+function eqUnmatchedPrefixes() {
+  const m = new Map();
+  (DATA.equipment || []).forEach(e => {
+    const p = eqTagPrefix(e['รหัสครุภัณฑ์']);
+    if (p && !eqCatByCode(p)) m.set(p, (m.get(p) || 0) + 1);
+  });
+  return Array.from(m.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+}
+
+function eqCatManagerHtml(prefill) {
+  const cats = eqCats().slice().sort(eqCatCompare);
+  const editing = EQ_CAT_EDIT.id ? cats.find(c => (c.id || c._id || c['รหัส']) === EQ_CAT_EDIT.id) : null;
+  const pf = prefill || (editing ? { code: eqCatCode(editing), name: editing['ชื่อหมวด'] } : { code: '', name: '' });
+  const useCount = (c) => (DATA.equipment || []).filter(e => eqNorm(e['หมวดหมู่']).toLowerCase() === eqNorm(c['ชื่อหมวด']).toLowerCase()).length;
+  const unmatched = eqUnmatchedPrefixes();
+  return `
+    <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:12px; margin-bottom:14px;">
+      <div style="font-weight:700; font-size:13px; margin-bottom:8px;">${editing ? '✏️ แก้ไขหมวดหมู่' : '➕ เพิ่มหมวดหมู่ใหม่'}</div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <input id="cat_code" value="${esc(pf.code)}" placeholder="รหัส 4 หลัก เช่น 7440" maxlength="4" inputmode="numeric" style="width:150px; padding:10px 12px; border-radius:10px; border:1px solid #cbd5e1; box-sizing:border-box;">
+        <input id="cat_name" value="${esc(pf.name)}" placeholder="ชื่อหมวด เช่น อุปกรณ์คอมพิวเตอร์และเครื่องพิมพ์" maxlength="100"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();saveCategoryForm();}"
+          style="flex:1; min-width:220px; padding:10px 14px; border-radius:10px; border:1px solid #cbd5e1; box-sizing:border-box;">
+        <button class="btn btn-primary" onclick="saveCategoryForm()" style="white-space:nowrap;">${editing ? '💾 บันทึก' : '➕ เพิ่ม'}</button>
+        ${editing ? `<button class="btn btn-secondary" onclick="cancelCategoryEdit()">ยกเลิก</button>` : ''}
+      </div>
+      <div style="font-size:12px; color:#64748b; margin-top:6px;">รหัสหมวด = 4 ตัวแรกของเลขครุภัณฑ์ เช่น <b>7440</b>-14-0001/31 · เว้นรหัสว่างได้ถ้าไม่ต้องการผูกอัตโนมัติ${editing ? ' · การเปลี่ยนชื่อจะอัปเดตอุปกรณ์ในหมวดนี้ให้ด้วย' : ''}</div>
+    </div>
+
+    ${unmatched.length ? `
+    <div style="background:#fffbeb; border:1px solid #fde68a; border-radius:12px; padding:12px; margin-bottom:14px;">
+      <div style="font-weight:700; font-size:13px; color:#b45309; margin-bottom:6px;">⚠️ พบรหัสในเลขครุภัณฑ์ที่ยังไม่มีหมวดรองรับ</div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        ${unmatched.map(([code, n]) => `<button class="btn btn-sm btn-secondary" onclick="prefillCategory(${jsArg(code)})" title="กดเพื่อสร้างหมวดสำหรับรหัสนี้">${esc(code)} <span style="color:#64748b;">(${fmt(n)} ชิ้น)</span> ➕</button>`).join('')}
+      </div>
+    </div>` : ''}
+
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:8px;">
+      <div style="font-weight:700; font-size:13px;">หมวดหมู่ทั้งหมด (${cats.length})</div>
+      <button class="btn btn-sm btn-info" onclick="autoAssignCategories()" title="ตั้งหมวดของอุปกรณ์ตามรหัส 4 หลักแรกของเลขครุภัณฑ์">🪄 จัดหมวดอัตโนมัติจากรหัสครุภัณฑ์</button>
+    </div>
+    <div class="table-wrap" style="max-height:40vh; overflow:auto;">
+      <table>
+        <thead><tr><th style="width:110px;">รหัสหมวด</th><th>ชื่อหมวดหมู่</th><th style="text-align:center; width:90px;">อุปกรณ์</th><th style="text-align:center; width:120px;">จัดการ</th></tr></thead>
+        <tbody>${cats.map(c => {
+          const id = c.id || c._id || c['รหัส'] || '';
+          const n = useCount(c);
+          return `<tr>
+            <td data-label="รหัสหมวด">${eqCatCode(c) ? `<code style="font-weight:700; color:#0f766e;">${esc(eqCatCode(c))}</code>` : '<span style="color:#cbd5e1;">—</span>'}</td>
+            <td data-label="ชื่อหมวด">${esc(c['ชื่อหมวด'])}</td>
+            <td data-label="อุปกรณ์" style="text-align:center;">${fmt(n)}</td>
+            <td data-label="จัดการ" style="text-align:center;">
+              <button class="btn btn-sm btn-secondary" onclick="editCategory(${jsArg(id)})" ${id ? '' : 'disabled title="หมวดนี้ไม่มีรหัสอ้างอิงในระบบ แก้ไขไม่ได้"'} style="padding:4px 8px;">✏️</button>
+              <button class="btn btn-sm btn-danger" onclick="deleteCategory(${jsArg(id)}, ${jsArg(c['ชื่อหมวด'])})" ${(!id || n) ? `disabled title="${n ? 'มีอุปกรณ์ใช้อยู่ ลบไม่ได้' : 'ไม่มีรหัสอ้างอิงในระบบ'}"` : 'title="ลบ"'} style="padding:4px 8px;">🗑️</button>
+            </td></tr>`;
+        }).join('') || '<tr><td colspan="4" style="text-align:center; padding:24px; color:#94a3b8;">ยังไม่มีหมวดหมู่</td></tr>'}
+        </tbody>
+      </table>
+    </div>`;
+}
+
+function openCategoryManager() {
+  if (!canManageEquipment()) return;
+  EQ_CAT_EDIT.id = '';
+  openModal('🗂️ จัดการหมวดหมู่ครุภัณฑ์', eqCatManagerHtml(), null, true);
+}
+
+function eqCatRepaint(prefill) {
+  const box = document.getElementById('modalBody');
+  if (box) box.innerHTML = eqCatManagerHtml(prefill);
+}
+
+function prefillCategory(code) {
+  EQ_CAT_EDIT.id = '';
+  eqCatRepaint({ code, name: EQ_KNOWN_CODES[code] || '' });
+  const el = $(EQ_KNOWN_CODES[code] ? 'cat_code' : 'cat_name');
+  if (el) el.focus();
+}
+function editCategory(id) { EQ_CAT_EDIT.id = id; eqCatRepaint(); const n = $('cat_name'); if (n) n.focus(); }
+function cancelCategoryEdit() { EQ_CAT_EDIT.id = ''; eqCatRepaint(); }
+
+async function saveCategoryForm() {
+  const code = String($('cat_code').value || '').trim();
+  const name = eqNorm($('cat_name').value);
+  if (!name) { toast('กรุณาระบุชื่อหมวดหมู่', 'warning'); return; }
+  if (code && !/^\d{4}$/.test(code)) { toast('รหัสหมวดต้องเป็นตัวเลข 4 หลัก เช่น 7440', 'warning'); return; }
+  showLoading(true);
+  try {
+    const r = await callApi('saveEquipmentCategory', { id: EQ_CAT_EDIT.id, name, code }, ADMIN_PASS);
+    showLoading(false);
+    if (!r.success) { toast(r.message, 'error'); return; }
+    // ปรับสำเนาในหน่วยความจำให้ตรงทันที
+    const prev = DATA.categories.find(c => (c.id || c._id || c['รหัส']) === r.id);
+    if (prev) {
+      const oldName = prev['ชื่อหมวด'];
+      DATA.equipment.forEach(e => { if (eqNorm(e['หมวดหมู่']).toLowerCase() === eqNorm(oldName).toLowerCase()) e['หมวดหมู่'] = r.name; });
+      prev['ชื่อหมวด'] = r.name;
+      if (r.code) prev['รหัสหมวด'] = r.code; else delete prev['รหัสหมวด'];
+    } else {
+      DATA.categories.push(Object.assign({ id: r.id, 'ชื่อหมวด': r.name }, r.code ? { 'รหัสหมวด': r.code } : {}));
+    }
+    if (window.EQUIPMENT_FILTER_STATE && prev && window.EQUIPMENT_FILTER_STATE.cat) window.EQUIPMENT_FILTER_STATE.cat = ''; // ชื่อเปลี่ยน ล้างตัวกรองเดิมกันค้าง
+    toast(EQ_CAT_EDIT.id ? 'บันทึกแล้ว' + (r.updated ? ' · อัปเดตอุปกรณ์ ' + r.updated + ' รายการ' : '') : 'เพิ่มหมวด "' + r.name + '" แล้ว');
+    EQ_CAT_EDIT.id = '';
+    eqCatRepaint();
+    if (typeof refreshData === 'function') refreshData();
+  } catch (err) { showLoading(false); toast('ผิดพลาด: ' + err.message, 'error'); }
+}
+
+async function deleteCategory(id, name) {
+  if (!confirm('ลบหมวดหมู่ "' + name + '" ?')) return;
+  showLoading(true);
+  try {
+    const r = await callApi('deleteEquipmentCategory', id, ADMIN_PASS);
+    showLoading(false);
+    if (!r.success) { toast(r.message, 'error'); return; }
+    DATA.categories = DATA.categories.filter(c => (c.id || c._id || c['รหัส']) !== id);
+    toast('ลบหมวด "' + name + '" แล้ว');
+    eqCatRepaint();
+    if (typeof refreshData === 'function') refreshData();
+  } catch (err) { showLoading(false); toast('ผิดพลาด: ' + err.message, 'error'); }
+}
+
+// จัดหมวดอัตโนมัติ: ดูตัวอย่างก่อน (ยังไม่แก้ข้อมูล) แล้วถามยืนยัน
+async function autoAssignCategories() {
+  showLoading(true);
+  try {
+    const pv = await callApi('assignEquipmentCategoriesByCode', false, ADMIN_PASS);
+    showLoading(false);
+    if (!pv.success) { toast(pv.message, 'error'); return; }
+    if (!pv.count) { toast('อุปกรณ์ทุกชิ้นที่มีรหัสตรงกับหมวด อยู่ในหมวดที่ถูกต้องแล้ว'); return; }
+    const sample = pv.items.slice(0, 8).map(x => '• ' + (x.tag || '') + ' ' + (x.name || '') + '\n   ' + (x.from || '(ไม่มีหมวด)') + ' → ' + x.to).join('\n');
+    const ok = confirm('จะปรับหมวดหมู่ของอุปกรณ์ ' + pv.count + ' รายการ ตามรหัส 4 หลักแรกของเลขครุภัณฑ์\n\nตัวอย่าง:\n' + sample + (pv.count > 8 ? '\n... และอีก ' + (pv.count - 8) + ' รายการ' : '') + '\n\nอุปกรณ์ที่รหัสไม่ตรงกับหมวดใดจะไม่ถูกแตะ\nต้องการดำเนินการหรือไม่?');
+    if (!ok) return;
+    showLoading(true);
+    const r = await callApi('assignEquipmentCategoriesByCode', true, ADMIN_PASS);
+    showLoading(false);
+    if (!r.success) { toast(r.message, 'error'); return; }
+    toast('ปรับหมวดหมู่อุปกรณ์ ' + r.updated + ' รายการแล้ว');
+    if (typeof refreshData === 'function') refreshData();
+    setTimeout(() => eqCatRepaint(), 600); // รอข้อมูลรีเฟรชแล้ววาดจำนวนอุปกรณ์ต่อหมวดใหม่
+  } catch (err) { showLoading(false); toast('ผิดพลาด: ' + err.message, 'error'); }
+}
+
 if (typeof module === 'object' && module.exports) {
-  module.exports = { eqFilter, eqSort, eqBuildEntries, eqPaginate, eqNorm, EQ_STATE_DEFAULT };
+  module.exports = { eqFilter, eqSort, eqBuildEntries, eqPaginate, eqNorm, eqTagPrefix, EQ_STATE_DEFAULT };
 }
