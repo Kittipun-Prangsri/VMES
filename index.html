@@ -4992,6 +4992,31 @@ input, select, textarea, button {
       if (pk && !pk.contains(ev.target)) { const l = $('ho_equipList'); if (l) l.style.display = 'none'; }
     });
 
+    // รายชื่อเจ้าหน้าที่จากตารางผู้ใช้งาน (ตัดบัญชีที่ระงับ/รออนุมัติ และชื่อซ้ำ) — คนในหน่วยงานที่เลือกขึ้นก่อน
+    function hoStaffList(dept) {
+      const seen = new Set();
+      const list = (DATA.users || []).filter(u => {
+        const name = String(u['ชื่อ-นามสกุล'] || '').replace(/\s+/g, ' ').trim();
+        const st = String(u['สถานะ'] || '').trim();
+        if (!name || ['ระงับ', 'ไม่ใช้งาน', 'รออนุมัติ'].includes(st) || seen.has(name)) return false;
+        seen.add(name);
+        return true;
+      }).map(u => ({
+        name: String(u['ชื่อ-นามสกุล']).replace(/\s+/g, ' ').trim(),
+        dept: String(u['หน่วยงาน'] || '').trim(),
+        pos: String(u['ตำแหน่ง'] || '').trim(),
+      }));
+      const inDept = (x) => dept && x.dept === dept ? 0 : 1;
+      return list.sort((a, b) => inDept(a) - inDept(b) || a.name.localeCompare(b.name, 'th'));
+    }
+    function hoStaffOptions(dept) {
+      return hoStaffList(dept).map(x => `<option value="${esc(x.name)}" label="${esc([x.pos, x.dept].filter(Boolean).join(' · '))}"></option>`).join('');
+    }
+    window._hoStaffRefresh = () => {
+      const dl = $('ho_staff_list');
+      if (dl) dl.innerHTML = hoStaffOptions($('ho_dept').value);
+    };
+
     function hoFindEquip(id) {
       return DATA.equipment.find(e => String(e['รหัส']) === String(id));
     }
@@ -5028,12 +5053,15 @@ input, select, textarea, button {
       <div class="field"><label>สเปค/ยี่ห้อ-Serial</label><input id="ho_spec" value="${esc(h['สเปค'] || '')}"></div>
       <div class="field"><label>ราคา</label><input id="ho_price" type="number" value="${esc(h['ราคา'] || 0)}"></div>
       <div class="field"><label>ส่งมอบให้หน่วยงาน *</label>
-        <select id="ho_dept">
+        <select id="ho_dept" onchange="window._hoStaffRefresh()">
           <option value="">-- เลือกหน่วยงาน --</option>
           ${DATA.departments.map(d => `<option ${d['ชื่อหน่วยงาน'] === h['ส่งมอบให้หน่วยงาน'] ? 'selected' : ''}>${esc(d['ชื่อหน่วยงาน'])}</option>`).join('')}
         </select>
       </div>
-      <div class="field"><label>ผู้รับผิดชอบ</label><input id="ho_responsible" value="${esc(h['ผู้รับผิดชอบ'] || '')}"></div>
+      <div class="field"><label>ผู้รับผิดชอบ <small style="color:#94a3b8;">(เลือกจากรายชื่อเจ้าหน้าที่ หรือพิมพ์เอง)</small></label>
+        <input id="ho_responsible" list="ho_staff_list" autocomplete="off" placeholder="พิมพ์ชื่อเพื่อค้นหา..." value="${esc(h['ผู้รับผิดชอบ'] || '')}">
+        <datalist id="ho_staff_list">${hoStaffOptions(h['ส่งมอบให้หน่วยงาน'])}</datalist>
+      </div>
       <div class="field"><label>ใช้งานครั้งที่</label><input id="ho_useNo" type="number" value="${esc(h['ใช้งานครั้งที่'] || 1)}"></div>
       <div class="field"><label>วันที่ใช้งานครั้งแรก</label><input id="ho_firstUseDate" type="date" value="${esc(h['วันที่ใช้งานครั้งแรก'] || today)}"></div>
     </div>
