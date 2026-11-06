@@ -3,7 +3,7 @@
 
 const { SHEETS, setDoc, deleteDoc, listDocs } = require('../firestore');
 const { newId, todayStr } = require('../util');
-const { verifyAdmin } = require('../auth');
+const { verifyAdmin, getSessionUser } = require('../auth');
 
 async function getDrivers() {
   return listDocs(SHEETS.DRIVERS);
@@ -24,7 +24,7 @@ async function deleteDriver(code, adminCode, reason) {
   if (!verifyAdmin(adminCode)) return { success: false, message: 'ต้องเป็น Admin' };
   const docId = String(code);
   await deleteDoc(SHEETS.DRIVERS, docId);
-  await logAudit('ลบพนักงานขับรถ', adminCode, 'รหัส: ' + docId + (reason ? ' | เหตุผล: ' + reason : ''));
+  await logAudit('ลบพนักงานขับรถ', ((await getSessionUser(this && this.session)) || {}).name || 'admin', 'รหัส: ' + docId + (reason ? ' | เหตุผล: ' + reason : ''));
   return { success: true };
 }
 

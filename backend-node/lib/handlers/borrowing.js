@@ -4,7 +4,7 @@
 
 const { SHEETS, setDoc, deleteDoc, getDoc, listDocs } = require('../firestore');
 const { newId, nowStr, todayStr, logAudit } = require('../util');
-const { verifyAdmin } = require('../auth');
+const { verifyAdmin, getSessionUser } = require('../auth');
 const { sendBorrowingFlex } = require('../line');
 const { getEquipment } = require('./equipment');
 const { getUsers } = require('./users');
@@ -359,7 +359,7 @@ async function deleteBorrowing(code, adminCode, reason) {
   if (!verifyAdmin(adminCode)) return { success: false, message: 'ต้องเป็น Admin' };
   const item = await getDoc(SHEETS.BORROWING, String(code));
   await deleteDoc(SHEETS.BORROWING, String(code));
-  await logAudit('ลบรายการยืมอุปกรณ์', adminCode, 'รหัส: ' + code + (reason ? ' | เหตุผล: ' + reason : '') + (item ? ' (' + item['ผู้ขอยืม'] + ')' : ''));
+  await logAudit('ลบรายการยืมอุปกรณ์', ((await getSessionUser(this && this.session)) || {}).name || 'admin', 'รหัส: ' + code + (reason ? ' | เหตุผล: ' + reason : '') + (item ? ' (' + item['ผู้ขอยืม'] + ')' : ''));
   return { success: true };
 }
 

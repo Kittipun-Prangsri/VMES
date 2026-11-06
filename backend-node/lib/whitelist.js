@@ -8,7 +8,8 @@
 
 const { login, changeUserPassword, updateUserProfile } = require('./auth');
 const { getMophSession } = require('./mophLogin');
-const { getAllData, syncFromFirebase } = require('./firestore');
+const { syncFromFirebase } = require('./firestore');
+const { getAllData } = require('./handlers/data');
 const { getBootstrapInfo, saveSystemSettings, setupSystem } = require('./handlers/settings');
 const { saveVehicle, deleteVehicle } = require('./handlers/vehicles');
 const { saveUsage, returnVehicle } = require('./handlers/usage');
@@ -30,6 +31,7 @@ const {
   requestReturnViaLiff,
 } = require('./handlers/borrowing');
 const { saveUser, deleteUser, requestPasswordResetNotification, autoLinkLineUser, bindLineByCitizenId, getLiffUserProfile, registerLiffUser } = require('./handlers/users');
+const { saveEquipmentCategory, deleteEquipmentCategory, assignEquipmentCategoriesByCode } = require('./handlers/categories');
 const { saveDriver, deleteDriver } = require('./handlers/drivers');
 const { saveBooking, approveBooking, updateBookingStatus, deleteBooking, getLiffBookingInfo, saveLiffBooking, cancelLiffBooking } = require('./handlers/booking');
 const { saveInspection, deleteInspection } = require('./handlers/inspection');
@@ -89,6 +91,9 @@ const API_WHITELIST = {
   addEquipmentLocation,
   renameEquipmentLocation,
   deleteEquipmentLocation,
+  saveEquipmentCategory,
+  deleteEquipmentCategory,
+  assignEquipmentCategoriesByCode,
 
   // Borrowing
   getBorrowing,

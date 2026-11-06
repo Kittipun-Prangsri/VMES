@@ -145,7 +145,7 @@ async function deleteBooking(code, adminCode, reason) {
   if (!verifyAdmin(adminCode)) return { success: false, message: 'ต้องเป็น Admin' };
   const item = await getDoc(SHEETS.BOOKING, String(code));
   await deleteDoc(SHEETS.BOOKING, String(code));
-  await logAudit('ลบการจองรถ', adminCode, 'รหัส: ' + code + (reason ? ' | เหตุผล: ' + reason : '') + (item ? ' (' + item['ทะเบียน'] + ')' : ''));
+  await logAudit('ลบการจองรถ', ((await getSessionUser(this && this.session)) || {}).name || 'admin', 'รหัส: ' + code + (reason ? ' | เหตุผล: ' + reason : '') + (item ? ' (' + item['ทะเบียน'] + ')' : ''));
   return { success: true };
 }
 

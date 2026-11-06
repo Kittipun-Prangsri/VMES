@@ -4,7 +4,7 @@
 
 const { SHEETS, setDoc, deleteDoc, getDoc, listDocs } = require('../firestore');
 const { newId, todayStr, nowStr, logAudit, SYSTEM_NAME } = require('../util');
-const { verifyAdmin } = require('../auth');
+const { verifyAdmin, getSessionUser } = require('../auth');
 const { sendLineFlex } = require('../line');
 
 async function getUsers() {
@@ -147,7 +147,8 @@ async function deleteUser(code, adminCode, reason) {
   const userObj = await getDoc(SHEETS.USERS, docId);
   await deleteDoc(SHEETS.USERS, docId);
   await deleteDoc('userCredentials', docId);
-  await logAudit('ลบผู้ใช้งาน', adminCode, 'รหัส: ' + docId + (userObj ? ' (' + userObj['ชื่อ-นามสกุล'] + ')' : '') + (reason ? ' | เหตุผล: ' + reason : ''));
+  const me = await getSessionUser(this && this.session);
+  await logAudit('ลบผู้ใช้งาน', (me && me.name) || 'admin', 'รหัส: ' + docId + (userObj ? ' (' + userObj['ชื่อ-นามสกุล'] + ')' : '') + (reason ? ' | เหตุผล: ' + reason : ''));
   return { success: true };
 }
 
