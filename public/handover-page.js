@@ -24,14 +24,15 @@ function hoEquipPicker(h) {
   <div id="ho_picker" style="position:relative;">
     <input type="hidden" id="ho_equipId" value="${esc(h.equipId || '')}">
     <input id="ho_equipSearch" autocomplete="off" placeholder="🔍 พิมพ์เพื่อค้นหาครุภัณฑ์..." value="${esc(text)}"
-      oninput="window._hoPickType()" onfocus="window._hoPickOpen()" onkeydown="window._hoPickKey(event)"
+      oninput="window._hoPickType()" onfocus="window._hoPickOpen()" onblur="window._hoPickBlur()" onkeydown="window._hoPickKey(event)"
       style="width:100%; padding-right:34px; box-sizing:border-box;">
     <button type="button" onclick="window._hoPickClear()" title="ล้าง" style="position:absolute; right:6px; top:6px; border:none; background:transparent; cursor:pointer; font-size:14px; color:#94a3b8;">✕</button>
+    <div id="ho_pick_status" style="font-size:12px; margin-top:4px; min-height:16px; color:${h.equipId ? '#15803d' : '#64748b'};">${h.equipId ? '✓ เลือกครุภัณฑ์แล้ว' : 'ยังไม่ได้เลือก — พิมพ์ค้นหาแล้วคลิกรายการ (หรือใช้ลูกศร ↑↓ แล้วกด Enter)'}</div>
     <div id="ho_equipList" style="display:none; position:absolute; left:0; right:0; top:100%; z-index:50; max-height:280px; overflow:auto; background:#fff; border:1px solid #cbd5e1; border-radius:10px; box-shadow:0 8px 24px rgba(0,0,0,.15); margin-top:4px;"></div>
   </div>`;
 }
 
-const HO_PICK = { active: -1, shown: [], activeHo: new Map() };
+const HO_PICK = { active: -1, shown: [], activeHo: new Map(), query: '' };
 
 function hoPickRender(query) {
   const q = String(query || '').trim().toLowerCase();
@@ -40,18 +41,19 @@ function hoPickRender(query) {
   const all = DATA.equipment.filter(e => !words.length || words.every(w => fields.some(f => String(e[f] ?? '').toLowerCase().includes(w))));
   const LIMIT = 50;
   HO_PICK.activeHo = hoActiveByEquip();
+  HO_PICK.query = q;
   HO_PICK.shown = all.slice(0, LIMIT);
-  HO_PICK.active = HO_PICK.shown.length ? 0 : -1;
+  HO_PICK.active = -1; // ไม่เลือกรายการแรกให้เอง — ต้องใช้ลูกศร/เมาส์ชี้จริง/คลิก จึงจะมีรายการที่ไฮไลต์
   const list = $('ho_equipList');
   if (!list) return;
   list.innerHTML = HO_PICK.shown.map((e, i) => `
-    <div class="ho-opt" data-i="${i}" onmousedown="event.preventDefault(); window._hoPickChoose(${i})" onmouseover="window._hoPickHover(${i})"
+    <div class="ho-opt" data-i="${i}" onmousedown="event.preventDefault(); window._hoPickChoose(${i})" onmousemove="window._hoPickHover(${i})"
       style="padding:8px 12px; cursor:pointer; border-bottom:1px solid #f1f5f9;">
       <div style="font-size:13px; font-weight:600; color:#0f172a;">${esc(e['รหัสครุภัณฑ์'] || e['รหัส'])} <span style="font-weight:500;">— ${esc(e['ชื่ออุปกรณ์'])}</span></div>
       <div style="font-size:11px; color:#64748b;">${esc([e['ยี่ห้อ'], e['รุ่น']].filter(Boolean).join(' '))}${e['Serial'] ? ' · S/N ' + esc(e['Serial']) : ''}${e['ที่เก็บ'] ? ' · 📍 ' + esc(e['ที่เก็บ']) : ''}</div>
       ${HO_PICK.activeHo.get(String(e['รหัส'])) ? `<div style="font-size:11px; color:#b45309; font-weight:600;">📋 ส่งมอบให้ ${esc(HO_PICK.activeHo.get(String(e['รหัส']))['ส่งมอบให้หน่วยงาน'] || '-')} แล้ว (ยังไม่รับคืน)</div>` : ''}
     </div>`).join('') + (all.length > LIMIT ? `<div style="padding:8px 12px; font-size:12px; color:#64748b; background:#f8fafc;">แสดง ${LIMIT} จาก ${all.length} รายการ — พิมพ์เพิ่มเพื่อกรองให้แคบลง</div>` : '')
-    || '<div style="padding:12px; font-size:13px; color:#64748b;">ไม่พบครุภัณฑ์ที่ตรงกับคำค้นหา</div>';
+    || `<div style="padding:12px; font-size:13px; color:#b45309;">ไม่พบครุภัณฑ์ที่ตรงกับ “${esc(String(query || '').trim())}” — ถ้ายังไม่มีในคลัง ต้องเพิ่มครุภัณฑ์ในเมนูคลังอุปกรณ์ก่อน</div>`;
   hoPickHighlight();
 }
 
@@ -63,6 +65,13 @@ function hoPickHighlight() {
   });
 }
 
+function hoPickStatus(kind, text) {
+  const el = $('ho_pick_status'), inp = $('ho_equipSearch');
+  if (!el) return;
+  el.textContent = text;
+  el.style.color = kind === 'ok' ? '#15803d' : kind === 'warn' ? '#b45309' : '#64748b';
+  if (inp) inp.style.borderColor = kind === 'warn' ? '#f59e0b' : '';
+}
 window._hoPickOpen = () => {
   const inp = $('ho_equipSearch');
   // ถ้าเลือกไว้แล้ว ให้แสดงรายการทั้งหมดตอนโฟกัส แทนที่จะกรองด้วยข้อความที่เลือกไว้
@@ -74,35 +83,60 @@ window._hoPickType = () => {
   $('ho_equipId').value = ''; // พิมพ์ใหม่ = ยังไม่ได้เลือก กันค่าเก่าค้างไม่ตรงกับข้อความ
   hoPickRender($('ho_equipSearch').value);
   $('ho_equipList').style.display = '';
+  hoPickStatus('', 'ยังไม่ได้เลือก — คลิกรายการด้านล่างเพื่อเลือก (หรือใช้ลูกศร ↑↓ แล้วกด Enter)');
 };
-window._hoPickHover = (i) => { HO_PICK.active = i; hoPickHighlight(); };
+// ออกจากช่องโดยมีข้อความแต่ยังไม่ได้เลือกรายการ = เตือนชัดๆ (ข้อความที่พิมพ์ค้างไว้ไม่ใช่การเลือก)
+window._hoPickBlur = () => {
+  setTimeout(() => {
+    const inp = $('ho_equipSearch');
+    if (!inp || $('ho_equipId').value) return;
+    if (inp.value.trim()) hoPickStatus('warn', '⚠️ ยังไม่ได้เลือกครุภัณฑ์จากรายการ — ข้อความที่พิมพ์ไว้ยังไม่ถูกนับเป็นการเลือก');
+  }, 150);
+};
+window._hoPickHover = (i) => { if (HO_PICK.active !== i) { HO_PICK.active = i; hoPickHighlight(); } };
 window._hoPickChoose = (i) => {
   const e = HO_PICK.shown[i];
   if (!e) return;
   $('ho_equipId').value = e['รหัส'];
   $('ho_equipSearch').value = hoEquipLabel(e);
   $('ho_equipList').style.display = 'none';
-  hoEquipChange();
+  hoEquipChange(e); // ใช้รายการที่เลือกจริง ไม่ค้นซ้ำจากรหัส
+  hoPickStatus('ok', '✓ เลือกครุภัณฑ์แล้ว: ' + hoEquipLabel(e));
   const act = hoActiveByEquip().get(String(e['รหัส']));
   if (act && String(act['รหัส']) !== String(HO_EDITING.id)) toast('ครุภัณฑ์ชิ้นนี้ยังอยู่ระหว่างส่งมอบให้ ' + (act['ส่งมอบให้หน่วยงาน'] || '-') + ' (ใบ ' + act['รหัส'] + ') — ตรวจสอบก่อนสร้างใบใหม่', 'warning');
 };
 window._hoPickClear = () => {
   $('ho_equipId').value = '';
   $('ho_equipSearch').value = '';
+  hoPickStatus('', 'ยังไม่ได้เลือก — พิมพ์ค้นหาแล้วคลิกรายการ');
   $('ho_equipSearch').focus();
 };
 window._hoPickKey = (ev) => {
   const list = $('ho_equipList');
+  const open = list.style.display !== 'none';
   if (ev.key === 'Escape') { list.style.display = 'none'; return; }
   if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
     ev.preventDefault();
-    if (list.style.display === 'none') window._hoPickOpen();
+    if (!open) window._hoPickOpen();
     const n = HO_PICK.shown.length;
-    if (n) HO_PICK.active = (HO_PICK.active + (ev.key === 'ArrowDown' ? 1 : -1) + n) % n;
+    if (n) {
+      const d = ev.key === 'ArrowDown' ? 1 : -1;
+      HO_PICK.active = HO_PICK.active < 0 ? (d > 0 ? 0 : n - 1) : (HO_PICK.active + d + n) % n;
+    }
     hoPickHighlight();
-  } else if (ev.key === 'Enter' && list.style.display !== 'none') {
-    ev.preventDefault();
-    if (HO_PICK.active >= 0) window._hoPickChoose(HO_PICK.active);
+  } else if (ev.key === 'Enter') {
+    ev.preventDefault(); // กัน Enter ไปกดปุ่ม/ส่งฟอร์ม
+    if (!open) return;
+    // Enter เลือกให้เฉพาะเมื่อ "ชัดเจน": ผู้ใช้ไฮไลต์เอง / เหลือผลลัพธ์เดียว / พิมพ์เลขครุภัณฑ์ตรงเป๊ะ
+    let idx = HO_PICK.active;
+    if (idx < 0 && HO_PICK.shown.length === 1) idx = 0;
+    if (idx < 0) {
+      const q = eqNorm($('ho_equipSearch').value).toLowerCase();
+      const exact = q ? HO_PICK.shown.findIndex(e => eqNorm(e['รหัสครุภัณฑ์']).toLowerCase() === q || String(e['รหัส']).toLowerCase() === q) : -1;
+      if (exact >= 0) idx = exact;
+    }
+    if (idx >= 0) window._hoPickChoose(idx);
+    else toast('ยังมีหลายรายการที่ตรงกับคำค้น — คลิกเลือก หรือกดลูกศร ↑↓ เพื่อเลือกรายการที่ต้องการ', 'warning');
   }
 };
 // คลิกนอกช่องค้นหา = ปิดรายการ
@@ -163,13 +197,13 @@ function hoChecklistRows(prefix, h) {
   return rows.map(r => `
     <div style="display:flex; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid #f1f5f9;">
       ${r.isCustomLabel
-        ? `<input id="ho_${prefix}_item1Label" value="${esc(item1Label)}" style="flex:1; font-size:12px; padding:4px 6px;">`
+        ? `<input autocomplete="off" id="ho_${prefix}_item1Label" value="${esc(item1Label)}" style="flex:1; font-size:12px; padding:4px 6px;">`
         : `<span style="flex:1; font-size:13px;">${esc(r.label)}</span>`}
       <label style="display:flex; align-items:center; gap:4px; font-size:12px; color:#475569;"><input type="checkbox" id="ho_${prefix}_${r.key}" ${h[prefix + 'Check_' + r.key] ? 'checked' : ''}> มี</label>
     </div>`).join('') + `
     <div style="display:flex; align-items:center; gap:8px; padding:6px 0;">
       <span style="font-size:13px;">อื่นๆ</span>
-      <input id="ho_${prefix}_otherNote" value="${esc(h[prefix + 'OtherNote'] || '')}" placeholder="ระบุ (ถ้ามี)" style="flex:1; font-size:12px; padding:4px 6px;">
+      <input autocomplete="off" id="ho_${prefix}_otherNote" value="${esc(h[prefix + 'OtherNote'] || '')}" placeholder="ระบุ (ถ้ามี)" style="flex:1; font-size:12px; padding:4px 6px;">
     </div>`;
 }
 
@@ -179,10 +213,10 @@ function equipmentHandoverForm(h) {
   return `
 <div class="form-grid">
   <div class="field full"><label>ครุภัณฑ์ * <span style="font-weight:400; color:#64748b; font-size:12px;">(พิมพ์ค้นหาด้วย เลขครุภัณฑ์ / ชื่อ / ยี่ห้อ / รุ่น / Serial / ที่เก็บ)</span></label>${hoEquipPicker(h)}</div>
-  <div class="field"><label>เลขครุภัณฑ์</label><input id="ho_assetNo" value="${esc(h['เลขครุภัณฑ์'] || '')}"></div>
-  <div class="field"><label>รุ่น</label><input id="ho_model" value="${esc(h['รุ่น'] || '')}"></div>
-  <div class="field"><label>สเปค/ยี่ห้อ-Serial</label><input id="ho_spec" value="${esc(h['สเปค'] || '')}"></div>
-  <div class="field"><label>ราคา</label><input id="ho_price" type="number" value="${esc(h['ราคา'] || 0)}"></div>
+  <div class="field"><label>เลขครุภัณฑ์</label><input autocomplete="off" id="ho_assetNo" value="${esc(h['เลขครุภัณฑ์'] || '')}"></div>
+  <div class="field"><label>รุ่น</label><input autocomplete="off" id="ho_model" value="${esc(h['รุ่น'] || '')}"></div>
+  <div class="field"><label>สเปค/ยี่ห้อ-Serial</label><input autocomplete="off" id="ho_spec" value="${esc(h['สเปค'] || '')}"></div>
+  <div class="field"><label>ราคา</label><input autocomplete="off" id="ho_price" type="number" value="${esc(h['ราคา'] || 0)}"></div>
   <div class="field"><label>ส่งมอบให้หน่วยงาน *</label>
     <select id="ho_dept" onchange="window._hoStaffRefresh()">
       <option value="">-- เลือกหน่วยงาน --</option>
@@ -190,11 +224,11 @@ function equipmentHandoverForm(h) {
     </select>
   </div>
   <div class="field"><label>ผู้รับผิดชอบ <small style="color:#94a3b8;">(เลือกจากรายชื่อเจ้าหน้าที่ หรือพิมพ์เอง)</small></label>
-    <input id="ho_responsible" list="ho_staff_list" autocomplete="off" placeholder="พิมพ์ชื่อเพื่อค้นหา..." value="${esc(h['ผู้รับผิดชอบ'] || '')}">
+    <input autocomplete="off" id="ho_responsible" list="ho_staff_list" placeholder="พิมพ์ชื่อเพื่อค้นหา..." value="${esc(h['ผู้รับผิดชอบ'] || '')}">
     <datalist id="ho_staff_list">${hoStaffOptions(h['ส่งมอบให้หน่วยงาน'])}</datalist>
   </div>
-  <div class="field"><label>ใช้งานครั้งที่</label><input id="ho_useNo" type="number" value="${esc(h['ใช้งานครั้งที่'] || 1)}"></div>
-  <div class="field"><label>วันที่ใช้งานครั้งแรก</label><input id="ho_firstUseDate" type="date" value="${esc(h['วันที่ใช้งานครั้งแรก'] || today)}"></div>
+  <div class="field"><label>ใช้งานครั้งที่</label><input autocomplete="off" id="ho_useNo" type="number" value="${esc(h['ใช้งานครั้งที่'] || 1)}"></div>
+  <div class="field"><label>วันที่ใช้งานครั้งแรก</label><input autocomplete="off" id="ho_firstUseDate" type="date" value="${esc(h['วันที่ใช้งานครั้งแรก'] || today)}"></div>
 </div>
 
 <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:16px;">
@@ -202,34 +236,34 @@ function equipmentHandoverForm(h) {
     <div style="font-weight:700; color:#0369a1; font-size:14px; margin-bottom:8px;">📤 ครุภัณฑ์ที่ส่งมอบ</div>
     <div id="ho_give_rows">${hoChecklistRows('give', h)}</div>
     <div class="form-grid" style="margin-top:10px;">
-      <div class="field"><label style="font-size:12px;">ผู้รับ</label><input id="ho_give_receiver" value="${esc(h['ส่งมอบ_ผู้รับ'] || '')}"></div>
-      <div class="field"><label style="font-size:12px;">วันที่รับ</label><input id="ho_give_receiverDate" type="date" value="${esc(h['ส่งมอบ_วันที่รับ'] || '')}"></div>
-      <div class="field"><label style="font-size:12px;">ผู้ส่งมอบ</label><input id="ho_give_sender" value="${esc(h['ส่งมอบ_ผู้ส่งมอบ'] || CURRENT_USER.name || '')}"></div>
-      <div class="field"><label style="font-size:12px;">วันที่ส่งมอบ</label><input id="ho_give_senderDate" type="date" value="${esc(h['ส่งมอบ_วันที่ส่งมอบ'] || today)}"></div>
+      <div class="field"><label style="font-size:12px;">ผู้รับ</label><input autocomplete="off" id="ho_give_receiver" value="${esc(h['ส่งมอบ_ผู้รับ'] || '')}"></div>
+      <div class="field"><label style="font-size:12px;">วันที่รับ</label><input autocomplete="off" id="ho_give_receiverDate" type="date" value="${esc(h['ส่งมอบ_วันที่รับ'] || '')}"></div>
+      <div class="field"><label style="font-size:12px;">ผู้ส่งมอบ</label><input autocomplete="off" id="ho_give_sender" value="${esc(h['ส่งมอบ_ผู้ส่งมอบ'] || CURRENT_USER.name || '')}"></div>
+      <div class="field"><label style="font-size:12px;">วันที่ส่งมอบ</label><input autocomplete="off" id="ho_give_senderDate" type="date" value="${esc(h['ส่งมอบ_วันที่ส่งมอบ'] || today)}"></div>
     </div>
   </div>
   <div style="border:1px solid #fde68a; background:#fffbeb; border-radius:10px; padding:12px;">
     <div style="font-weight:700; color:#b45309; font-size:14px; margin-bottom:8px;">📥 ครุภัณฑ์ที่รับคืน (กรอกเมื่อมีการคืนจริง)</div>
     <div id="ho_return_rows">${hoChecklistRows('return', h)}</div>
     <div class="form-grid" style="margin-top:10px;">
-      <div class="field"><label style="font-size:12px;">ผู้ส่งคืน</label><input id="ho_return_sender" value="${esc(h['รับคืน_ผู้ส่งคืน'] || '')}"></div>
-      <div class="field"><label style="font-size:12px;">วันที่ส่งคืน</label><input id="ho_return_senderDate" type="date" value="${esc(h['รับคืน_วันที่ส่งคืน'] || '')}"></div>
-      <div class="field"><label style="font-size:12px;">ผู้รับคืน</label><input id="ho_return_receiver" value="${esc(h['รับคืน_ผู้รับคืน'] || '')}"></div>
-      <div class="field"><label style="font-size:12px;">วันที่รับคืน</label><input id="ho_return_receiverDate" type="date" value="${esc(h['รับคืน_วันที่รับคืน'] || '')}"></div>
+      <div class="field"><label style="font-size:12px;">ผู้ส่งคืน</label><input autocomplete="off" id="ho_return_sender" value="${esc(h['รับคืน_ผู้ส่งคืน'] || '')}"></div>
+      <div class="field"><label style="font-size:12px;">วันที่ส่งคืน</label><input autocomplete="off" id="ho_return_senderDate" type="date" value="${esc(h['รับคืน_วันที่ส่งคืน'] || '')}"></div>
+      <div class="field"><label style="font-size:12px;">ผู้รับคืน</label><input autocomplete="off" id="ho_return_receiver" value="${esc(h['รับคืน_ผู้รับคืน'] || '')}"></div>
+      <div class="field"><label style="font-size:12px;">วันที่รับคืน</label><input autocomplete="off" id="ho_return_receiverDate" type="date" value="${esc(h['รับคืน_วันที่รับคืน'] || '')}"></div>
     </div>
   </div>
 </div>`;
 }
 
-function hoEquipChange() {
-  const e = hoFindEquip($('ho_equipId').value);
+function hoEquipChange(eq) {
+  const e = eq || hoFindEquip($('ho_equipId').value);
   if (!e) return;
   $('ho_assetNo').value = e['รหัสครุภัณฑ์'] || '';
   $('ho_model').value = e['รุ่น'] || '';
   $('ho_spec').value = [e['ยี่ห้อ'], e['Serial'] ? ('S/N: ' + e['Serial']) : ''].filter(Boolean).join(' / ');
   $('ho_price').value = e['มูลค่า'] || 0;
 }
-window._hoEquipChange = hoEquipChange;
+window._hoEquipChange = () => hoEquipChange();
 
 const HO_EDITING = { id: '' }; // รหัสใบที่กำลังแก้ไข ('' = สร้างใหม่) ใช้เทียบตอนเตือนส่งมอบซ้ำ
 
