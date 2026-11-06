@@ -17,7 +17,7 @@
 // ------------------------------------------------------------------ 1) state
 const EQ_STATE_DEFAULT = { text: '', cat: '', status: '', loc: '', sortKey: '', sortDir: 'asc', group: '', page: 1, pageSize: 50, collapsed: {} };
 const EQ_PAGE_SIZES = [25, 50, 100, 0]; // 0 = ทั้งหมด
-const EQ_SEARCH_FIELDS = ['รหัสครุภัณฑ์', 'รหัส', 'ชื่ออุปกรณ์', 'ยี่ห้อ', 'รุ่น', 'Serial', 'ที่เก็บ', 'หมวดหมู่'];
+const EQ_SEARCH_FIELDS = ['รหัสครุภัณฑ์', 'รหัส', 'ชื่ออุปกรณ์', 'ยี่ห้อ', 'รุ่น', 'Serial', 'ที่เก็บ', 'หมวดหมู่', 'ประเภทครุภัณฑ์', 'ผู้จำหน่าย', 'ผู้รับผิดชอบ', 'หน่วยงานที่รับผิดชอบ'];
 const EQ_GROUPS = { cat: { label: 'หมวดหมู่', field: 'หมวดหมู่' }, loc: { label: 'สถานที่จัดเก็บ', field: 'ที่เก็บ' } };
 
 // เรียงตามคอลัมน์: type 'num' เทียบเป็นตัวเลข นอกนั้นเทียบข้อความแบบไทย (เลขในข้อความเรียงตามค่า)
@@ -201,7 +201,7 @@ function eqRowHtml(e) {
                 </td>
                 <td data-label="ชื่ออุปกรณ์">
                   <div style="display:flex; align-items:center;">
-                    ${fsPhotoCell(e)}
+                    ${eqPhotoCell(e)}
                     <div>
                       <div style="font-weight:700; color:#0f172a; font-size:14px;">${esc(e['ชื่ออุปกรณ์'])}</div>
                       <div style="font-size:12px; color:#64748b; margin-top:2px;">
@@ -221,6 +221,7 @@ function eqRowHtml(e) {
                 </td>
                 <td data-label="ที่เก็บ">
                   <span style="font-size:13px; color:#334155; font-weight:500;">📍 ${esc(e['ที่เก็บ'] || '-')}</span>
+                  ${e['ผู้รับผิดชอบ'] || e['หน่วยงานที่รับผิดชอบ'] ? `<div style="font-size:12px; color:#64748b; margin-top:3px;">👤 ${esc([e['ผู้รับผิดชอบ'], e['หน่วยงานที่รับผิดชอบ']].filter(Boolean).join(' · '))}</div>` : ''}
                 </td>
                 <td data-label="มูลค่า">
                   <span style="font-size:13px; font-weight:600; color:#0f766e;">${money(e['มูลค่า'])}</span>
@@ -530,12 +531,201 @@ function renderEquipment() {
 }
 
 // ------------------------------------------------------------------ 4) ฟอร์ม เพิ่ม/แก้ไข/ลบ
-function eqDatalist(id, field) {
-  return `<datalist id="${id}">${eqDistinct(field).map(v => `<option value="${esc(v)}">`).join('')}</datalist>`;
+const EQ_ASSET_TYPES = ['ครุภัณฑ์สำนักงาน', 'ครุภัณฑ์คอมพิวเตอร์', 'ครุภัณฑ์การแพทย์', 'ครุภัณฑ์ไฟฟ้าและวิทยุ', 'ครุภัณฑ์ยานพาหนะและขนส่ง', 'ครุภัณฑ์งานบ้านงานครัว', 'ครุภัณฑ์โฆษณาและเผยแพร่', 'ครุภัณฑ์อื่น ๆ'];
+const EQ_DEPR_TYPES = ['ไม่คิดค่าเสื่อม', 'เส้นตรง (Straight-line)', 'ยอดลดลง (Declining balance)', 'ผลผลิตหน่วย (Units of production)']; // ต้องตรงกับ DEPRECIATION_TYPES ใน backend
+
+function eqDatalist(id, field, extra) {
+  const vals = eqDistinct(field);
+  (extra || []).forEach(x => { if (!vals.some(v => v.toLowerCase() === x.toLowerCase())) vals.push(x); });
+  vals.sort((a, b) => a.localeCompare(b, 'th'));
+  return `<datalist id="${id}">${vals.map(v => `<option value="${esc(v)}">`).join('')}</datalist>`;
 }
+
+// ---- รูปภาพหลายรูป: กรอบรูปจำลอง (สูงสุด EQ_PHOTO_MAX รูป, รูปแรก = รูปหลัก) ----
+const EQ_PHOTO_MAX = 6;
+// items: ลำดับที่แสดง/บันทึก; { url } = รูปเดิมที่อัปโหลดแล้ว, { dataUrl, base64, contentType } = รูปใหม่ที่ยังไม่อัปโหลด
+const EQ_PHOTO = { items: [], busy: false };
+
+function eqPhotoList(e) {
+  const arr = Array.isArray(e && e['รูปภาพทั้งหมด']) ? e['รูปภาพทั้งหมด'].filter(u => /^https?:\/\//i.test(u)) : [];
+  if (arr.length) return arr;
+  return e && /^https?:\/\//i.test(e['รูปภาพ'] || '') ? [e['รูปภาพ']] : [];
+}
+
+function eqEnsureFrameCss() {
+  if (document.getElementById('eq-frame-css')) return;
+  const st = document.createElement('style');
+  st.id = 'eq-frame-css';
+  st.textContent = `
+    .eq-gallery { display:grid; grid-template-columns:repeat(auto-fill,minmax(132px,1fr)); gap:14px; }
+    .eq-frame { position:relative; aspect-ratio:1/1; background:linear-gradient(135deg,#a16207,#78350f); padding:8px; border-radius:4px;
+      box-shadow:0 4px 10px rgba(0,0,0,.28), inset 0 0 0 1px rgba(255,255,255,.18); }
+    .eq-frame.cover { background:linear-gradient(135deg,#facc15,#a16207); box-shadow:0 4px 12px rgba(161,98,7,.45), inset 0 0 0 1px rgba(255,255,255,.35); }
+    .eq-frame .mat { width:100%; height:100%; background:#f8fafc; padding:6px; box-sizing:border-box; box-shadow:inset 0 0 6px rgba(0,0,0,.35); }
+    .eq-frame .mat img { width:100%; height:100%; object-fit:cover; display:block; cursor:zoom-in; background:#e2e8f0; }
+    .eq-frame .tag { position:absolute; left:6px; top:-9px; background:#0f766e; color:#fff; font-size:10px; font-weight:700; padding:2px 8px; border-radius:10px; }
+    .eq-frame .tools { position:absolute; right:4px; bottom:4px; display:flex; gap:4px; }
+    .eq-frame .tools button { border:none; border-radius:6px; width:26px; height:26px; cursor:pointer; background:rgba(15,23,42,.8); color:#fff; font-size:13px; line-height:1; }
+    .eq-frame .tools button:hover { background:#0f766e; }
+    .eq-frame .tools button.del:hover { background:#dc2626; }
+    .eq-slot { aspect-ratio:1/1; border:2px dashed #cbd5e1; border-radius:4px; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#94a3b8; font-size:12px; gap:4px; box-sizing:border-box; }
+    .eq-slot.add { cursor:pointer; border-color:#0d9488; color:#0f766e; background:#f0fdfa; }
+    .eq-slot.add:hover { background:#ccfbf1; }
+    .eq-slot .plus { font-size:30px; line-height:1; }
+    .eq-viewer { position:fixed; inset:0; z-index:100000; background:rgba(2,6,23,.92); display:flex; align-items:center; justify-content:center; flex-direction:column; gap:12px; }
+    .eq-viewer .stage { background:linear-gradient(135deg,#a16207,#78350f); padding:14px; border-radius:6px; box-shadow:0 10px 40px rgba(0,0,0,.6); }
+    .eq-viewer .stage .mat { background:#f8fafc; padding:12px; box-shadow:inset 0 0 10px rgba(0,0,0,.4); }
+    .eq-viewer img { max-width:min(86vw,900px); max-height:68vh; display:block; }
+    .eq-viewer .bar { color:#e2e8f0; font-size:14px; display:flex; gap:14px; align-items:center; }
+    .eq-viewer button { background:#334155; color:#fff; border:none; border-radius:8px; padding:8px 14px; cursor:pointer; font-size:14px; }`;
+  document.head.appendChild(st);
+}
+
+function eqPhotoInit(e) {
+  EQ_PHOTO.items = eqPhotoList(e).map(url => ({ url }));
+  EQ_PHOTO.busy = false;
+}
+
+function eqGalleryHtml() {
+  eqEnsureFrameCss();
+  const items = EQ_PHOTO.items;
+  const cells = [];
+  items.forEach((it, i) => {
+    cells.push(`
+      <div class="eq-frame ${i === 0 ? 'cover' : ''}">
+        ${i === 0 ? '<span class="tag">⭐ รูปหลัก</span>' : ''}
+        <div class="mat"><img src="${esc(it.url || it.dataUrl)}" alt="รูปที่ ${i + 1}" onclick="eqPhotoPreview(${i})" title="คลิกเพื่อดูรูปใหญ่"></div>
+        <div class="tools">
+          ${i === 0 ? '' : `<button type="button" title="ตั้งเป็นรูปหลัก" aria-label="ตั้งเป็นรูปหลัก" onclick="eqPhotoMakeCover(${i})">⭐</button>`}
+          <button type="button" class="del" title="ลบรูปนี้" aria-label="ลบรูปนี้" onclick="eqPhotoRemove(${i})">✕</button>
+        </div>
+      </div>`);
+  });
+  if (items.length < EQ_PHOTO_MAX) {
+    cells.push(`<div class="eq-slot add" role="button" tabindex="0" onclick="eqPhotoPick()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();eqPhotoPick();}"><span class="plus">＋</span>เพิ่มรูป</div>`);
+  }
+  for (let i = cells.length; i < EQ_PHOTO_MAX; i++) cells.push(`<div class="eq-slot" aria-hidden="true"><span>🖼️</span>ว่าง</div>`);
+  return `<div class="eq-gallery">${cells.join('')}</div>
+    <div style="font-size:12px; color:#64748b; margin-top:8px;">แนบได้สูงสุด ${EQ_PHOTO_MAX} รูป (${items.length}/${EQ_PHOTO_MAX}) · รูปแรกเป็นรูปหลักที่ใช้ในตาราง/ป้าย · กด ⭐ เพื่อเปลี่ยนรูปหลัก · ระบบย่อรูปให้อัตโนมัติ</div>
+    <input type="file" id="e_photos" accept="image/*" multiple style="display:none" onchange="eqPhotoAddFiles(this)">`;
+}
+
+function eqPhotoRepaint() {
+  const box = document.getElementById('e_gallery');
+  if (box) box.innerHTML = eqGalleryHtml();
+}
+function eqPhotoPick() { const i = document.getElementById('e_photos'); if (i) i.click(); }
+
+// ย่อรูปฝั่งเบราว์เซอร์ก่อนส่ง (ถ้าถอดรหัสไม่ได้ เช่น HEIC จะส่งไฟล์ต้นฉบับแทน แต่แสดงตัวอย่างไม่ได้)
+function eqCompressFile(file, maxDim, quality) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('อ่านไฟล์รูปไม่สำเร็จ'));
+    reader.onload = (ev) => {
+      const raw = ev.target.result;
+      const raw64 = () => { const c = raw.indexOf(','); return c >= 0 ? raw.slice(c + 1) : raw; };
+      const img = new Image();
+      img.onload = () => {
+        try {
+          let w = img.width, h = img.height;
+          const max = maxDim || 1024;
+          if (w > max || h > max) { if (w > h) { h = Math.round(h * max / w); w = max; } else { w = Math.round(w * max / h); h = max; } }
+          const cv = document.createElement('canvas');
+          cv.width = w; cv.height = h;
+          cv.getContext('2d').drawImage(img, 0, 0, w, h);
+          const dataUrl = cv.toDataURL('image/jpeg', quality || 0.7);
+          resolve({ dataUrl, base64: dataUrl.slice(dataUrl.indexOf(',') + 1), contentType: 'image/jpeg' });
+        } catch (err) { resolve({ dataUrl: raw, base64: raw64(), contentType: file.type || 'image/jpeg' }); }
+      };
+      img.onerror = () => resolve({ dataUrl: raw, base64: raw64(), contentType: file.type || 'image/jpeg' });
+      img.src = raw;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+async function eqPhotoAddFiles(input) {
+  const files = Array.from((input && input.files) || []).filter(f => /^image\//.test(f.type || '') || /\.(heic|heif|jpe?g|png|webp|gif)$/i.test(f.name || ''));
+  input.value = '';
+  if (!files.length) return;
+  const room = EQ_PHOTO_MAX - EQ_PHOTO.items.length;
+  if (files.length > room) toast('แนบได้อีก ' + room + ' รูป — ข้ามไฟล์ส่วนที่เกิน', 'warning');
+  for (const f of files.slice(0, Math.max(0, room))) {
+    try { EQ_PHOTO.items.push(await eqCompressFile(f, 1024, 0.7)); }
+    catch (err) { toast('เพิ่มรูปไม่สำเร็จ: ' + err.message, 'error'); }
+  }
+  eqPhotoRepaint();
+}
+function eqPhotoRemove(i) { EQ_PHOTO.items.splice(i, 1); eqPhotoRepaint(); }
+function eqPhotoMakeCover(i) { const [it] = EQ_PHOTO.items.splice(i, 1); EQ_PHOTO.items.unshift(it); eqPhotoRepaint(); }
+function eqPhotoPreview(i) { eqOpenViewer(EQ_PHOTO.items.map(x => x.url || x.dataUrl), i); }
+
+// ตัวดูรูปเต็ม (กรอบรูปใหญ่) — ใช้ทั้งในฟอร์มและตารางคลัง
+function eqOpenViewer(urls, start) {
+  if (!urls || !urls.length) return;
+  eqEnsureFrameCss();
+  let idx = Math.min(Math.max(0, start || 0), urls.length - 1);
+  const ov = document.createElement('div');
+  ov.className = 'eq-viewer';
+  const close = () => { document.removeEventListener('keydown', onKey); ov.remove(); };
+  const draw = () => {
+    ov.innerHTML = `<div class="stage"><div class="mat"><img src="${esc(urls[idx])}" alt="รูปที่ ${idx + 1}"></div></div>
+      <div class="bar">
+        <button type="button" ${urls.length < 2 ? 'disabled' : ''} data-act="prev" aria-label="รูปก่อนหน้า">‹</button>
+        <span>${idx + 1} / ${urls.length}${idx === 0 ? ' · ⭐ รูปหลัก' : ''}</span>
+        <button type="button" ${urls.length < 2 ? 'disabled' : ''} data-act="next" aria-label="รูปถัดไป">›</button>
+        <button type="button" data-act="close">ปิด</button>
+      </div>`;
+  };
+  const step = (d) => { idx = (idx + d + urls.length) % urls.length; draw(); };
+  const onKey = (ev) => { if (ev.key === 'Escape') close(); else if (ev.key === 'ArrowRight') step(1); else if (ev.key === 'ArrowLeft') step(-1); };
+  ov.addEventListener('click', (ev) => {
+    const act = ev.target && ev.target.getAttribute && ev.target.getAttribute('data-act');
+    if (act === 'prev') step(-1); else if (act === 'next') step(1); else if (act === 'close' || ev.target === ov) close();
+  });
+  document.addEventListener('keydown', onKey);
+  draw();
+  document.body.appendChild(ov);
+}
+
+// รูปย่อในตารางคลัง: รูปหลัก + ตัวเลขจำนวนรูป คลิกเปิดดูทั้งชุด
+function eqPhotoCell(e) {
+  const list = eqPhotoList(e);
+  if (!list.length) return '';
+  return `<span style="position:relative; display:inline-block; margin-right:8px; vertical-align:middle;">
+    <img src="${esc(list[0])}" onclick="eqViewEquipPhotos(${jsArg(e['รหัส'])})" title="คลิกดูรูป${list.length > 1 ? 'ทั้ง ' + list.length + ' รูป' : ''}" alt="" style="width:40px; height:40px; object-fit:cover; border-radius:8px; border:1px solid #e2e8f0; cursor:zoom-in; display:block;">
+    ${list.length > 1 ? `<span style="position:absolute; right:-4px; bottom:-4px; background:#0f766e; color:#fff; font-size:10px; font-weight:700; border-radius:10px; padding:1px 5px; border:1px solid #fff;">${list.length}</span>` : ''}
+  </span>`;
+}
+function eqViewEquipPhotos(id) {
+  const e = (DATA.equipment || []).find(x => String(x['รหัส']) === String(id));
+  eqOpenViewer(eqPhotoList(e || {}), 0);
+}
+
+// ค่าเสื่อมราคาเฉลี่ยต่อปี (เส้นตรง) แสดงเป็นข้อมูลประกอบในฟอร์มเท่านั้น
+function eqDeprHint() {
+  const el = document.getElementById('e_depr_hint');
+  if (!el) return;
+  const type = $('e_depr').value, life = +$('e_life').value, price = +$('e_price').value, qty = +$('e_qty').value;
+  const lifeBox = document.getElementById('e_life_wrap');
+  if (lifeBox) lifeBox.style.opacity = type && type !== 'ไม่คิดค่าเสื่อม' ? '1' : '.5';
+  if (type.startsWith('เส้นตรง') && life > 0 && price > 0) {
+    const total = price * (qty > 0 ? qty : 1);
+    el.textContent = '≈ ค่าเสื่อมปีละ ' + money(total / life) + ' (มูลค่ารวม ' + money(total) + ' ÷ ' + life + ' ปี)';
+  } else if (type.startsWith('เส้นตรง')) {
+    el.textContent = 'กรอกอายุการใช้งาน (ปี) และมูลค่า เพื่อดูค่าเสื่อมโดยประมาณ';
+  } else el.textContent = '';
+}
+function eqRefreshStaff() {
+  const dl = document.getElementById('e_staff_list');
+  const dept = $('e_dept') ? $('e_dept').value : '';
+  if (dl && typeof hoStaffOptions === 'function') dl.innerHTML = hoStaffOptions(dept);
+}
+if (typeof window !== 'undefined') { window._eqDeprHint = eqDeprHint; window._eqRefreshStaff = eqRefreshStaff; }
 
 function equipForm(e) {
   e = e || {};
+  eqPhotoInit(e);
   let buyDate = '';
   if (e['วันที่จัดซื้อ']) {
     try {
@@ -546,6 +736,8 @@ function equipForm(e) {
     }
   }
   const sec = (t) => `<div class="field full" style="margin-top:6px;"><div style="font-weight:700; color:#0f766e; font-size:13px; border-bottom:1px solid #e2e8f0; padding-bottom:4px;">${t}</div></div>`;
+  const depts = (DATA.departments || []).map(d => d['ชื่อหน่วยงาน']).filter(Boolean);
+  const curDept = e['หน่วยงานที่รับผิดชอบ'] || '';
   return `
     <div class="form-grid">
       ${sec('📌 ข้อมูลหลัก')}
@@ -558,33 +750,56 @@ function equipForm(e) {
         </select>
         <div id="e_cat_hint" style="font-size:12px; margin-top:4px; min-height:16px;"></div>
       </div>
+      <div class="field"><label>ประเภทครุภัณฑ์ <small style="color:#94a3b8;">(เลือกหรือพิมพ์เอง)</small></label><input id="e_atype" list="eq_dl_atype" value="${esc(e['ประเภทครุภัณฑ์'] || '')}" placeholder="เช่น ครุภัณฑ์คอมพิวเตอร์"></div>
       <div class="field"><label>สถานะ</label>
         <select id="e_status">
           ${['พร้อมยืม', 'อยู่ระหว่างยืม', 'ประจำจุด', 'ชำรุด'].map(s => `<option ${e['สถานะ'] === s ? 'selected' : ''}>${s}</option>`).join('')}
         </select>
       </div>
 
-      ${sec('🖥️ รายละเอียดเครื่อง')}
+      ${sec('🖥️ รายละเอียดเครื่องและการจัดซื้อ')}
       <div class="field"><label>ยี่ห้อ <small style="color:#94a3b8;">(เลือกจากที่เคยใช้ หรือพิมพ์ใหม่)</small></label><input id="e_brand" list="eq_dl_brand" value="${esc(e['ยี่ห้อ'] || '')}"></div>
       <div class="field"><label>รุ่น</label><input id="e_model" value="${esc(e['รุ่น'] || '')}"></div>
       <div class="field"><label>Serial Number</label><input id="e_sn" value="${esc(e['Serial'] || '')}"></div>
       <div class="field"><label>วันที่จัดซื้อ</label><input id="e_buy" type="date" value="${buyDate}"></div>
+      <div class="field full"><label>ผู้จำหน่าย / ผู้ขาย <small style="color:#94a3b8;">(เลือกจากที่เคยใช้ หรือพิมพ์ใหม่)</small></label><input id="e_vendor" list="eq_dl_vendor" value="${esc(e['ผู้จำหน่าย'] || '')}" placeholder="เช่น บริษัท ... จำกัด"></div>
 
-      ${sec('📦 การจัดเก็บและมูลค่า')}
-      <div class="field"><label>ที่เก็บ <small style="color:#94a3b8;">(เลือกจากที่เคยใช้ หรือพิมพ์ใหม่)</small></label><input id="e_loc" list="eq_dl_loc" value="${esc(e['ที่เก็บ'] || '')}"></div>
-      <div class="field"><label>จำนวน</label><input id="e_qty" type="number" min="0" value="${esc(e['จำนวน'] ?? 1)}"></div>
-      <div class="field"><label>หน่วยนับ</label><input id="e_unit" list="eq_dl_unit" value="${esc(e['หน่วยนับ'] || 'เครื่อง')}"></div>
-      <div class="field"><label>มูลค่า/หน่วย (บาท)</label><input id="e_price" type="number" min="0" value="${esc(e['มูลค่า'] ?? '')}"></div>
-
-      ${sec('📝 รูปและหมายเหตุ')}
-      <div class="field full">
-        <label>รูปถ่ายอุปกรณ์ (ถ้ามี)</label>
-        <input type="file" id="e_photo" accept="image/*" onchange="window._fsPreviewPhoto(this, 'e_photo_preview')">
-        <div id="e_photo_preview" style="margin-top:8px;">${e['รูปภาพ'] ? `<img src="${esc(e['รูปภาพ'])}" style="max-width:110px; max-height:110px; border-radius:10px; border:1px solid #e2e8f0; object-fit:cover;">` : ''}</div>
+      ${sec('📍 ที่ตั้ง / ผู้รับผิดชอบ')}
+      <div class="field"><label>ที่ตั้ง/ที่เก็บ <small style="color:#94a3b8;">(เลือกจากที่เคยใช้ หรือพิมพ์ใหม่)</small></label><input id="e_loc" list="eq_dl_loc" value="${esc(e['ที่เก็บ'] || '')}"></div>
+      <div class="field"><label>หน่วยงานที่รับผิดชอบ</label>
+        <select id="e_dept" onchange="window._eqRefreshStaff()">
+          <option value="">-- ไม่ระบุ --</option>
+          ${curDept && !depts.includes(curDept) ? `<option selected>${esc(curDept)}</option>` : ''}
+          ${depts.map(d => `<option ${d === curDept ? 'selected' : ''}>${esc(d)}</option>`).join('')}
+        </select>
       </div>
-      <div class="field full"><label>หมายเหตุ</label><textarea id="e_note" rows="2">${esc(e['หมายเหตุ'] || '')}</textarea></div>
+      <div class="field full"><label>ผู้รับผิดชอบ <small style="color:#94a3b8;">(เลือกจากรายชื่อเจ้าหน้าที่ หรือพิมพ์เอง)</small></label>
+        <input id="e_resp" list="e_staff_list" autocomplete="off" value="${esc(e['ผู้รับผิดชอบ'] || '')}" placeholder="พิมพ์ชื่อเพื่อค้นหา...">
+        <datalist id="e_staff_list">${typeof hoStaffOptions === 'function' ? hoStaffOptions(curDept) : ''}</datalist>
+      </div>
+
+      ${sec('💰 จำนวน มูลค่า และค่าเสื่อมราคา')}
+      <div class="field"><label>จำนวน</label><input id="e_qty" type="number" min="0" value="${esc(e['จำนวน'] ?? 1)}" oninput="window._eqDeprHint()"></div>
+      <div class="field"><label>หน่วยนับ</label><input id="e_unit" list="eq_dl_unit" value="${esc(e['หน่วยนับ'] || 'เครื่อง')}"></div>
+      <div class="field"><label>มูลค่า/หน่วย (บาท)</label><input id="e_price" type="number" min="0" value="${esc(e['มูลค่า'] ?? '')}" oninput="window._eqDeprHint()"></div>
+      <div class="field"><label>ประเภทค่าเสื่อม</label>
+        <select id="e_depr" onchange="window._eqDeprHint()">
+          <option value="">-- ไม่ระบุ --</option>
+          ${EQ_DEPR_TYPES.map(t => `<option ${e['ประเภทค่าเสื่อม'] === t ? 'selected' : ''}>${t}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field" id="e_life_wrap"><label>อายุการใช้งาน (ปี)</label><input id="e_life" type="number" min="0" max="100" step="0.5" value="${esc(e['อายุการใช้งานปี'] ?? '')}" oninput="window._eqDeprHint()"></div>
+      <div class="field"><label>&nbsp;</label><div id="e_depr_hint" style="font-size:12px; color:#0f766e; padding-top:10px;"></div></div>
+
+      ${sec('🖼️ รูปภาพอุปกรณ์')}
+      <div class="field full" id="e_gallery">${eqGalleryHtml()}</div>
+
+      ${sec('📝 หมายเหตุ')}
+      <div class="field full"><textarea id="e_note" rows="2">${esc(e['หมายเหตุ'] || '')}</textarea></div>
     </div>
     ${eqDatalist('eq_dl_brand', 'ยี่ห้อ')}${eqDatalist('eq_dl_loc', 'ที่เก็บ')}${eqDatalist('eq_dl_unit', 'หน่วยนับ')}
+    ${eqDatalist('eq_dl_vendor', 'ผู้จำหน่าย')}${eqDatalist('eq_dl_atype', 'ประเภทครุภัณฑ์', EQ_ASSET_TYPES)}
+    <img alt="" src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" style="display:none" onload="window._eqDeprHint()">
   `;
 }
 
@@ -614,49 +829,77 @@ if (typeof window !== 'undefined') { window._eqCodeChanged = eqCodeChanged; wind
 function addEquip() {
   if (!canManageEquipment()) return;
   openModal('💻 เพิ่มอุปกรณ์ใหม่', equipForm(), () => saveEquip(), true);
+  eqDeprHint();
 }
 
 function editEquip(row) {
   if (!canManageEquipment()) return;
   const e = DATA.equipment.find(x => x._row === row || String(x['รหัส']) === String(row));
   openModal('✏️ แก้ไขข้อมูลอุปกรณ์', equipForm(e), () => saveEquip(row), true);
+  eqDeprHint();
 }
 
 async function saveEquip(row) {
+  if (EQ_PHOTO.busy) return;
+  const lifeRaw = $('e_life').value.trim();
   const data = {
     'รหัสครุภัณฑ์': eqNorm($('e_code').value), 'ชื่ออุปกรณ์': eqNorm($('e_name').value), 'หมวดหมู่': $('e_cat').value,
+    'ประเภทครุภัณฑ์': eqCanon('ประเภทครุภัณฑ์', $('e_atype').value),
     'ยี่ห้อ': eqCanon('ยี่ห้อ', $('e_brand').value), 'รุ่น': eqNorm($('e_model').value), 'Serial': eqNorm($('e_sn').value),
+    'ผู้จำหน่าย': eqCanon('ผู้จำหน่าย', $('e_vendor').value),
     'จำนวน': +$('e_qty').value, 'หน่วยนับ': eqCanon('หน่วยนับ', $('e_unit').value), 'ที่เก็บ': eqCanon('ที่เก็บ', $('e_loc').value),
-    'มูลค่า': +$('e_price').value, 'สถานะ': $('e_status').value, 'วันที่จัดซื้อ': $('e_buy').value,
+    'หน่วยงานที่รับผิดชอบ': $('e_dept').value, 'ผู้รับผิดชอบ': eqNorm($('e_resp').value),
+    'มูลค่า': +$('e_price').value, 'ประเภทค่าเสื่อม': $('e_depr').value, 'อายุการใช้งานปี': lifeRaw === '' ? '' : +lifeRaw,
+    'สถานะ': $('e_status').value, 'วันที่จัดซื้อ': $('e_buy').value,
     'หมายเหตุ': $('e_note').value.trim(),
   };
   if (!data['ชื่ออุปกรณ์']) { toast('กรอกชื่ออุปกรณ์', 'warning'); return; }
   if (!Number.isFinite(data['จำนวน']) || data['จำนวน'] < 0) { toast('จำนวนต้องเป็นตัวเลขตั้งแต่ 0 ขึ้นไป', 'warning'); return; }
   if (!Number.isFinite(data['มูลค่า']) || data['มูลค่า'] < 0) { toast('มูลค่าต้องเป็นตัวเลขตั้งแต่ 0 ขึ้นไป', 'warning'); return; }
+  if (data['อายุการใช้งานปี'] !== '' && (!Number.isFinite(data['อายุการใช้งานปี']) || data['อายุการใช้งานปี'] < 0 || data['อายุการใช้งานปี'] > 100)) { toast('อายุการใช้งานต้องอยู่ระหว่าง 0–100 ปี', 'warning'); return; }
   const tag = data['รหัสครุภัณฑ์'];
   if (tag) {
     const dup = DATA.equipment.find(x => eqNorm(x['รหัสครุภัณฑ์']) === tag && String(x['รหัส']) !== String(row || ''));
     if (dup) { toast('รหัสครุภัณฑ์ ' + tag + ' ซ้ำกับ "' + (dup['ชื่ออุปกรณ์'] || dup['รหัส']) + '" ในระบบ', 'warning'); return; }
   }
   if (row) data['รหัส'] = row;
+  // รูปเดิมที่เหลืออยู่ (ตามลำดับที่ผู้ใช้จัด) — รูปใหม่จะอัปโหลดทีหลังแล้วค่อยจัดลำดับสุดท้าย
+  const keptUrls = EQ_PHOTO.items.filter(it => it.url).map(it => it.url);
+  data['รูปภาพทั้งหมด'] = keptUrls;
+
+  EQ_PHOTO.busy = true;
   showLoading(true);
   try {
     const r = await callApi('saveEquipment', data, ADMIN_PASS);
     if (!r.success) { showLoading(false); toast(r.message, 'error'); return; }
 
-    const photo = await fsReadAndCompressImage('e_photo', 1024, 0.7);
-    if (photo) {
-      const pr = await callApi('uploadEquipmentPhoto', r.code, photo.base64, photo.contentType, ADMIN_PASS);
-      if (!pr.success) toast('บันทึกข้อมูลสำเร็จ แต่อัปโหลดรูปไม่สำเร็จ: ' + pr.message, 'warning');
+    // อัปโหลดรูปใหม่ทีละรูป (ต่อท้ายรายการฝั่ง server) แล้วเก็บ URL ที่ได้ตามลำดับที่ผู้ใช้จัดไว้
+    const added = EQ_PHOTO.items.filter(it => !it.url);
+    let failed = 0;
+    const uploaded = new Map();
+    for (let i = 0; i < added.length; i++) {
+      const pr = await callApi('uploadEquipmentPhoto', r.code, added[i].base64, added[i].contentType, ADMIN_PASS);
+      if (pr.success) uploaded.set(added[i], pr.url); else { failed++; toast('อัปโหลดรูปที่ ' + (i + 1) + ' ไม่สำเร็จ: ' + pr.message, 'warning'); }
+    }
+    if (uploaded.size) {
+      const finalOrder = EQ_PHOTO.items.map(it => it.url || uploaded.get(it)).filter(Boolean);
+      const serverOrder = keptUrls.concat(added.map(it => uploaded.get(it)).filter(Boolean));
+      if (finalOrder.join('|') !== serverOrder.join('|')) {
+        // ผู้ใช้ตั้งรูปใหม่เป็นรูปหลัก/สลับลำดับ — บันทึกลำดับสุดท้ายอีกครั้ง (ส่งเฉพาะรหัส + รายการรูป)
+        const fr = await callApi('saveEquipment', { 'รหัส': r.code, 'รูปภาพทั้งหมด': finalOrder }, ADMIN_PASS);
+        if (!fr.success) toast('บันทึกข้อมูลสำเร็จ แต่จัดลำดับรูปไม่สำเร็จ: ' + fr.message, 'warning');
+      }
     }
 
     showLoading(false);
-    toast('บันทึกสำเร็จ');
+    toast(failed ? 'บันทึกข้อมูลแล้ว แต่รูปอัปโหลดไม่สำเร็จ ' + failed + ' รูป' : 'บันทึกสำเร็จ', failed ? 'warning' : 'success');
     closeModal();
     refreshData();
   } catch (err) {
     showLoading(false);
     toast('ผิดพลาด: ' + err.message, 'error');
+  } finally {
+    EQ_PHOTO.busy = false;
   }
 }
 

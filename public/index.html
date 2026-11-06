@@ -2332,7 +2332,7 @@ input, select, textarea, button {
     // สถานะโหมดสำรวจภาคสนาม เก็บไว้นอก render function เพื่อไม่ให้หายเวลา Firestore realtime listener สั่ง re-render หน้าทั้งหมด
     let FIELD_SURVEY_STATE = { room: '', category: '', items: [] };
     // สถานะหน้าพิมพ์ป้าย QR แบบชุด เก็บนอก render function ด้วยเหตุผลเดียวกัน (กันตัวเลือก/ตัวกรองหายตอน realtime re-render)
-    let QR_BATCH_STATE = { search: '', cat: '', room: '', onlyNoTag: false, onlySurveyed: false, cols: 3, selected: new Set() };
+    let QR_BATCH_STATE = { search: '', cat: '', room: '', onlyNoTag: false, onlySurveyed: false, cols: 3, selected: new Set(), mode: storageGet('vmes_qb_mode') === 'tape' ? 'tape' : 'sheet' };
     let CHARTS = {};
     let REFRESH_TIMER = null;
     // เก็บลายเซ็นข้อมูลรอบล่าสุดไว้เทียบตอน poll ทุก 30 วิ — ต่างจาก Firestore listener
@@ -5336,8 +5336,13 @@ input, select, textarea, button {
             <input type="checkbox" id="qb_surveyed" ${QR_BATCH_STATE.onlySurveyed ? 'checked' : ''} onchange="window._qbFilter()"> 🔎 เฉพาะที่มาจากการสำรวจภาคสนาม
           </label>
           <div style="margin-left:auto; display:flex; gap:8px; align-items:center;">
-            <label style="font-size:13px; color:#64748b;">คอลัมน์/แผ่น:</label>
-            <select id="qb_cols" onchange="window._qbSetCols(this.value)" style="padding:6px 10px; border-radius:8px; border:1px solid #cbd5e1;">
+            <label style="font-size:13px; color:#64748b;">พิมพ์ด้วย:</label>
+            <select id="qb_mode" onchange="window._qbSetMode(this.value)" title="เลือกให้ตรงกับเครื่องพิมพ์ที่จะใช้ — กระดาษแผ่นกับเครื่องพิมพ์เทปใช้เลย์เอาต์คนละแบบ" style="padding:6px 10px; border-radius:8px; border:1px solid #cbd5e1;">
+              <option value="sheet" ${QR_BATCH_STATE.mode === 'sheet' ? 'selected' : ''}>🗒️ กระดาษแผ่น (A4 ตัดแปะ)</option>
+              <option value="tape" ${QR_BATCH_STATE.mode === 'tape' ? 'selected' : ''}>🏷️ เทปสติกเกอร์ (PT-P710BT)</option>
+            </select>
+            ${QR_BATCH_STATE.mode === 'sheet' ? `<label style="font-size:13px; color:#64748b;">คอลัมน์/แผ่น:</label>` : ''}
+            <select id="qb_cols" onchange="window._qbSetCols(this.value)" style="padding:6px 10px; border-radius:8px; border:1px solid #cbd5e1; ${QR_BATCH_STATE.mode === 'sheet' ? '' : 'display:none;'}">
               ${[2, 3, 4].map(n => `<option value="${n}" ${QR_BATCH_STATE.cols === n ? 'selected' : ''}>${n} คอลัมน์</option>`).join('')}
             </select>
           </div>
@@ -5352,8 +5357,9 @@ input, select, textarea, button {
           <div style="display:flex; gap:8px; flex-wrap:wrap;">
             <button class="btn btn-sm btn-secondary" onclick="window._qbSelectAllFiltered()">☑️ เลือกทั้งหมดที่กรองอยู่</button>
             <button class="btn btn-sm btn-outline-danger" onclick="window._qbClearSelection()">✕ ล้างการเลือก</button>
-            <button class="btn btn-sm btn-primary" style="font-weight:700;" onclick="window._qbPrint()">🖨️ พิมพ์ป้าย QR ที่เลือก (${selectedCount})</button>
-            <button class="btn btn-sm btn-info" style="font-weight:700;" onclick="window._qbPrintLabels()" title="พิมพ์สติกเกอร์ผ่าน Brother PT-P710BT">🏷️ พิมพ์สติกเกอร์ PT-P710BT (${selectedCount})</button>
+            ${QR_BATCH_STATE.mode === 'tape'
+              ? `<button class="btn btn-sm btn-primary" style="font-weight:700;" onclick="window._qbPrintLabels()" title="เปิดหน้าต่างออกแบบป้าย แล้วพิมพ์ผ่านบลูทูธ/ไดรเวอร์ — 1 ป้ายต่อ 1 ชิ้นเทป">🏷️ พิมพ์สติกเกอร์ที่เลือก (${selectedCount})</button>`
+              : `<button class="btn btn-sm btn-primary" style="font-weight:700;" onclick="window._qbPrint()" title="จัดเรียงเป็นตารางบนกระดาษ A4 สำหรับตัดไปแปะ — ไม่เหมาะกับเครื่องพิมพ์เทป">🖨️ พิมพ์แผ่น A4 ที่เลือก (${selectedCount})</button>`}
           </div>
         </div>
         <div class="table-wrap" style="border:none">
@@ -5390,6 +5396,11 @@ input, select, textarea, button {
       };
 
       window._qbSetCols = (v) => { QR_BATCH_STATE.cols = +v; };
+      window._qbSetMode = (v) => {
+        QR_BATCH_STATE.mode = v === 'tape' ? 'tape' : 'sheet';
+        storageSet('vmes_qb_mode', QR_BATCH_STATE.mode);
+        $('content').innerHTML = render();
+      };
 
       window._qbToggle = (code) => {
         if (QR_BATCH_STATE.selected.has(code)) QR_BATCH_STATE.selected.delete(code);
@@ -5448,9 +5459,13 @@ input, select, textarea, button {
         printWin.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>พิมพ์ป้าย QR</title>
           <style>
             * { box-sizing:border-box; }
-            body { font-family:'Sarabun','TH Sarabun New',Arial,sans-serif; margin:0; padding:8mm; }
+            /* กำหนดหน้ากระดาษเป็น A4 ชัดเจน — ถ้าเลือกเครื่องพิมพ์เทปที่หน้ากระดาษเตี้ยกว่าป้าย Chrome จะหั่นป้ายเป็นหลายหน้า */
+            @page { size: A4 portrait; margin: 8mm; }
+            body { font-family:'Sarabun','TH Sarabun New',Arial,sans-serif; margin:0; padding:0; }
+            .warn { background:#fffbeb; border:1px solid #fde68a; color:#92400e; padding:8px 12px; border-radius:8px; font-size:13px; margin-bottom:8px; }
+            @media print { .warn { display:none; } }
             .qr-grid { display:grid; grid-template-columns:repeat(${cols}, 1fr); gap:4mm; }
-            .qr-label { border:1px dashed #999; border-radius:4px; padding:3mm; text-align:center; page-break-inside:avoid; }
+            .qr-label { border:1px dashed #999; border-radius:4px; padding:3mm; text-align:center; break-inside:avoid; page-break-inside:avoid; }
             .qr-label img { width:100%; max-width:30mm; height:auto; }
             .qr-label-name { font-weight:700; font-size:11px; margin-top:2mm; }
             .qr-label-sub { font-size:9px; color:#555; min-height:11px; }
@@ -5458,6 +5473,7 @@ input, select, textarea, button {
             .qr-label-room { font-size:9px; color:#555; }
           </style>
         </head><body>
+          <div class="warn">ℹ️ หน้านี้จัดเรียงสำหรับ <b>กระดาษ A4</b> — ถ้าจะพิมพ์ด้วยเครื่องพิมพ์เทป/สติกเกอร์ (เช่น Brother PT-P710BT) ให้ปิดหน้านี้ แล้วเลือก "🏷️ เทปสติกเกอร์" ที่ช่อง "พิมพ์ด้วย" ในหน้าพิมพ์ป้าย QR แบบชุด</div>
           <div class="qr-grid">${labelsHtml}</div>
           \x3Cscript>window.onload = function(){ setTimeout(function(){ window.print(); }, 300); };\x3C/script>
         </body></html>`);
