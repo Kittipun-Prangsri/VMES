@@ -134,7 +134,9 @@ async function addEquipmentLocation(name, adminCode) {
   }
 }
 
-async function renameEquipmentLocation(oldName, newName, adminCode) {
+// allowMerge: ชื่อใหม่ซ้ำกับสถานที่อื่นที่มีอยู่ = ควบรวมสองห้องเป็นห้องเดียว ย้อนกลับไม่ได้ จึงต้องยืนยันชัดเจน
+// (ไม่ส่ง allowMerge จะไม่ทำอะไรและคืน needsMerge พร้อมจำนวนอุปกรณ์ให้ฝั่งหน้าเว็บถามผู้ใช้)
+async function renameEquipmentLocation(oldName, newName, adminCode, allowMerge) {
   if (!verifyAdmin(adminCode)) return { success: false, message: 'ไม่มีสิทธิ์ดำเนินการ' };
   try {
     const o = normLoc(oldName);
@@ -152,6 +154,18 @@ async function renameEquipmentLocation(oldName, newName, adminCode) {
     // ชื่อใหม่ชนกับสถานที่อื่นที่มีอยู่ = ควบรวม (ยกเว้นเป็นชื่อเดียวกันกับของเดิมที่แค่แก้ตัวพิมพ์/ช่องว่าง)
     const merged = !sameLoc(o, n) && (list.some((x) => sameLoc(x, n)) || items.some((e) => sameLoc(e['ที่เก็บ'], n)));
     const finalName = merged ? (list.find((x) => sameLoc(x, n)) || normLoc((items.find((e) => sameLoc(e['ที่เก็บ'], n)) || {})['ที่เก็บ']) || n) : n;
+
+    if (merged && allowMerge !== true) {
+      return {
+        success: false,
+        needsMerge: true,
+        from: o,
+        fromCount: affected.length,
+        target: finalName,
+        targetCount: items.filter((e) => sameLoc(e['ที่เก็บ'], finalName)).length,
+        message: 'ชื่อ "' + finalName + '" มีอยู่แล้ว — ต้องยืนยันการควบรวม',
+      };
+    }
 
     let updated = 0;
     for (let i = 0; i < affected.length; i += 10) {

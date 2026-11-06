@@ -644,7 +644,7 @@ function eqLocManagerHtml() {
         </tbody>
       </table>
     </div>
-    <div style="font-size:12px; color:#64748b; margin-top:10px;">การเปลี่ยนชื่อจะอัปเดตอุปกรณ์ทุกชิ้นที่ใช้สถานที่นี้ · ถ้าชื่อใหม่ซ้ำกับสถานที่ที่มีอยู่ ระบบจะควบรวมให้ · ลบได้เฉพาะสถานที่ที่ไม่มีอุปกรณ์ใช้อยู่</div>`;
+    <div style="font-size:12px; color:#64748b; margin-top:10px;">การเปลี่ยนชื่อจะอัปเดตอุปกรณ์ทุกชิ้นที่ใช้สถานที่นี้ · ถ้าชื่อใหม่ซ้ำกับสถานที่ที่มีอยู่ ระบบจะถามยืนยันก่อนควบรวม · ลบได้เฉพาะสถานที่ที่ไม่มีอุปกรณ์ใช้อยู่</div>`;
 }
 
 function openLocationManager() {
@@ -686,7 +686,18 @@ async function renameLocation(oldName) {
   if (name === oldName) return;
   showLoading(true);
   try {
-    const r = await callApi('renameEquipmentLocation', oldName, name, ADMIN_PASS);
+    let r = await callApi('renameEquipmentLocation', oldName, name, ADMIN_PASS);
+    if (!r.success && r.needsMerge) {
+      // ชื่อใหม่ซ้ำกับห้องอื่นที่มีอยู่ — ถามก่อนรวม (ย้อนกลับไม่ได้)
+      showLoading(false);
+      const ok = confirm('⚠️ มีสถานที่ชื่อ "' + r.target + '" อยู่แล้ว (' + r.targetCount + ' รายการ)\n\n'
+        + 'ถ้าดำเนินการต่อ อุปกรณ์ของ "' + r.from + '" (' + r.fromCount + ' รายการ) จะถูกย้ายไปอยู่ใน "' + r.target + '" '
+        + 'และ "' + r.from + '" จะหายไปจากรายการ ย้อนกลับไม่ได้\n\n'
+        + 'ถ้าเป็นคนละห้องกัน ให้กด "ยกเลิก" แล้วตั้งชื่อใหม่ให้ต่างกัน (เช่น ระบุชั้น/หน่วยงานเพิ่ม)\n\nต้องการรวมสองสถานที่นี้หรือไม่?');
+      if (!ok) return;
+      showLoading(true);
+      r = await callApi('renameEquipmentLocation', oldName, name, ADMIN_PASS, true);
+    }
     showLoading(false);
     if (!r.success) { toast(r.message, 'error'); return; }
     // ปรับสำเนาในหน่วยความจำให้ตรงทันที

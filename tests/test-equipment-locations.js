@@ -49,12 +49,20 @@ const master = () => JSON.parse(store.settings.EQUIPMENT_LOCATIONS.Value);
   console.log('  ✅ rename (bulk update, fields preserved, master updated)');
 
   // rename ชนชื่อที่มีอยู่ = ควบรวม
+  // ชื่อซ้ำกับห้องอื่น: ห้ามรวมเงียบๆ — ต้องยืนยัน (allowMerge) และไม่มีอะไรเปลี่ยนก่อนยืนยัน
+  const snapshot = JSON.stringify(store);
   r = await H.renameEquipmentLocation('ห้องยา', 'ห้องไอที ชั้น1', A);
+  assert.equal(r.success, false); assert.equal(r.needsMerge, true);
+  assert.equal(r.from, 'ห้องยา'); assert.equal(r.fromCount, 1);
+  assert.equal(r.target, 'ห้องไอที ชั้น1'); assert.equal(r.targetCount, 2);
+  assert.equal(JSON.stringify(store), snapshot, 'nothing changes without allowMerge');
+  assert.equal((await H.renameEquipmentLocation('ห้องยา', 'ห้องไอที ชั้น1', A, 'true')).needsMerge, true, 'only boolean true counts');
+  r = await H.renameEquipmentLocation('ห้องยา', 'ห้องไอที ชั้น1', A, true);
   assert.equal(r.merged, true); assert.equal(store.equipment.e3['ที่เก็บ'], 'ห้องไอที ชั้น1');
   assert.equal(master().filter((x) => x === 'ห้องไอที ชั้น1').length, 1);
   assert.equal((await H.renameEquipmentLocation('ไม่มีจริง', 'ใหม่', A)).success, false, 'unknown rejected');
   assert.equal((await H.renameEquipmentLocation('ห้องไอที ชั้น1', '', A)).success, false, 'empty new name rejected');
-  console.log('  ✅ rename merge + error cases');
+  console.log('  ✅ rename onto existing name needs explicit merge confirmation + error cases');
 
   // delete: ลบได้เฉพาะที่ไม่มีอุปกรณ์ใช้
   r = await H.deleteEquipmentLocation('ห้องไอที ชั้น1', A);
