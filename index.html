@@ -5301,12 +5301,101 @@ input, select, textarea, button {
     // บันทึกได้ทั้งฝั่งส่งมอบและฝั่งรับคืน (กรอกฝั่งรับคืนเมื่อถึงเวลาจริง)
     const HO_CHECK_LABELS = { scratch: 'รอยถลอก', crack: 'รอยแตก/หัก', notReady: 'เครื่องไม่พร้อมใช้งาน' };
 
-    function hoEquipOptions(selectedId) {
-      return '<option value="">-- เลือกครุภัณฑ์ --</option>' + DATA.equipment.map(e => {
-        const id = e['รหัส'] || '';
-        return `<option value="${esc(id)}" ${String(id) === String(selectedId) ? 'selected' : ''}>${esc(e['รหัสครุภัณฑ์'] || id)} — ${esc(e['ชื่ออุปกรณ์'])}</option>`;
-      }).join('');
+    // ตัวเลือกครุภัณฑ์แบบค้นหาได้ (แทน <select> ยาวๆ ที่เลื่อนหาไม่ไหว)
+    // ยังเก็บค่าไว้ใน input#ho_equipId (hidden) เหมือนเดิม โค้ดส่วนอื่นอ่านค่าจากตัวนี้
+    function hoEquipLabel(e) {
+      return (e['รหัสครุภัณฑ์'] || e['รหัส'] || '') + ' — ' + (e['ชื่ออุปกรณ์'] || '');
     }
+
+    function hoEquipPicker(h) {
+      const cur = h.equipId ? hoFindEquip(h.equipId) : null;
+      const text = cur ? hoEquipLabel(cur) : (h.equipId ? ((h['เลขครุภัณฑ์'] || '') + ' — ' + (h['รายการ'] || h.equipId)) : '');
+      return `
+      <div id="ho_picker" style="position:relative;">
+        <input type="hidden" id="ho_equipId" value="${esc(h.equipId || '')}">
+        <input id="ho_equipSearch" autocomplete="off" placeholder="🔍 พิมพ์เพื่อค้นหาครุภัณฑ์..." value="${esc(text)}"
+          oninput="window._hoPickType()" onfocus="window._hoPickOpen()" onkeydown="window._hoPickKey(event)"
+          style="width:100%; padding-right:34px; box-sizing:border-box;">
+        <button type="button" onclick="window._hoPickClear()" title="ล้าง" style="position:absolute; right:6px; top:6px; border:none; background:transparent; cursor:pointer; font-size:14px; color:#94a3b8;">✕</button>
+        <div id="ho_equipList" style="display:none; position:absolute; left:0; right:0; top:100%; z-index:50; max-height:280px; overflow:auto; background:#fff; border:1px solid #cbd5e1; border-radius:10px; box-shadow:0 8px 24px rgba(0,0,0,.15); margin-top:4px;"></div>
+      </div>`;
+    }
+
+    const HO_PICK = { active: -1, shown: [] };
+
+    function hoPickRender(query) {
+      const q = String(query || '').trim().toLowerCase();
+      const words = q ? q.split(/\s+/) : [];
+      const fields = ['รหัสครุภัณฑ์', 'รหัส', 'ชื่ออุปกรณ์', 'ยี่ห้อ', 'รุ่น', 'Serial', 'ที่เก็บ', 'หมวดหมู่'];
+      const all = DATA.equipment.filter(e => !words.length || words.every(w => fields.some(f => String(e[f] ?? '').toLowerCase().includes(w))));
+      const LIMIT = 50;
+      HO_PICK.shown = all.slice(0, LIMIT);
+      HO_PICK.active = HO_PICK.shown.length ? 0 : -1;
+      const list = $('ho_equipList');
+      if (!list) return;
+      list.innerHTML = HO_PICK.shown.map((e, i) => `
+        <div class="ho-opt" data-i="${i}" onmousedown="event.preventDefault(); window._hoPickChoose(${i})" onmouseover="window._hoPickHover(${i})"
+          style="padding:8px 12px; cursor:pointer; border-bottom:1px solid #f1f5f9;">
+          <div style="font-size:13px; font-weight:600; color:#0f172a;">${esc(e['รหัสครุภัณฑ์'] || e['รหัส'])} <span style="font-weight:500;">— ${esc(e['ชื่ออุปกรณ์'])}</span></div>
+          <div style="font-size:11px; color:#64748b;">${esc([e['ยี่ห้อ'], e['รุ่น']].filter(Boolean).join(' '))}${e['Serial'] ? ' · S/N ' + esc(e['Serial']) : ''}${e['ที่เก็บ'] ? ' · 📍 ' + esc(e['ที่เก็บ']) : ''}</div>
+        </div>`).join('') + (all.length > LIMIT ? `<div style="padding:8px 12px; font-size:12px; color:#64748b; background:#f8fafc;">แสดง ${LIMIT} จาก ${all.length} รายการ — พิมพ์เพิ่มเพื่อกรองให้แคบลง</div>` : '')
+        || '<div style="padding:12px; font-size:13px; color:#64748b;">ไม่พบครุภัณฑ์ที่ตรงกับคำค้นหา</div>';
+      hoPickHighlight();
+    }
+
+    function hoPickHighlight() {
+      document.querySelectorAll('#ho_equipList .ho-opt').forEach(el => {
+        const on = +el.dataset.i === HO_PICK.active;
+        el.style.background = on ? '#e0f2fe' : '';
+        if (on) el.scrollIntoView({ block: 'nearest' });
+      });
+    }
+
+    window._hoPickOpen = () => {
+      const inp = $('ho_equipSearch');
+      // ถ้าเลือกไว้แล้ว ให้แสดงรายการทั้งหมดตอนโฟกัส แทนที่จะกรองด้วยข้อความที่เลือกไว้
+      hoPickRender($('ho_equipId').value ? '' : inp.value);
+      $('ho_equipList').style.display = '';
+      if ($('ho_equipId').value) inp.select();
+    };
+    window._hoPickType = () => {
+      $('ho_equipId').value = ''; // พิมพ์ใหม่ = ยังไม่ได้เลือก กันค่าเก่าค้างไม่ตรงกับข้อความ
+      hoPickRender($('ho_equipSearch').value);
+      $('ho_equipList').style.display = '';
+    };
+    window._hoPickHover = (i) => { HO_PICK.active = i; hoPickHighlight(); };
+    window._hoPickChoose = (i) => {
+      const e = HO_PICK.shown[i];
+      if (!e) return;
+      $('ho_equipId').value = e['รหัส'];
+      $('ho_equipSearch').value = hoEquipLabel(e);
+      $('ho_equipList').style.display = 'none';
+      hoEquipChange();
+    };
+    window._hoPickClear = () => {
+      $('ho_equipId').value = '';
+      $('ho_equipSearch').value = '';
+      $('ho_equipSearch').focus();
+    };
+    window._hoPickKey = (ev) => {
+      const list = $('ho_equipList');
+      if (ev.key === 'Escape') { list.style.display = 'none'; return; }
+      if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
+        ev.preventDefault();
+        if (list.style.display === 'none') window._hoPickOpen();
+        const n = HO_PICK.shown.length;
+        if (n) HO_PICK.active = (HO_PICK.active + (ev.key === 'ArrowDown' ? 1 : -1) + n) % n;
+        hoPickHighlight();
+      } else if (ev.key === 'Enter' && list.style.display !== 'none') {
+        ev.preventDefault();
+        if (HO_PICK.active >= 0) window._hoPickChoose(HO_PICK.active);
+      }
+    };
+    // คลิกนอกช่องค้นหา = ปิดรายการ
+    document.addEventListener('mousedown', (ev) => {
+      const pk = $('ho_picker');
+      if (pk && !pk.contains(ev.target)) { const l = $('ho_equipList'); if (l) l.style.display = 'none'; }
+    });
 
     function hoFindEquip(id) {
       return DATA.equipment.find(e => String(e['รหัส']) === String(id));
@@ -5338,7 +5427,7 @@ input, select, textarea, button {
       const today = new Date().toISOString().split('T')[0];
       return `
     <div class="form-grid">
-      <div class="field full"><label>ครุภัณฑ์ *</label><select id="ho_equipId" onchange="window._hoEquipChange()">${hoEquipOptions(h.equipId)}</select></div>
+      <div class="field full"><label>ครุภัณฑ์ * <span style="font-weight:400; color:#64748b; font-size:12px;">(พิมพ์ค้นหาด้วย เลขครุภัณฑ์ / ชื่อ / ยี่ห้อ / รุ่น / Serial / ที่เก็บ)</span></label>${hoEquipPicker(h)}</div>
       <div class="field"><label>เลขครุภัณฑ์</label><input id="ho_assetNo" value="${esc(h['เลขครุภัณฑ์'] || '')}"></div>
       <div class="field"><label>รุ่น</label><input id="ho_model" value="${esc(h['รุ่น'] || '')}"></div>
       <div class="field"><label>สเปค/ยี่ห้อ-Serial</label><input id="ho_spec" value="${esc(h['สเปค'] || '')}"></div>
