@@ -767,11 +767,7 @@ function equipForm(e) {
       ${sec('📍 ที่ตั้ง / ผู้รับผิดชอบ')}
       <div class="field"><label>ที่ตั้ง/ที่เก็บ <small style="color:#94a3b8;">(เลือกจากที่เคยใช้ หรือพิมพ์ใหม่)</small></label><input id="e_loc" list="eq_dl_loc" value="${esc(e['ที่เก็บ'] || '')}"></div>
       <div class="field"><label>หน่วยงานที่รับผิดชอบ</label>
-        <select id="e_dept" onchange="window._eqRefreshStaff()">
-          <option value="">-- ไม่ระบุ --</option>
-          ${curDept && !depts.includes(curDept) ? `<option selected>${esc(curDept)}</option>` : ''}
-          ${depts.map(d => `<option ${d === curDept ? 'selected' : ''}>${esc(d)}</option>`).join('')}
-        </select>
+        ${eqDeptInputHtml('e_dept', curDept, 'window._eqRefreshStaff()', 'พิมพ์เพื่อค้นหา หรือเว้นว่างถ้าไม่ระบุ')}
       </div>
       <div class="field full"><label>ผู้รับผิดชอบ <small style="color:#94a3b8;">(เลือกจากรายชื่อเจ้าหน้าที่ หรือพิมพ์เอง)</small></label>
         <input id="e_resp" list="e_staff_list" autocomplete="off" value="${esc(e['ผู้รับผิดชอบ'] || '')}" placeholder="พิมพ์ชื่อเพื่อค้นหา...">
@@ -841,6 +837,7 @@ function editEquip(row) {
 
 async function saveEquip(row) {
   if (EQ_PHOTO.busy) return;
+  if (!(await eqDeptEnsure('e_dept'))) return;
   const lifeRaw = $('e_life').value.trim();
   const data = {
     'รหัสครุภัณฑ์': eqNorm($('e_code').value), 'ชื่ออุปกรณ์': eqNorm($('e_name').value), 'หมวดหมู่': $('e_cat').value,
@@ -848,7 +845,7 @@ async function saveEquip(row) {
     'ยี่ห้อ': eqCanon('ยี่ห้อ', $('e_brand').value), 'รุ่น': eqNorm($('e_model').value), 'Serial': eqNorm($('e_sn').value),
     'ผู้จำหน่าย': eqCanon('ผู้จำหน่าย', $('e_vendor').value),
     'จำนวน': +$('e_qty').value, 'หน่วยนับ': eqCanon('หน่วยนับ', $('e_unit').value), 'ที่เก็บ': eqCanon('ที่เก็บ', $('e_loc').value),
-    'หน่วยงานที่รับผิดชอบ': $('e_dept').value, 'ผู้รับผิดชอบ': eqNorm($('e_resp').value),
+    'หน่วยงานที่รับผิดชอบ': eqNorm($('e_dept').value), 'ผู้รับผิดชอบ': eqNorm($('e_resp').value),
     'มูลค่า': +$('e_price').value, 'ประเภทค่าเสื่อม': $('e_depr').value, 'อายุการใช้งานปี': lifeRaw === '' ? '' : +lifeRaw,
     'สถานะ': $('e_status').value, 'วันที่จัดซื้อ': $('e_buy').value,
     'หมายเหตุ': $('e_note').value.trim(),
@@ -1175,6 +1172,71 @@ async function autoAssignCategories() {
     setTimeout(() => eqCatRepaint(), 600); // รอข้อมูลรีเฟรชแล้ววาดจำนวนอุปกรณ์ต่อหมวดใหม่
   } catch (err) { showLoading(false); toast('ผิดพลาด: ' + err.message, 'error'); }
 }
+
+// ------------------------------------------------------------------ 7) ช่องหน่วยงานแบบพิมพ์ค้นหา + เพิ่มหน่วยงานใหม่ได้ (ใช้ร่วมกับฟอร์มใบส่งมอบ)
+// เดิมเป็น <select> ตายตัวจากตารางหน่วยงาน: หน่วยงานที่ยังไม่มีในตาราง (เช่น ห้องคลอด) จึงหาไม่เจอและเพิ่มไม่ได้
+function eqDeptNames() {
+  const seen = new Set();
+  return (DATA.departments || []).map(d => eqNorm(d['ชื่อหน่วยงาน'])).filter(n => n && !seen.has(n.toLowerCase()) && seen.add(n.toLowerCase()))
+    .sort((a, b) => a.localeCompare(b, 'th'));
+}
+function eqDeptFind(name) {
+  const n = eqNorm(name).toLowerCase();
+  return n ? eqDeptNames().find(x => x.toLowerCase() === n) : undefined;
+}
+// onChangeJs: โค้ด JS (สตริง) ที่รันเมื่อค่าเปลี่ยน เช่น รีเฟรชรายชื่อเจ้าหน้าที่ของหน่วยงานนั้น
+function eqDeptInputHtml(id, value, onChangeJs, placeholder) {
+  return `<input id="${id}" list="${id}_list" autocomplete="off" value="${esc(value || '')}" placeholder="${esc(placeholder || 'พิมพ์เพื่อค้นหาหน่วยงาน...')}"
+      oninput="eqDeptCheck('${id}')" onchange="eqDeptCheck('${id}');${onChangeJs || ''}">
+    <datalist id="${id}_list">${eqDeptNames().map(n => `<option value="${esc(n)}"></option>`).join('')}</datalist>
+    <div id="${id}_hint" style="font-size:12px; margin-top:4px; min-height:16px;"></div>`;
+}
+// พิมพ์ชื่อที่ยังไม่มีในระบบ -> แสดงปุ่มเพิ่มเป็นหน่วยงานใหม่ (ชื่อที่ตรงกับของเดิมต่างแค่ตัวพิมพ์/ช่องว่างจะใช้ของเดิม)
+function eqDeptCheck(id) {
+  const inp = document.getElementById(id), hint = document.getElementById(id + '_hint');
+  if (!inp || !hint) return;
+  const typed = eqNorm(inp.value);
+  if (!typed) { hint.innerHTML = ''; return; }
+  const hit = eqDeptFind(typed);
+  if (hit) { if (hit !== inp.value) inp.value = hit; hint.innerHTML = ''; return; }
+  const canAdd = typeof canManageEquipment === 'function' && canManageEquipment();
+  hint.innerHTML = `<span style="color:#b45309;">ไม่พบหน่วยงาน “${esc(typed)}” ในระบบ</span>`
+    + (canAdd ? ` <button type="button" class="btn btn-sm btn-secondary" onclick="eqDeptAdd('${id}')" style="padding:2px 10px; margin-left:6px;">➕ เพิ่มเป็นหน่วยงานใหม่</button>` : '');
+}
+// เพิ่มหน่วยงานเข้าตารางหน่วยงาน (ฝั่ง server กันชื่อซ้ำ) แล้วอัปเดตรายการในหน่วยความจำทันที
+async function eqDeptAdd(id) {
+  const inp = document.getElementById(id);
+  const name = eqNorm(inp ? inp.value : '');
+  if (!name) return false;
+  showLoading(true);
+  try {
+    const r = await callApi('saveDepartment', { 'ชื่อหน่วยงาน': name }, ADMIN_PASS);
+    showLoading(false);
+    if (!r.success) { toast(r.message || 'เพิ่มหน่วยงานไม่สำเร็จ', 'error'); return false; }
+    if (!DATA.departments) DATA.departments = [];
+    if (!eqDeptFind(r.name)) DATA.departments.push({ 'รหัส': r.id, 'ชื่อหน่วยงาน': r.name });
+    if (inp) inp.value = r.name;
+    const dl = document.getElementById(id + '_list');
+    if (dl) dl.innerHTML = eqDeptNames().map(n => `<option value="${esc(n)}"></option>`).join('');
+    eqDeptCheck(id);
+    toast(r.existed ? 'มีหน่วยงาน "' + r.name + '" อยู่แล้ว' : 'เพิ่มหน่วยงาน "' + r.name + '" แล้ว', r.existed ? 'warning' : 'success');
+    if (typeof inp.onchange === 'function') inp.onchange();
+    if (typeof refreshData === 'function') refreshData();
+    return true;
+  } catch (err) { showLoading(false); toast('ผิดพลาด: ' + err.message, 'error'); return false; }
+}
+// ก่อนบันทึก: ถ้าชื่อที่พิมพ์ไม่อยู่ในระบบ ให้ถามเพิ่มเป็นหน่วยงานใหม่ (ไม่ปล่อยให้พิมพ์ผิดแล้วบันทึกเงียบๆ) — true = ไปต่อได้
+async function eqDeptEnsure(id) {
+  const inp = document.getElementById(id);
+  const typed = eqNorm(inp ? inp.value : '');
+  if (!typed) return true;
+  const hit = eqDeptFind(typed);
+  if (hit) { inp.value = hit; return true; }
+  if (typeof canManageEquipment === 'function' && !canManageEquipment()) { toast('ไม่พบหน่วยงาน "' + typed + '" ในระบบ', 'warning'); return false; }
+  if (!confirm('ไม่พบหน่วยงาน "' + typed + '" ในระบบ\n\nต้องการเพิ่มเป็นหน่วยงานใหม่หรือไม่?\n(กด "ยกเลิก" เพื่อกลับไปแก้ชื่อ)')) return false;
+  return eqDeptAdd(id);
+}
+if (typeof window !== 'undefined') { window.eqDeptCheck = eqDeptCheck; window.eqDeptAdd = eqDeptAdd; }
 
 if (typeof module === 'object' && module.exports) {
   module.exports = { eqFilter, eqSort, eqBuildEntries, eqPaginate, eqNorm, eqTagPrefix, EQ_STATE_DEFAULT };

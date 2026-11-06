@@ -217,11 +217,8 @@ function equipmentHandoverForm(h) {
   <div class="field"><label>รุ่น</label><input autocomplete="off" id="ho_model" value="${esc(h['รุ่น'] || '')}"></div>
   <div class="field"><label>สเปค/ยี่ห้อ-Serial</label><input autocomplete="off" id="ho_spec" value="${esc(h['สเปค'] || '')}"></div>
   <div class="field"><label>ราคา</label><input autocomplete="off" id="ho_price" type="number" value="${esc(h['ราคา'] || 0)}"></div>
-  <div class="field"><label>ส่งมอบให้หน่วยงาน *</label>
-    <select id="ho_dept" onchange="window._hoStaffRefresh()">
-      <option value="">-- เลือกหน่วยงาน --</option>
-      ${DATA.departments.map(d => `<option ${d['ชื่อหน่วยงาน'] === h['ส่งมอบให้หน่วยงาน'] ? 'selected' : ''}>${esc(d['ชื่อหน่วยงาน'])}</option>`).join('')}
-    </select>
+  <div class="field"><label>ส่งมอบให้หน่วยงาน * <small style="color:#94a3b8;">(พิมพ์ค้นหา — ถ้ายังไม่มีในระบบ เพิ่มได้ทันที)</small></label>
+    ${eqDeptInputHtml('ho_dept', h['ส่งมอบให้หน่วยงาน'], 'window._hoStaffRefresh()')}
   </div>
   <div class="field"><label>ผู้รับผิดชอบ <small style="color:#94a3b8;">(เลือกจากรายชื่อเจ้าหน้าที่ หรือพิมพ์เอง)</small></label>
     <input autocomplete="off" id="ho_responsible" list="ho_staff_list" placeholder="พิมพ์ชื่อเพื่อค้นหา..." value="${esc(h['ผู้รับผิดชอบ'] || '')}">
@@ -300,8 +297,9 @@ function hoCollectChecklist(prefix) {
 async function saveEquipmentHandover(row) {
   const equipId = $('ho_equipId').value;
   if (!equipId) { toast('กรุณาเลือกครุภัณฑ์', 'warning'); return; }
-  const dept = $('ho_dept').value;
-  if (!dept) { toast('กรุณาเลือกหน่วยงานที่ส่งมอบให้', 'warning'); return; }
+  if (!$('ho_dept').value.trim()) { toast('กรุณาระบุหน่วยงานที่ส่งมอบให้', 'warning'); return; }
+  if (!(await eqDeptEnsure('ho_dept'))) return;
+  const dept = eqNorm($('ho_dept').value);
   const e = hoFindEquip(equipId);
 
   const returnSenderDate = $('ho_return_senderDate').value;
