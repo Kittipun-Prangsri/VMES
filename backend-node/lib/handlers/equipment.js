@@ -14,6 +14,53 @@ async function getEquipmentCategories() {
   return listDocs(SHEETS.EQUIPMENT_CATEGORY);
 }
 
+// ---- ฟิลด์เพิ่มเติมของทะเบียนครุภัณฑ์ ----
+const DEPRECIATION_TYPES = ['ไม่คิดค่าเสื่อม', 'เส้นตรง (Straight-line)', 'ยอดลดลง (Declining balance)', 'ผลผลิตหน่วย (Units of production)'];
+const MAX_PHOTOS = 6;
+const SHORT_TEXT_MAX = 200;
+const normText = (v, max) => String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, max || SHORT_TEXT_MAX);
+const isUrl = (u) => /^https?:\/\/\S+$/i.test(String(u || ''));
+
+// รูปทั้งหมดของอุปกรณ์ (เรียงตามลำดับ รูปแรก = รูปหลัก) — รองรับข้อมูลเก่าที่มีแค่ 'รูปภาพ' เดียว
+function photoListOf(doc) {
+  const arr = Array.isArray(doc && doc['รูปภาพทั้งหมด']) ? doc['รูปภาพทั้งหมด'].filter(isUrl) : [];
+  if (arr.length) return arr;
+  return doc && isUrl(doc['รูปภาพ']) ? [doc['รูปภาพ']] : [];
+}
+
+// ตรวจ/ทำความสะอาดเฉพาะฟิลด์ใหม่ที่ client ส่งมา (ไม่แตะฟิลด์เดิม เพื่อไม่กระทบการนำเข้า/ฟอร์มอื่น)
+function sanitizeExtraFields(d) {
+  ['ประเภทครุภัณฑ์', 'ผู้จำหน่าย', 'หน่วยงานที่รับผิดชอบ', 'ผู้รับผิดชอบ'].forEach((k) => {
+    if (k in d) d[k] = normText(d[k]);
+  });
+  if ('ประเภทค่าเสื่อม' in d) {
+    const v = normText(d['ประเภทค่าเสื่อม']);
+    if (v && !DEPRECIATION_TYPES.includes(v)) return 'ประเภทค่าเสื่อมไม่ถูกต้อง';
+    d['ประเภทค่าเสื่อม'] = v;
+  }
+  if ('อายุการใช้งานปี' in d) {
+    const raw = d['อายุการใช้งานปี'];
+    if (raw === '' || raw == null) d['อายุการใช้งานปี'] = '';
+    else {
+      const n = Number(raw);
+      if (!Number.isFinite(n) || n < 0 || n > 100) return 'อายุการใช้งานต้องอยู่ระหว่าง 0–100 ปี';
+      d['อายุการใช้งานปี'] = n;
+    }
+  }
+  if ('รูปภาพทั้งหมด' in d) {
+    const list = Array.isArray(d['รูปภาพทั้งหมด']) ? d['รูปภาพทั้งหมด'] : [];
+    const clean = [];
+    for (const u of list) {
+      if (!isUrl(u)) return 'ลิงก์รูปภาพไม่ถูกต้อง';
+      if (!clean.includes(u)) clean.push(u);
+    }
+    if (clean.length > MAX_PHOTOS) return 'แนบรูปได้ไม่เกิน ' + MAX_PHOTOS + ' รูปต่ออุปกรณ์';
+    d['รูปภาพทั้งหมด'] = clean;
+    d['รูปภาพ'] = clean[0] || ''; // รูปหลัก = รูปแรกเสมอ (ตารางคลัง/ป้าย/หน้าอื่นอ่านจากฟิลด์นี้)
+  }
+  return '';
+}
+
 async function saveEquipment(data, adminCode) {
   if (!verifyAdmin(adminCode)) return { success: false, message: 'ไม่มีสิทธิ์ดำเนินการ' };
   try {
@@ -25,6 +72,8 @@ async function saveEquipment(data, adminCode) {
       const existing = await getDoc(SHEETS.EQUIPMENT, String(data['รหัส']));
       if (existing) data = { ...existing, ...data };
     }
+    const bad = sanitizeExtraFields(data);
+    if (bad) return { success: false, message: bad };
     data['วันที่บันทึก'] = nowStr();
     delete data._row;
     await setDoc(SHEETS.EQUIPMENT, data['รหัส'], data);
@@ -48,9 +97,9 @@ async function deleteEquipment(code, adminCode, reason) {
   }
 }
 
-// อัปโหลดรูปครุภัณฑ์: ดึงเอกสารเดิมมาก่อนแล้วเขียนกลับทั้งฉบับ เพราะ setDoc เป็น
-// full replace ไม่ merge (ดู setDoc ใน ../firestore.js) ถ้าส่งแค่ฟิลด์รูปไปตรงๆ
-// จะเผลอลบฟิลด์อื่นของอุปกรณ์ทิ้งหมด
+// อัปโหลดรูปครุภัณฑ์ "เพิ่มต่อท้าย" รายการรูปของอุปกรณ์ (สูงสุด MAX_PHOTOS รูป; รูปแรกคือรูปหลัก)
+// ดึงเอกสารเดิมมาก่อนแล้วเขียนกลับทั้งฉบับ เพราะ setDoc เป็น full replace ไม่ merge (ดู setDoc ใน
+// ../firestore.js) ถ้าส่งแค่ฟิลด์รูปไปตรงๆ จะเผลอลบฟิลด์อื่นของอุปกรณ์ทิ้งหมด
 async function uploadEquipmentPhoto(code, base64Data, contentType, adminCode) {
   if (!verifyAdmin(adminCode)) return { success: false, message: 'ไม่มีสิทธิ์ดำเนินการ' };
   try {
@@ -58,15 +107,18 @@ async function uploadEquipmentPhoto(code, base64Data, contentType, adminCode) {
     if (!docId) return { success: false, message: 'ไม่พบรหัสอุปกรณ์' };
     const existing = await getDoc(SHEETS.EQUIPMENT, docId);
     if (!existing) return { success: false, message: 'ไม่พบข้อมูลอุปกรณ์นี้แล้ว' };
+    const list = photoListOf(existing);
+    if (list.length >= MAX_PHOTOS) return { success: false, message: 'แนบรูปได้ไม่เกิน ' + MAX_PHOTOS + ' รูปต่ออุปกรณ์' };
 
     const ext = (contentType || 'image/jpeg').split('/')[1] || 'jpg';
     const destPath = `equipment-photos/${docId}-${Date.now()}.${ext}`;
     const url = await uploadBase64Image(base64Data, destPath, contentType);
 
-    const updated = { ...existing, 'รูปภาพ': url };
+    const photos = list.concat(url);
+    const updated = { ...existing, 'รูปภาพทั้งหมด': photos, 'รูปภาพ': photos[0] };
     delete updated._row;
     await setDoc(SHEETS.EQUIPMENT, docId, updated);
-    return { success: true, url };
+    return { success: true, url, count: photos.length };
   } catch (err) {
     return { success: false, message: err.message };
   }
@@ -210,4 +262,5 @@ async function deleteEquipmentLocation(name, adminCode) {
 module.exports = {
   getEquipment, getEquipmentCategories, saveEquipment, deleteEquipment, uploadEquipmentPhoto,
   addEquipmentLocation, renameEquipmentLocation, deleteEquipmentLocation,
+  sanitizeExtraFields, photoListOf, DEPRECIATION_TYPES, MAX_PHOTOS,
 };
