@@ -9,7 +9,7 @@ const fake = {
   SHEETS: { EQUIPMENT: 'equipment', SETTINGS: 'settings', AUDIT: 'audit', USERS: 'users', EQUIPMENT_CATEGORY: 'equipmentCategory' },
   listDocs: async (c) => Object.values(store[c] || (store[c] = {})).map((d) => ({ ...d })),
   getDoc: async (c, id) => (store[c] && store[c][id] ? { ...store[c][id] } : null),
-  setDoc: async (c, id, d) => { (store[c] || (store[c] = {}))[id] = { ...d }; return true; },
+  setDoc: async (c, id, d) => { if (global.__dropWrites) return true; (store[c] || (store[c] = {}))[id] = { ...d }; return true; },
   deleteDoc: async (c, id) => { delete store[c][id]; return true; },
 };
 require.cache[fsPath] = { id: fsPath, filename: fsPath, loaded: true, exports: fake };
@@ -91,7 +91,12 @@ const master = () => JSON.parse(store.settings.EQUIPMENT_LOCATIONS.Value);
   r = await H.bulkSetEquipmentUnit('ห้องไอที ชั้น2', 'งานสารสนเทศ', A, true); assert.deepEqual([r.matched, r.willChange], [2, 2]);
   r = await H.bulkSetEquipmentUnit('ห้องไอที ชั้น2', 'งานสารสนเทศ', A); assert.equal(r.updated, 2);
   assert.equal(store.equipment.r1['หน่วยงานที่รับผิดชอบ'], 'งานสารสนเทศ'); assert.equal(store.equipment.r3['หน่วยงานที่รับผิดชอบ'], undefined);
-  console.log('  ✅ bulk set responsible unit by category / location');
+  // เขียนไม่เข้าจริงแต่ setDoc ไม่ throw -> ต้องไม่รายงานสำเร็จ
+  put('s1', { 'หมวดหมู่': 'เครื่องมือแพทย์' }); put('s2', { 'หมวดหมู่': 'เครื่องมือแพทย์' });
+  global.__dropWrites = true; // จำลองเขียนไม่เข้าแต่ไม่ throw
+  r = await H.bulkSetEquipmentUnit('6515', 'งานสารสนเทศ', A);
+  assert.equal(r.success, false); assert.match(r.message, /อ่านกลับไม่ตรง/); global.__dropWrites = false;
+  console.log('  ✅ bulk set responsible unit by category / location (+ detects silently lost writes)');
 
   console.log('\n🎉 ALL EQUIPMENT LOCATION TESTS PASSED');
 })().catch((e) => { console.error(e); process.exit(1); });

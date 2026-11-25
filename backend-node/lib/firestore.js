@@ -56,6 +56,10 @@ const COLLECTION = SHEETS;
 
 // in-memory cache ต่อ warm instance ของ Vercel — ลดจำนวน query ซ้ำๆ เมื่อมีหลาย request
 // เข้ามาถี่ๆ ภายใน 30 วิ (ไม่มีผลต่อ correctness เพราะ setDoc/deleteDoc ล้าง cache ทันที)
+// ข้อผิดพลาดล่าสุดจากการเขียน Supabase — เดิมถูกกลืนเงียบ (ถ้า Firebase เขียนผ่านจะตอบว่าสำเร็จทั้งที่ข้อมูลที่อ่านกลับมาจาก Supabase ไม่เปลี่ยน)
+let LAST_SB_ERROR = '';
+const getLastWriteError = () => LAST_SB_ERROR;
+const resetLastWriteError = () => { LAST_SB_ERROR = ''; };
 const CACHE = {};
 const CACHE_TTL_MS = 30 * 1000;
 
@@ -113,7 +117,8 @@ async function setDoc(collection, docId, data) {
         .from(collection)
         .upsert({ id: cleanDocId, data: clean, updated_at: new Date().toISOString() });
       if (!error) sbSuccess = true;
-    } catch (e) {}
+      else { LAST_SB_ERROR = `${collection}/${cleanDocId}: ${error.message || error.code || 'unknown'}`; console.error('Supabase upsert failed:', LAST_SB_ERROR); }
+    } catch (e) { LAST_SB_ERROR = `${collection}/${cleanDocId}: ${e.message}`; console.error('Supabase upsert threw:', LAST_SB_ERROR); }
   }
 
   try {
@@ -153,6 +158,23 @@ async function deleteField(collection, docId, fieldName) {
   const updated = { ...existing };
   delete updated[fieldName];
   return await setDoc(collection, cleanDocId, updated);
+}
+
+// ตรวจว่าแต่ละ collection อ่านได้จากฐานไหน/กี่รายการ (ใช้วินิจฉัยกรณีข้อมูลสองฐานไม่ตรงกัน — listDocs อ่าน Supabase ก่อน ถ้าว่างหรือ error ถึงไปอ่าน Firebase)
+async function diagnose(collection) {
+  const out = { collection, supabase: { configured: !!supabase }, firebase: {} };
+  if (supabase) {
+    try {
+      const { count, error } = await supabase.from(collection).select('id', { count: 'exact', head: true });
+      out.supabase.ok = !error; out.supabase.count = count; if (error) out.supabase.error = error.message || String(error.code);
+    } catch (e) { out.supabase.ok = false; out.supabase.error = e.message; }
+  }
+  try {
+    const snap = await getFirebaseDb().collection(collection).count().get();
+    out.firebase.ok = true; out.firebase.count = snap.data().count;
+  } catch (e) { out.firebase.ok = false; out.firebase.error = e.message; }
+  out.readsFrom = out.supabase.ok && out.supabase.count > 0 ? 'Supabase' : (out.firebase.ok && out.firebase.count > 0 ? 'Firebase (สำรอง)' : 'ไม่มี');
+  return out;
 }
 
 async function listDocs(collection) {
@@ -290,4 +312,4 @@ async function getAllData() {
   return out;
 }
 
-module.exports = { SHEETS, COLLECTION, setDoc, deleteDoc, deleteField, listDocs, getDoc, getAllData, syncFromFirebase };
+module.exports = { SHEETS, COLLECTION, diagnose, getLastWriteError, resetLastWriteError, setDoc, deleteDoc, deleteField, listDocs, getDoc, getAllData, syncFromFirebase };

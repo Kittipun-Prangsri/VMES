@@ -1,7 +1,8 @@
 // ============== EQUIPMENT ==============
 // พอร์ตจาก รหัส.js L1681-1707 (saveEquipment/deleteEquipment), L1502, L1511 (getEquipmentCategories)
 
-const { SHEETS, setDoc, deleteDoc, listDocs, getDoc } = require('../firestore');
+const fsEngine = require('../firestore');
+const { SHEETS, setDoc, deleteDoc, listDocs, getDoc } = fsEngine;
 const { newId, nowStr, logAudit } = require('../util');
 const { verifyAdmin } = require('../auth');
 const { uploadBase64Image } = require('../storage');
@@ -301,9 +302,14 @@ async function bulkSetEquipmentUnit(categoryOrLocation, unit, adminCode, dryRun)
       hit = items.filter((e) => e['รหัส'] && sameLoc(e['ที่เก็บ'], code));
     }
     const todo = hit.filter((e) => String(e['หน่วยงานที่รับผิดชอบ'] || '').trim() !== u);
-    if (dryRun) return { success: true, matched: hit.length, willChange: todo.length };
+    if (dryRun) {
+      let storage = null;
+      try { storage = fsEngine.diagnose ? await fsEngine.diagnose(SHEETS.EQUIPMENT) : null; } catch (e) { storage = null; }
+      return { success: true, matched: hit.length, willChange: todo.length, storage };
+    }
     // เขียนเป็นชุดพร้อมกัน (ทีละชิ้นต่อกัน 290 รายการอาจเกินเวลาของ serverless function จนบันทึกไม่ครบ)
     const failed = [];
+    if (fsEngine.resetLastWriteError) fsEngine.resetLastWriteError();
     for (let i = 0; i < todo.length; i += 15) {
       await Promise.all(todo.slice(i, i + 15).map((e) =>
         setDoc(SHEETS.EQUIPMENT, e['รหัส'], { ...e, 'หน่วยงานที่รับผิดชอบ': u }).catch((err) => { failed.push(e['รหัส'] + ': ' + err.message); })));
@@ -311,6 +317,19 @@ async function bulkSetEquipmentUnit(categoryOrLocation, unit, adminCode, dryRun)
     if (failed.length) {
       await logAudit('ตั้งหน่วยงานที่รับผิดชอบ (บางรายการล้มเหลว)', 'admin', code + ' -> ' + u + ' ล้มเหลว ' + failed.length + ' รายการ');
       return { success: false, message: 'บันทึกไม่ครบ: สำเร็จ ' + (todo.length - failed.length) + ' ล้มเหลว ' + failed.length + ' รายการ — กดซ้ำอีกครั้งเพื่อทำส่วนที่เหลือ (' + failed[0] + ')' };
+    }
+    // อ่านกลับจากฐานข้อมูลจริงเพื่อยืนยันว่าค่าเข้าจริง (setDoc ตอบ "สำเร็จ" ได้แม้เขียนฐานหลักไม่ผ่านแต่ฐานสำรองผ่าน)
+    const notSaved = [];
+    for (let i = 0; i < todo.length; i += 15) {
+      await Promise.all(todo.slice(i, i + 15).map(async (e) => {
+        const back = await getDoc(SHEETS.EQUIPMENT, e['รหัส']);
+        if (!back || String(back['หน่วยงานที่รับผิดชอบ'] || '').trim() !== u) notSaved.push(e['รหัส']);
+      }));
+    }
+    if (notSaved.length) {
+      const why = (fsEngine.getLastWriteError && fsEngine.getLastWriteError()) || 'ไม่พบข้อผิดพลาดจากฐานข้อมูล (ค่าที่อ่านกลับยังเป็นของเดิม)';
+      await logAudit('ตั้งหน่วยงานที่รับผิดชอบ (อ่านกลับไม่ตรง)', 'admin', code + ' -> ' + u + ' ไม่เข้า ' + notSaved.length + '/' + todo.length + ' | ' + why);
+      return { success: false, message: 'บันทึกแล้วแต่อ่านกลับไม่ตรง ' + notSaved.length + ' จาก ' + todo.length + ' รายการ — สาเหตุ: ' + why };
     }
     await logAudit(byCode ? 'ตั้งหน่วยงานที่รับผิดชอบตามหมวด' : 'ตั้งหน่วยงานที่รับผิดชอบตามที่เก็บ', 'admin', code + ' -> ' + u + ' (' + todo.length + ' รายการ)');
     return { success: true, matched: hit.length, updated: todo.length, unit: u };

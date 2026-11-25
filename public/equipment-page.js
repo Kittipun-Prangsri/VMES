@@ -1310,6 +1310,14 @@ if (typeof module === 'object' && module.exports) {
 }
 
 // ตั้ง "หน่วยงานที่รับผิดชอบ" ทั้งหมวดทีเดียว — เฉพาะอุปกรณ์ของงานสารสนเทศเท่านั้นที่เปิดให้ยืมผ่านระบบ
+// บอกผู้ดูแลว่าระบบอ่านข้อมูลจากฐานไหน — ถ้า Supabase กับ Firebase จำนวนไม่เท่ากัน แปลว่าข้อมูลสองฐานไม่ตรงกัน
+function eqStorageNote(st) {
+  if (!st) return '';
+  const f = (x) => x ? (x.ok ? x.count : 'ผิดพลาด: ' + x.error) : '-';
+  return '\n\n[ตรวจฐานข้อมูล] อ่านจาก: ' + st.readsFrom + ' · Supabase ' + f(st.supabase) + ' รายการ · Firebase ' + f(st.firebase) + ' รายการ'
+    + (st.supabase && st.supabase.ok && st.firebase && st.firebase.ok && st.supabase.count !== st.firebase.count ? '\n⚠️ จำนวนสองฐานไม่เท่ากัน — แจ้งผู้พัฒนา' : '');
+}
+
 async function bulkSetUnitByCategory() {
   if (!canManageEquipment()) return;
   const code = (prompt('ตั้งหน่วยงานให้ทั้งหมวดหรือทั้งห้อง — ใส่รหัสหมวด 4 หลัก (เช่น 7440) หรือชื่อสถานที่เก็บ (เช่น ห้องไอที ชั้น2)', '7440') || '').trim();
@@ -1322,7 +1330,7 @@ async function bulkSetUnitByCategory() {
     showLoading(false);
     if (!d.success) { toast(d.message, 'error'); return; }
     if (!d.matched) { toast('ไม่พบอุปกรณ์ที่ตรงกับ ' + code, 'warning'); return; }
-    if (!confirm('พบอุปกรณ์ที่ตรงกับ ' + code + ' จำนวน ' + d.matched + ' รายการ (จะเปลี่ยน ' + d.willChange + ' รายการ)\nตั้งหน่วยงานที่รับผิดชอบเป็น "' + unit + '" ?')) return;
+    if (!confirm('พบอุปกรณ์ที่ตรงกับ ' + code + ' จำนวน ' + d.matched + ' รายการ (จะเปลี่ยน ' + d.willChange + ' รายการ)' + eqStorageNote(d.storage) + '\nตั้งหน่วยงานที่รับผิดชอบเป็น "' + unit + '" ?')) return;
     showLoading(true);
     const r = await callApi('bulkSetEquipmentUnit', code, unit, ADMIN_PASS);
     showLoading(false);
