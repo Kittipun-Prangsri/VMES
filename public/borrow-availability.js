@@ -106,10 +106,10 @@
   function isBorrowableStatus(status) { return !UNBORROWABLE_STATUSES.includes(String(status || '').trim()); }
 
   // อุปกรณ์ที่เปิดให้ยืมผ่านระบบนี้ = ของงานสารสนเทศเท่านั้น; ของหน่วยงานอื่นเป็นครุภัณฑ์ที่ตั้งใช้งานอยู่ในหน่วยงานนั้นแล้ว
-  // (ข้อมูลเก่าที่ยังไม่ระบุหน่วยงานที่รับผิดชอบ ถือเป็นของงานสารสนเทศ)
+  // ต้องระบุ "หน่วยงานที่รับผิดชอบ" เป็นงานสารสนเทศชัดเจน — ที่ยังไม่ระบุไม่ถือว่ายืมได้
   function isITUnit(unit) {
     const u = String(unit == null ? '' : unit).trim();
-    return !u || /สารสนเทศ|ไอที|(^|[^A-Za-z])IT([^A-Za-z]|$)/i.test(u);
+    return !!u && /สารสนเทศ|ไอที|(^|[^A-Za-z])IT([^A-Za-z]|$)/i.test(u);
   }
   function isBorrowPoolEquipment(e) { return !!e && isITUnit(e['หน่วยงานที่รับผิดชอบ']); }
 

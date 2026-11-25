@@ -864,7 +864,7 @@
 
       const emptyMsg = '<div class="eq-empty">' + (equipmentList.length
         ? 'ไม่พบอุปกรณ์ตามที่ค้นหา' + (EQ.onlyFree ? '<br><span class="eq-muted">ลองเอาติ๊ก “แสดงเฉพาะที่ว่าง” ออก เพื่อดูว่าติดยืมถึงเมื่อไร</span>' : '')
-        : '❌ ไม่พบอุปกรณ์ในระบบ') + '</div>';
+        : '❌ ยังไม่มีอุปกรณ์เปิดให้ยืม<br><span class="eq-muted">(เฉพาะอุปกรณ์งานสารสนเทศ — ให้ผู้ดูแลระบุ "หน่วยงานที่รับผิดชอบ" ในคลังอุปกรณ์)</span>') + '</div>';
       $id('eqList').innerHTML = (html || emptyMsg)
         + (list.length > EQ.limit ? '<button type="button" class="eq-more" onclick="EQ.limit += 30; eqRender(false)">แสดงเพิ่ม (อีก ' + (list.length - EQ.limit) + ' กลุ่ม)</button>' : '');
     }

@@ -20,7 +20,7 @@ const { todayStr } = require('../backend-node/lib/util');
 const today = todayStr();
 const plus = (n) => { const d = new Date(today + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
 const dmy = (iso) => iso.split('-').reverse().join('/'); // รูปแบบที่ฟอร์ม LIFF ส่งมา
-const eq = (id, o) => { store.equipment[id] = Object.assign({ 'รหัส': id, 'ชื่ออุปกรณ์': 'โน้ตบุ๊ก ' + id, 'จำนวน': 1, 'หน่วยนับ': 'เครื่อง', 'สถานะ': 'พร้อมยืม' }, o); };
+const eq = (id, o) => { store.equipment[id] = Object.assign({ 'รหัส': id, 'ชื่ออุปกรณ์': 'โน้ตบุ๊ก ' + id, 'จำนวน': 1, 'หน่วยนับ': 'เครื่อง', 'สถานะ': 'พร้อมยืม', 'หน่วยงานที่รับผิดชอบ': 'งานสารสนเทศ' }, o); };
 const req = (items, from, to, o) => Object.assign({
   'รายการอุปกรณ์': items.map(([id, q]) => ({ 'รหัสอุปกรณ์': id, 'จำนวน': q })), 'รหัสอุปกรณ์': items[0][0], 'จำนวน': items[0][1],
   'ผู้ขอยืม': 'สมชาย', 'หน่วยงาน': 'OPD', 'LINE_USER_ID': 'U1', 'วันที่ต้องการรับ': dmy(from), 'วันที่ครบกำหนด': dmy(to),
@@ -115,10 +115,10 @@ const reset = () => { store.borrowing = {}; sent.length = 0; };
   // เฉพาะอุปกรณ์งานสารสนเทศเท่านั้นที่ยืมผ่านระบบได้ — ของหน่วยงานอื่นเป็นครุภัณฑ์ประจำหน่วยงานที่ใช้งานอยู่แล้ว
   reset();
   eq('IT1', { 'หน่วยงานที่รับผิดชอบ': 'งานสารสนเทศ' }); eq('IT2', { 'หน่วยงานที่รับผิดชอบ': 'ศูนย์คอมพิวเตอร์ (IT)' });
-  eq('OPD1', { 'หน่วยงานที่รับผิดชอบ': 'ผู้ป่วยนอก' }); eq('OLD1', {}); // OLD1 = ข้อมูลเก่าไม่ระบุหน่วยงาน -> ถือเป็นของงานสารสนเทศ
+  eq('OPD1', { 'หน่วยงานที่รับผิดชอบ': 'ผู้ป่วยนอก' }); eq('OLD1', { 'หน่วยงานที่รับผิดชอบ': '' }); // ยังไม่ระบุหน่วยงาน -> ยังไม่เปิดให้ยืม
   const cat2 = await B.getBorrowCatalog();
   const ids = cat2.items.map((i) => i['รหัส']).sort();
-  assert.ok(ids.includes('IT1') && ids.includes('IT2') && ids.includes('OLD1') && !ids.includes('OPD1'), 'catalog lists only IT equipment: ' + ids);
+  assert.ok(ids.includes('IT1') && ids.includes('IT2') && !ids.includes('OLD1') && !ids.includes('OPD1'), 'catalog lists only IT equipment: ' + ids);
   const badOpd = await B.saveBorrowing(req([['OPD1', 1]], plus(1), plus(2)), 'x');
   assert.equal(badOpd.success, false); assert.match(badOpd.message, /ประจำหน่วยงาน ผู้ป่วยนอก.*งานสารสนเทศ/);
   assert.equal((await B.saveBorrowing(req([['IT1', 1]], plus(1), plus(2)), 'x')).success, true);

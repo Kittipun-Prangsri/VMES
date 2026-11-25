@@ -79,5 +79,8 @@ console.log('  ✅ equipment status');
 const pub = path.join(__dirname, '../public/borrow-availability.js');
 assert.ok(fs.existsSync(pub), 'public/borrow-availability.js missing — run `npm run build`');
 assert.equal(fs.readFileSync(pub, 'utf8'), fs.readFileSync(path.join(__dirname, '../backend-node/lib/borrowAvailability.js'), 'utf8'), 'browser copy is stale — run `npm run build`');
+for (const u of ['งานสารสนเทศ', 'งานเทคโนโลยีสารสนเทศ', 'IT', 'ไอที']) assert.equal(A.isITUnit(u), true, u);
+for (const u of ['', undefined, 'ผู้ป่วยนอก', 'ห้องคลอด', 'ADMIT']) assert.equal(A.isITUnit(u), false, String(u));
+console.log('  ✅ IT unit matching');
 console.log('  ✅ browser copy identical to source');
 console.log('\n🎉 ALL BORROW AVAILABILITY TESTS PASSED');
