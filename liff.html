@@ -367,6 +367,11 @@
     .eq-search { width:100%; padding:12px 14px; border:1.5px solid #c7d2fe; border-radius:12px; background:#eef2ff; font-size:.95rem; outline:none; }
     .eq-search:focus { background:#fff; border-color:#4f46e5; box-shadow:0 0 0 3px rgba(79,70,229,.15); }
     .eq-cats { display:flex; gap:6px; overflow-x:auto; padding:8px 0 4px; -webkit-overflow-scrolling:touch; }
+    .eq-kinds { display:flex; gap:8px; margin:8px 0 4px; }
+    .eq-kind { flex:1; border:2px solid #c7d2fe; background:#eef2ff; color:#3730a3; border-radius:12px; padding:10px 6px; font-size:.82rem; font-weight:800; line-height:1.25; }
+    .eq-kind small { display:block; font-weight:600; color:#059669; }
+    .eq-kind.on { background:#4f46e5; border-color:#4f46e5; color:#fff; } .eq-kind.on small { color:#c7f9e0; }
+    .eq-kind.dim { opacity:.55; }
     .eq-chip { flex:0 0 auto; border:1px solid #cbd5e1; background:#fff; color:#334155; border-radius:16px; padding:5px 11px; font-size:.75rem; font-weight:600; white-space:nowrap; }
     .eq-chip b { color:#059669; margin-left:2px; }
     .eq-chip.on { background:#4f46e5; border-color:#4f46e5; color:#fff; } .eq-chip.on b { color:#c7f9e0; }
@@ -449,6 +454,7 @@
         <div id="eqChosen" style="display:none;"></div>
         <div id="eqPicker">
           <input type="search" id="eqSearch" class="eq-search" autocomplete="off" placeholder="🔍 พิมพ์ค้นหา ชื่อ / เลขครุภัณฑ์ / ยี่ห้อ / รุ่น / ห้อง" oninput="eqRender(true)">
+          <div id="eqKinds" class="eq-kinds"></div>
           <div id="eqCats" class="eq-cats"></div>
           <label class="eq-opt"><input type="checkbox" id="eqOnlyFree" checked onchange="eqRender(true)"> แสดงเฉพาะที่ว่างในช่วงวันที่เลือก (เอาออกเพื่อดูว่าติดยืมถึงเมื่อไร)</label>
           <div id="eqInfo" class="eq-info"></div>
@@ -728,7 +734,7 @@
     // ตอนนี้ backend ส่ง catalog (อุปกรณ์ + ช่วงวันที่ที่ถูกกันไว้ ไม่มีข้อมูลบุคคล) แล้วหน้านี้คำนวณความว่างตามช่วงวันที่ที่ผู้ใช้เลือก
     // ด้วยตัวคำนวณชุดเดียวกับ backend (/borrow-availability.js) จึงตรงกับที่ระบบจะตรวจตอนบันทึก
     let catalog = { today: '', items: [], categories: [] };
-    const EQ = { text: '', cat: '', onlyFree: true, open: {}, limit: 30, chosenCollapsed: false };
+    const EQ = { text: '', cat: '', kind: '', onlyFree: true, open: {}, limit: 30, chosenCollapsed: false };
 
     const $id = (id) => document.getElementById(id);
     const escHtml = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -756,9 +762,26 @@
       return next ? 'ว่างอีกครั้ง ' + dmy(next) : 'ไม่ว่าง';
     }
     const eqText = (e) => [e['ชื่ออุปกรณ์'], e['รหัสครุภัณฑ์'], e['รหัส'], e['ยี่ห้อ'], e['รุ่น'], e['Serial'], e['ที่เก็บ'], e['หมวดหมู่']].map((v) => String(v == null ? '' : v)).join(' ').toLowerCase();
+    // อุปกรณ์ที่ยืมบ่อย: โน้ตบุ๊ก/โปรเจคเตอร์ ขึ้นเป็นปุ่มใหญ่ก่อน — ที่เหลือเก็บไว้ใต้ "อื่น ๆ" ไม่ให้รายการยาวท่วมหน้าจอ
+    const EQ_KINDS = [
+      { k: 'nb', label: '💻 โน้ตบุ๊ก', re: /โน้ต?บุ๊?[คก]|notebook|laptop/i },
+      { k: 'pj', label: '📽️ โปรเจคเตอร์', re: /โปรเจ[คก]เตอร์|projector/i },
+    ];
+    function eqKindOf(e) {
+      const t = (e['ชื่ออุปกรณ์'] || '') + ' ' + (e['รุ่น'] || '');
+      const hit = EQ_KINDS.find((x) => x.re.test(t));
+      return hit ? hit.k : 'other';
+    }
+    function eqSetKind(k) { EQ.kind = EQ.kind === k ? '' : k; eqRender(true); }
+    // มุมมองเริ่มต้น (ไม่ค้นหา/ไม่เลือกหมวด/ไม่เลือกปุ่ม) = เฉพาะที่ยืมบ่อย
+    const eqPopularOnly = () => !EQ.kind && !EQ.cat && !EQ.text.trim();
     function eqFiltered(ignoreCat) {
       const words = EQ.text.trim().toLowerCase().split(/\s+/).filter(Boolean);
       return equipmentList.filter((e) => {
+        if (!ignoreCat) {
+          const k = eqKindOf(e);
+          if (EQ.kind === 'all' ? false : EQ.kind ? k !== EQ.kind : eqPopularOnly() && k === 'other') return false;
+        }
         if (!ignoreCat && EQ.cat && (e['หมวดหมู่'] || '') !== (EQ.cat === '__none' ? '' : EQ.cat)) return false;
         if (words.length) { const t = eqText(e); if (!words.every((w) => t.includes(w))) return false; }
         return true;
@@ -798,6 +821,13 @@
       EQ.text = $id('eqSearch').value;
       EQ.onlyFree = $id('eqOnlyFree').checked;
 
+      // ปุ่มประเภทที่ยืมบ่อย: นับเฉพาะที่ว่างในช่วงวันที่เลือก
+      const kindFree = { nb: 0, pj: 0, other: 0 };
+      eqFilteredKindBase().forEach((e) => { if (eqAvail(e) > 0) kindFree[eqKindOf(e)]++; });
+      const kb = (k, label) => '<button type="button" class="eq-kind' + (EQ.kind === k ? ' on' : '') + (kindFree[k] ? '' : ' dim') + '" onclick="eqSetKind(\'' + k + '\')">' + label + '<small>ว่าง ' + kindFree[k] + ' ชิ้น</small></button>';
+      $id('eqKinds').innerHTML = EQ_KINDS.map((x) => kb(x.k, x.label)).join('') + kb('other', '📦 อื่น ๆ')
+        + '<button type="button" class="eq-kind' + (EQ.kind === 'all' ? ' on' : '') + '" onclick="eqSetKind(\'all\')">ทั้งหมด<small>&nbsp;</small></button>';
+
       // ชิปหมวดหมู่: นับเฉพาะที่ "ว่างในช่วงวันที่เลือก" ตามคำค้นปัจจุบัน
       const base = eqFiltered(true);
       const counts = new Map();
@@ -834,7 +864,8 @@
       const hiddenBusy = EQ.onlyFree ? items.length - items.filter((e) => eqAvail(e) > 0).length : 0;
       const w = eqWindow();
       $id('eqInfo').innerHTML = 'ช่วงที่ยืม <b>' + dmy(w.from) + (w.to !== w.from ? ' – ' + dmy(w.to) : '') + '</b> · พบ ' + items.filter((e) => eqAvail(e) > 0).length + ' ชิ้นที่ว่าง'
-        + (hiddenBusy ? ' <span class="eq-muted">(ซ่อนที่ไม่ว่าง ' + hiddenBusy + ' ชิ้น)</span>' : '');
+        + (hiddenBusy ? ' <span class="eq-muted">(ซ่อนที่ไม่ว่าง ' + hiddenBusy + ' ชิ้น)</span>' : '')
+        + (eqPopularOnly() ? '<br><span class="eq-muted">แสดงเฉพาะที่ยืมบ่อย (โน้ตบุ๊ก/โปรเจคเตอร์) — กด “📦 อื่น ๆ” หรือ “ทั้งหมด” เพื่อดูอุปกรณ์อื่น หรือพิมพ์ค้นหา</span>' : '');
 
       const unitRow = (e) => {
         const a = eqAvail(e), reason = eqReason(e);
@@ -855,8 +886,9 @@
         return '<div class="eq-group"><button type="button" class="eq-group-head" data-key="' + escHtml(g.key) + '" onclick="eqToggle(this.dataset.key)">'
           + '<span>' + (open ? '▼' : '▶') + ' <b>' + escHtml(g.name) + '</b>' + (g.brand || g.model ? ' <span class="eq-muted">' + escHtml([g.brand, g.model].filter(Boolean).join(' ')) + '</span>' : '') + '</span>'
           + '<span class="eq-badge ' + (g.avail.length ? 'ok' : 'off') + '">ว่าง ' + g.avail.length + '/' + g.units.length + '</span></button>'
-          + (open ? '<div class="eq-group-body">'
-            + (first ? '<button type="button" class="eq-quick" data-id="' + escHtml(first['รหัส']) + '" onclick="eqChoose(this.dataset.id)">⚡ เอาเครื่องที่ว่างเครื่องแรก' + (first['รหัสครุภัณฑ์'] ? ' (' + escHtml(first['รหัสครุภัณฑ์']) + ')' : '') + '</button>' : '')
+          + (first ? '<button type="button" class="eq-quick" data-id="' + escHtml(first['รหัส']) + '" onclick="eqChoose(this.dataset.id)">⚡ เลือกเครื่องที่ว่าง (ไม่ต้องดูทีละเครื่อง)</button>' : '')
+          + (open ? '<div class="eq-group-body">' 
+            + ''
             + g.shown.slice(0, 60).map(unitRow).join('')
             + (g.shown.length > 60 ? '<div class="eq-muted" style="padding:6px 10px;">แสดง 60 จาก ' + g.shown.length + ' — พิมพ์ค้นหาเพื่อกรอง</div>' : '') + '</div>' : '')
           + '</div>';
@@ -869,6 +901,15 @@
         + (list.length > EQ.limit ? '<button type="button" class="eq-more" onclick="EQ.limit += 30; eqRender(false)">แสดงเพิ่ม (อีก ' + (list.length - EQ.limit) + ' กลุ่ม)</button>' : '');
     }
 
+    // ฐานนับของปุ่มประเภท: ตามคำค้นและหมวดที่เลือก แต่ไม่ตัดตามประเภท
+    function eqFilteredKindBase() {
+      const words = EQ.text.trim().toLowerCase().split(/\s+/).filter(Boolean);
+      return equipmentList.filter((e) => {
+        if (EQ.cat && (e['หมวดหมู่'] || '') !== (EQ.cat === '__none' ? '' : EQ.cat)) return false;
+        if (words.length) { const t = eqText(e); if (!words.every((w) => t.includes(w))) return false; }
+        return true;
+      });
+    }
     function eqSetCat(k) { EQ.cat = k; eqRender(true); }
     function eqToggle(key) { EQ.open[key] = !EQ.open[key]; eqRender(false); }
 

@@ -72,5 +72,21 @@ const master = () => JSON.parse(store.settings.EQUIPMENT_LOCATIONS.Value);
   assert.equal((await H.deleteEquipmentLocation(NAME, A)).success, false, 'already gone');
   console.log('  ✅ delete (blocked when in use)');
 
+  // ตั้งหน่วยงานที่รับผิดชอบทั้งหมวด
+  store.equipment = {}; store.equipmentCategory = { c1: { 'รหัสหมวด': '7440', 'ชื่อหมวด': 'คอมพิวเตอร์และเครื่องพิมพ์' }, c2: { 'รหัสหมวด': '6515', 'ชื่อหมวด': 'เครื่องมือแพทย์' } };
+  const put = (id, o) => { store.equipment[id] = Object.assign({ 'รหัส': id, 'ชื่ออุปกรณ์': id }, o); };
+  put('a', { 'หมวดหมู่': 'คอมพิวเตอร์และเครื่องพิมพ์' }); put('b', { 'รหัสครุภัณฑ์': '7440-001-0001/1' });
+  put('c', { 'หมวดหมู่': 'เครื่องมือแพทย์', 'รหัสครุภัณฑ์': '6515-1' }); put('d', { 'หมวดหมู่': 'คอมพิวเตอร์และเครื่องพิมพ์', 'หน่วยงานที่รับผิดชอบ': 'งานสารสนเทศ' });
+  assert.equal((await H.bulkSetEquipmentUnit('7440', 'งานสารสนเทศ', 'wrong')).success, false, 'needs admin');
+  assert.equal((await H.bulkSetEquipmentUnit('74', 'งานสารสนเทศ', A)).success, false, 'bad code');
+  assert.equal((await H.bulkSetEquipmentUnit('7440', ' ', A)).success, false, 'empty unit');
+  r = await H.bulkSetEquipmentUnit('7440', 'งานสารสนเทศ', A, true);
+  assert.deepEqual([r.matched, r.willChange], [3, 2]); assert.equal(store.equipment.a['หน่วยงานที่รับผิดชอบ'], undefined, 'dry run changes nothing');
+  r = await H.bulkSetEquipmentUnit('7440', 'งานสารสนเทศ', A);
+  assert.deepEqual([r.matched, r.updated], [3, 2]);
+  assert.equal(store.equipment.a['หน่วยงานที่รับผิดชอบ'], 'งานสารสนเทศ'); assert.equal(store.equipment.b['หน่วยงานที่รับผิดชอบ'], 'งานสารสนเทศ');
+  assert.equal(store.equipment.c['หน่วยงานที่รับผิดชอบ'], undefined, 'other categories untouched');
+  console.log('  ✅ bulk set responsible unit by category');
+
   console.log('\n🎉 ALL EQUIPMENT LOCATION TESTS PASSED');
 })().catch((e) => { console.error(e); process.exit(1); });

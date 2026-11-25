@@ -280,7 +280,31 @@ async function deleteEquipmentLocation(name, adminCode) {
   }
 }
 
+// ตั้ง "หน่วยงานที่รับผิดชอบ" ให้อุปกรณ์ทั้งหมวดทีเดียว (หมวด = รหัสหมวด 4 ตัวหน้า เช่น 7440 ตรงกับหมวดที่ผูกไว้ หรือรหัสครุภัณฑ์ขึ้นต้นด้วยรหัสนั้น)
+// dryRun: นับอย่างเดียว ไม่แก้ข้อมูล
+async function bulkSetEquipmentUnit(categoryCode, unit, adminCode, dryRun) {
+  if (!verifyAdmin(adminCode)) return { success: false, message: 'ไม่มีสิทธิ์ดำเนินการ' };
+  try {
+    const code = String(categoryCode || '').trim();
+    const u = String(unit || '').trim();
+    if (!/^\d{4}$/.test(code)) return { success: false, message: 'รหัสหมวดต้องเป็นตัวเลข 4 หลัก เช่น 7440' };
+    if (!u || u.length > 60) return { success: false, message: 'กรุณาระบุหน่วยงานที่รับผิดชอบ (ไม่เกิน 60 ตัวอักษร)' };
+    const cats = await listDocs(SHEETS.EQUIPMENT_CATEGORY);
+    const names = new Set(cats.filter((c) => String(c['รหัสหมวด'] || '').trim() === code).map((c) => String(c['ชื่อหมวด'] || '').trim()).filter(Boolean));
+    const items = await listDocs(SHEETS.EQUIPMENT);
+    const hit = items.filter((e) => e['รหัส'] && (names.has(String(e['หมวดหมู่'] || '').trim()) || String(e['รหัสครุภัณฑ์'] || '').trim().startsWith(code)));
+    const todo = hit.filter((e) => String(e['หน่วยงานที่รับผิดชอบ'] || '').trim() !== u);
+    if (dryRun) return { success: true, matched: hit.length, willChange: todo.length };
+    for (const e of todo) await setDoc(SHEETS.EQUIPMENT, e['รหัส'], { ...e, 'หน่วยงานที่รับผิดชอบ': u });
+    await logAudit('ตั้งหน่วยงานที่รับผิดชอบตามหมวด', 'admin', code + ' -> ' + u + ' (' + todo.length + ' รายการ)');
+    return { success: true, matched: hit.length, updated: todo.length, unit: u };
+  } catch (err) {
+    return { success: false, message: err.message };
+  }
+}
+
 module.exports = {
+  bulkSetEquipmentUnit,
   getEquipment, getEquipmentCategories, saveEquipment, deleteEquipment, uploadEquipmentPhoto,
   addEquipmentLocation, renameEquipmentLocation, deleteEquipmentLocation,
   sanitizeExtraFields, photoListOf, cleanLabelMap, addPhotoToEquipment, readLocations, normLoc, DEPRECIATION_TYPES, MAX_PHOTOS,

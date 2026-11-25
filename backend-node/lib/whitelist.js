@@ -17,7 +17,7 @@ const { saveMaintenance, deleteMaintenance } = require('./handlers/maintenance')
 const { saveFuel, deleteFuel } = require('./handlers/fuel');
 const {
   getEquipment, getEquipmentCategories, saveEquipment, deleteEquipment, uploadEquipmentPhoto,
-  addEquipmentLocation, renameEquipmentLocation, deleteEquipmentLocation,
+  addEquipmentLocation, renameEquipmentLocation, deleteEquipmentLocation, bulkSetEquipmentUnit,
 } = require('./handlers/equipment');
 const {
   getBorrowing,
@@ -94,6 +94,7 @@ const API_WHITELIST = {
   addEquipmentLocation,
   renameEquipmentLocation,
   deleteEquipmentLocation,
+  bulkSetEquipmentUnit,
   saveEquipmentCategory,
   deleteEquipmentCategory,
   assignEquipmentCategoriesByCode,
