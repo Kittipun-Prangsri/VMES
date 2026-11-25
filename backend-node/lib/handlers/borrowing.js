@@ -7,6 +7,7 @@ const { newId, nowStr, todayStr, logAudit } = require('../util');
 const { verifyAdmin, getSessionUser } = require('../auth');
 const { sendBorrowingFlex } = require('../line');
 const { getEquipment } = require('./equipment');
+const BA = require('../borrowAvailability');
 const { getUsers } = require('./users');
 const { getUserLineId } = require('./users');
 
@@ -24,106 +25,58 @@ async function resolveBorrowerLineId(record) {
   return await getUserLineId(record['ผู้ขอยืม']);
 }
 
-const ACTIVE_BORROW_STATUSES = ['รอรับเรื่อง', 'รับเรื่องแล้ว', 'อยู่ในระหว่างการยืม', 'ถึงวันครบกำหนดคืน', 'อยู่ในระหว่างการคืน'];
+// สถานะที่ยังกันของไว้ — รวม 'ขอขยายเวลา' (เดิมหายไป ทำให้ยืมซ้อนได้ และผู้ยืมไม่เห็นรายการนั้นตอนจะแจ้งคืน)
+const ACTIVE_BORROW_STATUSES = BA.ACTIVE_STATUSES;
+
+const fmtDate = (iso) => (iso ? iso.split('-').reverse().join('/') : '-');
+
+// รายการที่ขอ: คำขอหลายรายการ หรือชิ้นเดียวแบบเดิม — รวมอุปกรณ์ซ้ำในคำขอเดียวกัน (กดเพิ่มชิ้นเดิมซ้ำ) เป็นจำนวนเดียว
+function requestedLines(data) {
+  const raw = Array.isArray(data['รายการอุปกรณ์']) && data['รายการอุปกรณ์'].length
+    ? data['รายการอุปกรณ์'].map((i) => ({ id: i['รหัสอุปกรณ์'], qty: parseFloat(i['จำนวน']) }))
+    : [{ id: data['รหัสอุปกรณ์'], qty: parseFloat(data['จำนวน']) }];
+  const merged = new Map();
+  raw.forEach((l) => merged.set(l.id, (merged.get(l.id) || 0) + (Number.isFinite(l.qty) ? l.qty : 1)));
+  return Array.from(merged.entries()).map(([id, qty]) => ({ id, qty }));
+}
+
+// ตรวจคำขอยืมใหม่ "ตามช่วงวันที่" (ฟังก์ชันล้วน ทดสอบได้) -> { error } หรือ { lines:[{equip, qty, available}], from, to }
+// ความว่างคิดจากจำนวนในคลัง − ปริมาณที่ถูกกันไว้พร้อมกันสูงสุดในช่วง [รับ, คืน] (ดู borrowAvailability.js)
+function checkBorrowRequest(data, equipments, borrowings, today) {
+  const from = BA.toIso(data['วันที่ต้องการรับ']) || today;
+  const to = BA.toIso(data['วันที่ครบกำหนด']) || from;
+  if (to < from) return { error: 'วันที่ครบกำหนดคืนต้องไม่ก่อนวันที่ต้องการรับ' };
+
+  const lines = [];
+  for (const l of requestedLines(data)) {
+    const equip = (equipments || []).find((e) => e['รหัส'] === l.id);
+    if (!equip) return { error: `ไม่พบข้อมูลอุปกรณ์รหัส ${l.id || '-'} ในระบบ` };
+    if (!(l.qty > 0)) return { error: `จำนวนที่ยืม "${equip['ชื่ออุปกรณ์']}" ต้องมากกว่า 0` };
+    if (!BA.isBorrowableStatus(equip['สถานะ'])) return { error: `ไม่สามารถยืมได้: อุปกรณ์ "${equip['ชื่ออุปกรณ์']}" อยู่ในสถานะ ${equip['สถานะ']}` };
+
+    const busy = BA.busyWindows(equip['รหัส'], borrowings, today);
+    const available = BA.availableFor(equip['จำนวน'], busy, from, to);
+    if (l.qty > available) {
+      const next = BA.nextFreeDate(equip['จำนวน'], busy, today, l.qty);
+      return {
+        error: `ไม่สามารถยืมได้: อุปกรณ์ "${equip['ชื่ออุปกรณ์']}" เหลือยืมได้ ${available} ${equip['หน่วยนับ'] || ''} ในช่วง ${fmtDate(from)} – ${fmtDate(to)} (คุณระบุ ${l.qty})`
+          + (next ? ` — ว่างอีกครั้งตั้งแต่ ${fmtDate(next)}` : ''),
+      };
+    }
+    lines.push({ equip, qty: l.qty, available });
+  }
+  return { lines, from, to };
+}
 
 async function saveBorrowing(data, user) {
   try {
     if (!data['รหัส']) {
-      // Stock Validation
-      const equipments = await getEquipment();
-      const borrowings = await getBorrowing();
-
+      // ตรวจจำนวนคงเหลือตามช่วงวันที่ — คำขอหลายรายการนับแยกตามชิ้น, ช่วงวันที่ไม่ทับกันยืมซ้ำได้
+      const checked = checkBorrowRequest(data, await getEquipment(), await getBorrowing(), todayStr());
+      if (checked.error) return { success: false, message: checked.error };
       if (Array.isArray(data['รายการอุปกรณ์']) && data['รายการอุปกรณ์'].length > 0) {
-        // Multi-item validation & summary
-        const itemNames = [];
-        let totalQtySum = 0;
-
-        for (const item of data['รายการอุปกรณ์']) {
-          const equipId = item['รหัสอุปกรณ์'];
-          const reqQty = parseFloat(item['จำนวน']) || 1;
-
-          const equip = equipments.find((e) => e['รหัส'] === equipId);
-          if (!equip) throw new Error(`ไม่พบข้อมูลอุปกรณ์รหัส ${equipId} ในระบบ`);
-
-          const totalStock = parseFloat(equip['จำนวน']) || 0;
-          const activeBorrowings = borrowings.filter((b) => {
-            if (!ACTIVE_BORROW_STATUSES.includes(b['สถานะ'])) return false;
-            if (b['รหัสอุปกรณ์'] === equipId) return true;
-            if (Array.isArray(b['รายการอุปกรณ์']) && b['รายการอุปกรณ์'].some((i) => i['รหัสอุปกรณ์'] === equipId)) return true;
-            return false;
-          });
-
-          const borrowedQty = activeBorrowings.reduce((sum, b) => {
-            if (Array.isArray(b['รายการอุปกรณ์'])) {
-              const match = b['รายการอุปกรณ์'].find((i) => i['รหัสอุปกรณ์'] === equipId);
-              return sum + (match ? (parseFloat(match['จำนวน']) || 0) : 0);
-            }
-            return sum + (parseFloat(b['จำนวน']) || 0);
-          }, 0);
-
-          const available = totalStock - borrowedQty;
-
-          if (reqQty > available) {
-            let errorDetail = '';
-            if (activeBorrowings.length > 0) {
-              const sorted = [...activeBorrowings].sort((a, b) => String(b['วันที่ครบกำหนด'] || '').localeCompare(String(a['วันที่ครบกำหนด'] || '')));
-              const lastB = sorted[0];
-              const lastBorrower = lastB['ผู้ขอยืม'] || 'ท่านอื่น';
-              const lastDate = lastB['วันที่ครบกำหนด'] || '-';
-              errorDetail = ` (ถูกยืม/จองล่วงหน้าอยู่โดย ${lastBorrower} กำหนดคืน ${lastDate})`;
-            }
-            return {
-              success: false,
-              message: `ไม่สามารถยืมได้: อุปกรณ์ "${equip['ชื่ออุปกรณ์']}"${errorDetail} เหลือยืมได้ ${available < 0 ? 0 : available} ${equip['หน่วยนับ'] || ''} (คุณระบุ ${reqQty})`,
-            };
-          }
-
-          itemNames.push(`${equip['ชื่ออุปกรณ์']} (x${reqQty})`);
-          totalQtySum += reqQty;
-        }
-
-        data['ชื่ออุปกรณ์'] = itemNames.join(', ');
-        data['จำนวน'] = totalQtySum;
-      } else {
-        // Single item validation
-        const equipId = data['รหัสอุปกรณ์'];
-        const reqQty = parseFloat(data['จำนวน']) || 1;
-
-        const equip = equipments.find((e) => e['รหัส'] === equipId);
-        if (!equip) throw new Error('ไม่พบข้อมูลอุปกรณ์ในระบบ');
-
-        const totalStock = parseFloat(equip['จำนวน']) || 0;
-        const activeBorrowings = borrowings.filter((b) => {
-          if (!ACTIVE_BORROW_STATUSES.includes(b['สถานะ'])) return false;
-          if (b['รหัสอุปกรณ์'] === equipId) return true;
-          if (Array.isArray(b['รายการอุปกรณ์']) && b['รายการอุปกรณ์'].some((i) => i['รหัสอุปกรณ์'] === equipId)) return true;
-          return false;
-        });
-
-        const borrowedQty = activeBorrowings.reduce((sum, b) => {
-          if (Array.isArray(b['รายการอุปกรณ์'])) {
-            const match = b['รายการอุปกรณ์'].find((i) => i['รหัสอุปกรณ์'] === equipId);
-            return sum + (match ? (parseFloat(match['จำนวน']) || 0) : 0);
-          }
-          return sum + (parseFloat(b['จำนวน']) || 0);
-        }, 0);
-
-        const available = totalStock - borrowedQty;
-
-        if (reqQty > available) {
-          let errorDetail = '';
-          if (activeBorrowings.length > 0) {
-            const sorted = [...activeBorrowings].sort((a, b) => String(b['วันที่ครบกำหนด'] || '').localeCompare(String(a['วันที่ครบกำหนด'] || '')));
-            const lastB = sorted[0];
-            const lastBorrower = lastB['ผู้ขอยืม'] || 'ท่านอื่น';
-            const lastDate = lastB['วันที่ครบกำหนด'] || '-';
-            errorDetail = ` (ถูกยืม/จองล่วงหน้าอยู่โดย ${lastBorrower} กำหนดคืน ${lastDate})`;
-          }
-          return {
-            success: false,
-            message: `ไม่สามารถยืมได้: อุปกรณ์ "${equip['ชื่ออุปกรณ์']}"${errorDetail} เหลือยืมได้ ${available < 0 ? 0 : available} ${equip['หน่วยนับ'] || ''} (คุณระบุ ${reqQty})`,
-          };
-        }
+        data['ชื่ออุปกรณ์'] = checked.lines.map((l) => `${l.equip['ชื่ออุปกรณ์']} (x${l.qty})`).join(', ');
+        data['จำนวน'] = checked.lines.reduce((sum, l) => sum + l.qty, 0);
       }
 
       data['รหัส'] = newId('BR');
@@ -363,6 +316,41 @@ async function deleteBorrowing(code, adminCode, reason) {
   return { success: true };
 }
 
+// ============== CATALOG สำหรับหน้าเลือกอุปกรณ์ (LIFF สาธารณะ) ==============
+// คืนอุปกรณ์ + "ช่วงวันที่ที่ถูกกันไว้" แบบไม่มีข้อมูลบุคคล เพื่อให้หน้า LIFF คำนวณความว่างตามวันที่ที่ผู้ใช้เลือกเองได้
+// (เดิม LIFF ดึง getBorrowing ทั้งตารางซึ่งมีชื่อ/เบอร์ผู้ยืมทุกคนมาที่เบราว์เซอร์สาธารณะ — เลิกแล้ว)
+async function getBorrowCatalog() {
+  try {
+    const today = todayStr();
+    const [equips, cats, borrowings] = await Promise.all([getEquipment(), listDocs(SHEETS.EQUIPMENT_CATEGORY), getBorrowing()]);
+    const busyBy = new Map();
+    borrowings.forEach((b) => {
+      if (!ACTIVE_BORROW_STATUSES.includes(b['สถานะ'])) return;
+      const w = BA.windowOf(b, today);
+      BA.linesOf(b).forEach((l) => {
+        if (!l.id || !(l.qty > 0)) return;
+        if (!busyBy.has(l.id)) busyBy.set(l.id, []);
+        busyBy.get(l.id).push({ s: w.s, e: w.e, q: l.qty });
+      });
+    });
+    const items = equips.filter((e) => e['รหัส']).map((e) => ({
+      'รหัส': e['รหัส'], 'รหัสครุภัณฑ์': e['รหัสครุภัณฑ์'] || '', 'ชื่ออุปกรณ์': e['ชื่ออุปกรณ์'] || '',
+      'ยี่ห้อ': e['ยี่ห้อ'] || '', 'รุ่น': e['รุ่น'] || '', 'Serial': e['Serial'] || '',
+      'หมวดหมู่': e['หมวดหมู่'] || '', 'ที่เก็บ': e['ที่เก็บ'] || '', 'หน่วยนับ': e['หน่วยนับ'] || 'เครื่อง',
+      'จำนวน': parseFloat(e['จำนวน']) || 0, 'สถานะ': e['สถานะ'] || '', 'รูปภาพ': e['รูปภาพ'] || '',
+      busy: busyBy.get(e['รหัส']) || [],
+    }));
+    return {
+      success: true,
+      today,
+      items,
+      categories: cats.map((c) => ({ name: String(c['ชื่อหมวด'] || '').trim(), code: String(c['รหัสหมวด'] || '').trim() })).filter((c) => c.name),
+    };
+  } catch (err) {
+    return { success: false, message: err.message };
+  }
+}
+
 module.exports = {
   getBorrowing,
   saveBorrowing,
@@ -374,4 +362,7 @@ module.exports = {
   deleteBorrowing,
   getMyActiveBorrowings,
   requestReturnViaLiff,
+  getBorrowCatalog,
+  checkBorrowRequest,
+  requestedLines,
 };

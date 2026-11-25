@@ -5,7 +5,7 @@
 
 const crypto = require('crypto');
 const { SYSTEM_NAME, safeTruncate, safeGet, nowStr } = require('../lib/util');
-const { replyLineFlex, flexRow, buildBookingBubble, LIFF_BOOKING_URL, LIFF_SURVEY_URL } = require('../lib/line');
+const { replyLineFlex, flexRow, buildBookingBubble, buildBorrowingBubble, LIFF_BOOKING_URL, LIFF_SURVEY_URL } = require('../lib/line');
 const { SHEETS, getDoc } = require('../lib/firestore');
 const { isStaffRole } = require('../lib/auth');
 const { getUserByLineId, getMyBookings, changeBookingStatus } = require('../lib/handlers/booking');
@@ -455,147 +455,19 @@ const BORROWING_STATUS_MAP = {
   'ยกเลิก': { color: '#6b7280', icon: '❌', desc: 'รายการถูกยกเลิก' },
 };
 
-async function handleCodeLookup(replyToken, userMessage) {
+async function handleCodeLookup(replyToken, userMessage, userId) {
   const q = userMessage.toUpperCase();
   if (q.indexOf('BR-') === 0) {
     const borrowing = await safeGet(getBorrowing);
     const found = borrowing.find((b) => String(b['รหัส'] || '').toUpperCase() === q);
     if (found) {
-      const id = safeTruncate(found['รหัส'] || '-', 25);
-      const eqName = safeTruncate(found['ชื่ออุปกรณ์'] || '-', 40);
-      const qty = found['จำนวน'] || 1;
-      const borrower = safeTruncate(found['ผู้ขอยืม'] || '-', 30);
-      const dept = safeTruncate(found['หน่วยงาน'] || '-', 30);
-      const dateBorrow = safeTruncate(found['วันที่ขอยืม'] || '-', 20);
-      const dateReturn = safeTruncate(found['วันที่ครบกำหนด'] || '-', 20);
-      const status = found['สถานะ'] || '-';
-      const purpose = safeTruncate(found['วัตถุประสงค์'] || '-', 50);
-
-      const meta = BORROWING_STATUS_MAP[status] || { color: '#3b82f6', icon: '📦', desc: status };
-
-      const footerButtons = [
-        {
-          type: 'button',
-          style: 'primary',
-          color: '#1e40af',
-          height: 'sm',
-          action: { type: 'uri', label: '🌐 เปิดดูในระบบ', uri: 'https://vmes.web.app/#borrowing' },
-        },
-      ];
-
-      if (status === 'รอรับเรื่อง') {
-        footerButtons.unshift({
-          type: 'button',
-          style: 'secondary',
-          height: 'sm',
-          action: { type: 'message', label: '✅ รับเรื่องคำขอนี้ (เจ้าหน้าที่)', text: 'รับเรื่อง ' + id },
-        });
-      } else if (status === 'รับเรื่องแล้ว') {
-        footerButtons.unshift({
-          type: 'button',
-          style: 'primary',
-          color: '#8b5cf6',
-          height: 'sm',
-          action: { type: 'message', label: '📦 ส่งมอบอุปกรณ์แล้ว (เจ้าหน้าที่)', text: 'ส่งมอบ ' + id },
-        });
-      } else if (status === 'อยู่ในระหว่างการยืม' || status === 'ถึงวันครบกำหนดคืน') {
-        footerButtons.unshift({
-          type: 'button',
-          style: 'primary',
-          color: '#06b6d4',
-          height: 'sm',
-          action: { type: 'message', label: '🔄 แจ้งคืนอุปกรณ์นี้', text: 'คืน ' + id },
-        });
-        footerButtons.unshift({
-          type: 'button',
-          style: 'secondary',
-          height: 'sm',
-          action: { type: 'message', label: '⏳ ขอขยายเวลาคืน', text: 'ขอขยายเวลา ' + id },
-        });
-      } else if (status === 'อยู่ในระหว่างการคืน') {
-        footerButtons.unshift({
-          type: 'button',
-          style: 'primary',
-          color: '#10b981',
-          height: 'sm',
-          action: { type: 'message', label: '✅ ยืนยันรับคืนอุปกรณ์ (เจ้าหน้าที่)', text: 'ยืนยันคืน ' + id },
-        });
-      }
-
-      const flexContent = {
-        type: 'bubble',
-        size: 'mega',
-        header: {
-          type: 'box',
-          layout: 'vertical',
-          backgroundColor: meta.color,
-          paddingAll: '20px',
-          contents: [
-            { type: 'text', text: meta.icon + ' รายละเอียดคำขอยืม', color: '#ffffff', size: 'lg', weight: 'bold' },
-            { type: 'text', text: meta.desc, color: '#ffffff', size: 'sm', margin: 'sm' },
-          ],
-        },
-        body: {
-          type: 'box',
-          layout: 'vertical',
-          spacing: 'md',
-          paddingAll: '20px',
-          contents: [
-            {
-              type: 'box',
-              layout: 'vertical',
-              backgroundColor: '#f8fafc',
-              cornerRadius: '12px',
-              paddingAll: '16px',
-              contents: [
-                { type: 'text', text: 'อุปกรณ์ที่ยืม', size: 'xs', color: '#64748b' },
-                { type: 'text', text: eqName, size: 'md', weight: 'bold', color: '#0f172a', wrap: true },
-                { type: 'text', text: 'จำนวน ' + qty + ' รายการ', size: 'sm', color: '#64748b', margin: 'xs' },
-              ],
-            },
-            { type: 'separator', margin: 'md' },
-            {
-              type: 'box',
-              layout: 'vertical',
-              spacing: 'sm',
-              contents: [
-                flexRow('🆔 เลขคำขอ', id),
-                flexRow('👤 ผู้ขอยืม', borrower),
-                flexRow('🏢 หน่วยงาน', dept),
-                flexRow('📅 วันที่ยืม', dateBorrow),
-                flexRow('📅 ครบกำหนดคืน', dateReturn),
-                flexRow('🎯 วัตถุประสงค์', purpose),
-                flexRow('📌 สถานะ', status),
-              ],
-            },
-            { type: 'separator', margin: 'md' },
-            {
-              type: 'box',
-              layout: 'vertical',
-              alignItems: 'center',
-              margin: 'md',
-              contents: [
-                {
-                  type: 'image',
-                  url: 'https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=' + encodeURIComponent(id),
-                  size: 'md',
-                  aspectRatio: '1:1',
-                },
-                { type: 'text', text: 'QR Code คำขอยืม: ' + id, size: 'xxs', color: '#94a3b8', margin: 'xs', align: 'center' },
-              ],
-            },
-          ],
-        },
-        footer: {
-          type: 'box',
-          layout: 'vertical',
-          spacing: 'sm',
-          paddingAll: '16px',
-          backgroundColor: '#f1f5f9',
-          contents: [...footerButtons, { type: 'text', text: '⏱ ' + nowStr() + ' | ' + SYSTEM_NAME, size: 'xxs', color: '#94a3b8', align: 'center', margin: 'sm' }],
-        },
-      };
-      await replyLineFlex(replyToken, '📋 รายละเอียดคำขอยืม ' + id, flexContent);
+      // การ์ดแยกตามบทบาทของ "คนที่ถาม": เจ้าหน้าที่ (ผู้ส่งมอบ) เห็นปุ่มจัดการ, เจ้าของคำขอ (ผู้รับ) เห็นปุ่มแจ้งคืน/ขอขยาย,
+      // คนอื่นเห็นสถานะอย่างเดียว (เดิมทุกคนเห็นปุ่มของทั้งสองบทบาทปนกัน)
+      const me = userId ? await getUserByLineId(userId) : null;
+      const isOwner = !!userId && (String(found['LINE_USER_ID'] || '') === String(userId) || (me && String(found['ผู้ขอยืม'] || '').trim() === me.name));
+      const audience = me && isStaffRole(me.role) ? 'staff' : isOwner ? 'requester' : 'viewer';
+      const flexContent = buildBorrowingBubble(found, found['สถานะ'], audience);
+      await replyLineFlex(replyToken, '📋 รายละเอียดคำขอยืม ' + safeTruncate(found['รหัส'] || '-', 25), flexContent);
     } else {
       const flexContent = simpleErrorBubble('#ef4444', '❌ ไม่พบข้อมูลคำขอ', 'ไม่พบข้อมูลคำขอยืมรหัส ' + safeTruncate(q, 20) + ' ในระบบ');
       await replyLineFlex(replyToken, '❌ ไม่พบคำขอยืมรหัส ' + safeTruncate(q, 20), flexContent);
@@ -1549,7 +1421,7 @@ module.exports = async function handler(req, res) {
       }
       // 6. ค้นหารหัส BR- / EQ-
       else if (userMessage.toUpperCase().indexOf('BR-') === 0 || userMessage.toUpperCase().indexOf('EQ-') === 0) {
-        await handleCodeLookup(replyToken, userMessage);
+        await handleCodeLookup(replyToken, userMessage, userId);
       }
       // 7. เมนูช่วยเหลือ
       else {

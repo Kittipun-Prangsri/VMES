@@ -77,166 +77,163 @@ function flexRow(label, value) {
   };
 }
 
-async function sendBorrowingFlex(data, status, targetId) {
-  const statusMap = {
-    'รอรับเรื่อง': { color: '#f59e0b', icon: '📥', desc: 'มีคำขอยืมใหม่' },
-    'รับเรื่องแล้ว': { color: '#3b82f6', icon: '✅', desc: 'รับเรื่องเรียบร้อย' },
-    'อยู่ในระหว่างการยืม': { color: '#8b5cf6', icon: '📦', desc: 'ส่งมอบอุปกรณ์แล้ว' },
-    'ถึงวันครบกำหนดคืน': { color: '#ef4444', icon: '⏰', desc: 'ครบกำหนดคืนวันนี้ / เกินกำหนด' },
-    'ขอขยายเวลา': { color: '#d97706', icon: '⏳', desc: 'ผู้ยืมขอขยายเวลาส่งคืน' },
-    'อนุมัติขยายเวลา': { color: '#10b981', icon: '👍', desc: 'อนุมัติขยายเวลาเรียบร้อย' },
-    'อยู่ในระหว่างการคืน': { color: '#06b6d4', icon: '🔄', desc: 'อยู่ระหว่างตรวจรับ' },
-    'คืนเสร็จสิ้น': { color: '#10b981', icon: '✔️', desc: 'คืนสำเร็จ' },
-    'ยกเลิก': { color: '#6b7280', icon: '❌', desc: 'รายการถูกยกเลิก' },
-  };
-  const meta = statusMap[status] || { color: '#3b82f6', icon: '📦', desc: status };
+// ============== การ์ดแจ้งเตือนการยืม แยกตามบทบาท ==============
+// บทบาทในการยืม: "ผู้ส่งมอบ" = เจ้าหน้าที่/แอดมิน (รับเรื่อง ส่งมอบ ตรวจรับคืน) กับ "ผู้รับ" = ผู้ยืม
+// เดิมส่งการ์ดใบเดียวกันให้ทั้งกลุ่มแอดมินและผู้ยืม (ปุ่มเจ้าหน้าที่กับปุ่มผู้ยืมปนกันอยู่ในใบเดียว)
+// ตอนนี้แยกเป็น 2 ใบ: audience 'staff' (กลุ่มแอดมิน/เจ้าหน้าที่) และ 'requester' (ผู้ยืม, ส่งส่วนตัว)
+// 'viewer' = ผู้ที่ไม่ใช่ทั้งสองบทบาท (ถามรหัสคำขอของคนอื่น) เห็นสถานะอย่างเดียว ไม่มีปุ่ม ไม่มีเบอร์ติดต่อ
+const BORROW_STAGE = {
+  'รอรับเรื่อง': { color: '#f59e0b', icon: '📥',
+    staff: 'มีคำขอยืมใหม่ — รอเจ้าหน้าที่รับเรื่อง', user: 'ส่งคำขอยืมเรียบร้อย — รอเจ้าหน้าที่รับเรื่อง',
+    staffNext: 'กด “รับเรื่อง” เพื่อยืนยันว่าจะดำเนินการ', userNext: 'รอเจ้าหน้าที่ติดต่อกลับ เมื่อรับเรื่องแล้วจะแจ้งให้ทราบอีกครั้ง' },
+  'รับเรื่องแล้ว': { color: '#3b82f6', icon: '✅',
+    staff: 'รับเรื่องแล้ว — เตรียมอุปกรณ์เพื่อส่งมอบ', user: 'เจ้าหน้าที่รับเรื่องแล้ว — มารับอุปกรณ์ตามวันเวลาที่ต้องการ',
+    staffNext: 'เมื่อส่งมอบอุปกรณ์ให้ผู้ยืมแล้ว กด “ส่งมอบอุปกรณ์แล้ว”', userNext: 'ตอนรับอุปกรณ์ แสดง QR Code ด้านล่างให้เจ้าหน้าที่สแกน' },
+  'อยู่ในระหว่างการยืม': { color: '#8b5cf6', icon: '📦',
+    staff: 'ส่งมอบอุปกรณ์แล้ว — อยู่ระหว่างการยืม', user: 'คุณได้รับอุปกรณ์แล้ว — โปรดคืนภายในวันที่กำหนด',
+    staffNext: '', userNext: 'ต้องใช้นานกว่ากำหนด? กด “ขอขยายเวลาคืน” ก่อนครบกำหนด' },
+  'ถึงวันครบกำหนดคืน': { color: '#ef4444', icon: '⏰',
+    staff: 'ครบกำหนดคืนวันนี้ / เกินกำหนด — ติดตามผู้ยืม', user: 'ครบกำหนดคืนแล้ว — กรุณานำอุปกรณ์มาคืน หรือขอขยายเวลา',
+    staffNext: 'ผู้ยืมยังไม่ได้คืนตามกำหนด', userNext: 'คืนแล้วกด “แจ้งคืนอุปกรณ์” เพื่อให้เจ้าหน้าที่ตรวจรับ' },
+  'ขอขยายเวลา': { color: '#d97706', icon: '⏳',
+    staff: 'ผู้ยืมขอขยายเวลาส่งคืน — พิจารณาอนุมัติได้ในระบบ', user: 'ส่งคำขอขยายเวลาแล้ว — รอเจ้าหน้าที่พิจารณา',
+    staffNext: 'อนุมัติหรือปฏิเสธได้ที่หน้ายืม-คืนในระบบ', userNext: 'ระหว่างรอ ยังต้องถืออุปกรณ์ไว้ตามเดิม' },
+  'อนุมัติขยายเวลา': { color: '#10b981', icon: '👍',
+    staff: 'อนุมัติขยายเวลาเรียบร้อย', user: 'เจ้าหน้าที่อนุมัติขยายเวลาแล้ว — ครบกำหนดใหม่ตามด้านล่าง', staffNext: '', userNext: '' },
+  'อยู่ในระหว่างการคืน': { color: '#06b6d4', icon: '🔄',
+    staff: 'ผู้ยืมแจ้งคืนแล้ว — ตรวจรับอุปกรณ์', user: 'แจ้งคืนแล้ว — นำอุปกรณ์ไปส่งเจ้าหน้าที่เพื่อตรวจรับ',
+    staffNext: 'ตรวจสภาพแล้วกด “ยืนยันรับคืน” (ถ้าชำรุดกด “รับคืน (ชำรุด)”)', userNext: 'รอเจ้าหน้าที่ตรวจรับ เสร็จแล้วจะแจ้งให้ทราบ' },
+  'คืนเสร็จสิ้น': { color: '#10b981', icon: '✔️',
+    staff: 'รับคืนเรียบร้อย', user: 'คืนอุปกรณ์เรียบร้อย ขอบคุณที่ใช้บริการ', staffNext: '', userNext: 'ช่วยประเมินความพึงพอใจได้ที่ปุ่มด้านล่าง' },
+  'ยกเลิก': { color: '#6b7280', icon: '❌', staff: 'รายการถูกยกเลิก', user: 'คำขอยืมนี้ถูกยกเลิก', staffNext: '', userNext: '' },
+};
 
-  const footerButtons = [
-    {
-      type: 'button',
-      style: 'primary',
-      color: '#1e40af',
-      height: 'sm',
-      action: { type: 'uri', label: '🌐 เปิดดูในระบบ (vmes.web.app)', uri: 'https://vmes.web.app/#borrowing' },
-    },
-  ];
+// ปุ่มของ "ผู้ส่งมอบ" (เจ้าหน้าที่) ตามสถานะ — ใช้คำสั่งข้อความที่ webhook ตรวจสิทธิ์จาก LINE userId อีกชั้น
+function borrowStaffButtons(code, status) {
+  const btn = (style, color, label, text) => ({ type: 'button', style, ...(color ? { color } : {}), height: 'sm', action: { type: 'message', label, text } });
+  const out = [];
+  if (status === 'รอรับเรื่อง') out.push(btn('primary', '#3b82f6', '✅ รับเรื่องคำขอนี้', 'รับเรื่อง ' + code));
+  else if (status === 'รับเรื่องแล้ว') out.push(btn('primary', '#8b5cf6', '📦 ส่งมอบอุปกรณ์แล้ว', 'ส่งมอบ ' + code));
+  else if (status === 'อยู่ในระหว่างการคืน') {
+    out.push(btn('primary', '#10b981', '✅ ยืนยันรับคืนอุปกรณ์', 'ยืนยันคืน ' + code));
+    out.push(btn('secondary', null, '⚠️ รับคืน (ชำรุด)', 'ยืนยันคืนชำรุด ' + code));
+  }
+  out.push({ type: 'button', style: 'link', height: 'sm', action: { type: 'uri', label: '🌐 เปิดดูในระบบ (vmes.web.app)', uri: 'https://vmes.web.app/#borrowing' } });
+  return out;
+}
 
-  if (status === 'รอรับเรื่อง') {
-    footerButtons.unshift({
-      type: 'button',
-      style: 'secondary',
-      height: 'sm',
-      action: { type: 'message', label: '✅ รับเรื่องคำขอนี้ (เจ้าหน้าที่)', text: 'รับเรื่อง ' + String(data['รหัส'] || '') },
-    });
-  } else if (status === 'รับเรื่องแล้ว') {
-    footerButtons.unshift({
-      type: 'button',
-      style: 'primary',
-      color: '#8b5cf6',
-      height: 'sm',
-      action: { type: 'message', label: '📦 ส่งมอบอุปกรณ์แล้ว (เจ้าหน้าที่)', text: 'ส่งมอบ ' + String(data['รหัส'] || '') },
-    });
-  } else if (status === 'อยู่ในระหว่างการยืม' || status === 'ถึงวันครบกำหนดคืน') {
-    footerButtons.unshift({
-      type: 'button',
-      style: 'secondary',
-      height: 'sm',
-      action: { type: 'message', label: '⏳ ขอขยายเวลาคืน', text: 'ขอขยายเวลา ' + String(data['รหัส'] || '') },
-    });
-  } else if (status === 'อยู่ในระหว่างการคืน') {
-    footerButtons.unshift({
-      type: 'button',
-      style: 'primary',
-      color: '#10b981',
-      height: 'sm',
-      action: { type: 'message', label: '✅ ยืนยันรับคืนอุปกรณ์ (เจ้าหน้าที่)', text: 'ยืนยันคืน ' + String(data['รหัส'] || '') },
-    });
+// ปุ่มของ "ผู้รับ" (ผู้ยืม) ตามสถานะ
+function borrowRequesterButtons(code, status) {
+  const out = [];
+  if (['อยู่ในระหว่างการยืม', 'ถึงวันครบกำหนดคืน', 'ขอขยายเวลา', 'อนุมัติขยายเวลา'].includes(status)) {
+    out.push({ type: 'button', style: 'primary', color: '#06b6d4', height: 'sm', action: { type: 'uri', label: '🔄 แจ้งคืนอุปกรณ์', uri: LIFF_URL + '?tab=return' } });
+    if (status !== 'ขอขยายเวลา') {
+      out.push({ type: 'button', style: 'secondary', height: 'sm', action: { type: 'message', label: '⏳ ขอขยายเวลาคืน', text: 'ขอขยายเวลา ' + code } });
+    }
   } else if (status === 'คืนเสร็จสิ้น') {
-    footerButtons.unshift({
-      type: 'button',
-      style: 'primary',
-      color: '#f59e0b',
-      height: 'sm',
-      action: { type: 'uri', label: '⭐ ประเมินความพึงพอใจการยืม', uri: 'https://vmes.web.app/#borrowing' },
+    out.push({ type: 'button', style: 'primary', color: '#f59e0b', height: 'sm', action: { type: 'uri', label: '⭐ ประเมินความพึงพอใจการยืม', uri: 'https://vmes.web.app/#borrowing' } });
+    out.push({ type: 'button', style: 'secondary', height: 'sm', action: { type: 'uri', label: '📦 ยืมอุปกรณ์อีกครั้ง', uri: LIFF_URL } });
+  }
+  out.push({ type: 'button', style: 'link', height: 'sm', action: { type: 'message', label: '📋 รายการยืมของฉัน', text: 'รายการของฉัน' } });
+  return out;
+}
+
+function buildBorrowingBubble(data, status, audience) {
+  const st = status || data['สถานะ'] || 'รอรับเรื่อง';
+  const stage = BORROW_STAGE[st] || { color: '#3b82f6', icon: '📦', staff: st, user: st, staffNext: '', userNext: '' };
+  const isStaff = audience === 'staff';
+  const isRequester = audience === 'requester';
+  const code = String(data['รหัส'] || '');
+  // viewer (คนที่ไม่ใช่ทั้งผู้ส่งมอบและผู้รับ) ใช้คำบรรยายแบบกลาง ไม่พูดกับผู้ยืม และไม่มีขั้นตอนถัดไป
+  const desc = isRequester ? stage.user : stage.staff;
+  const next = isStaff ? stage.staffNext : isRequester ? stage.userNext : '';
+
+  const multi = Array.isArray(data['รายการอุปกรณ์']) && data['รายการอุปกรณ์'].length > 0;
+  const itemsBox = multi
+    ? {
+        type: 'box', layout: 'vertical', backgroundColor: '#f8fafc', cornerRadius: '12px', paddingAll: '16px',
+        contents: [
+          { type: 'text', text: `อุปกรณ์ที่ยืม (${data['รายการอุปกรณ์'].length} รายการ)`, size: 'xs', color: '#64748b' },
+          ...data['รายการอุปกรณ์'].map((item) => ({ type: 'text', text: `• ${item['ชื่ออุปกรณ์']} (x${item['จำนวน']})`, size: 'sm', weight: 'bold', color: '#0f172a', wrap: true, margin: 'xs' })),
+        ],
+      }
+    : {
+        type: 'box', layout: 'vertical', backgroundColor: '#f8fafc', cornerRadius: '12px', paddingAll: '16px',
+        contents: [
+          { type: 'text', text: 'อุปกรณ์ที่ยืม', size: 'xs', color: '#64748b' },
+          { type: 'text', text: String(data['ชื่ออุปกรณ์'] || '-'), size: 'xl', weight: 'bold', color: '#0f172a', wrap: true },
+          { type: 'text', text: 'จำนวน ' + (data['จำนวน'] || 1) + ' รายการ', size: 'sm', color: '#64748b', margin: 'xs' },
+        ],
+      };
+
+  const deliverer = String(data['ผู้รับเรื่อง'] || '').trim();
+  const when = data['วันที่ต้องการรับ'] ? String(data['วันที่ต้องการรับ']) + (data['เวลาที่ต้องการรับ'] ? ' เวลา ' + data['เวลาที่ต้องการรับ'] + ' น.' : '') : '';
+  const rows = isStaff
+    ? [
+        flexRow('🆔 เลขคำขอ', code || '-'),
+        flexRow('🙋 ผู้รับ (ผู้ยืม)', String(data['ผู้ขอยืม'] || '-')),
+        flexRow('🏢 หน่วยงาน', String(data['หน่วยงาน'] || '-')),
+        flexRow('📞 ติดต่อ', String(data['เบอร์ติดต่อ'] || '-')),
+        flexRow('🎯 วัตถุประสงค์', String(data['วัตถุประสงค์'] || '-')),
+        flexRow('📍 สถานที่ใช้งาน', String(data['สถานที่ใช้งาน'] || data['สถานที่'] || '-')),
+        ...(when ? [flexRow('🕐 วันที่/เวลารับ', when)] : []),
+        flexRow('📅 ครบกำหนดคืน', String(data['วันที่ครบกำหนด'] || '-')),
+        flexRow('🚚 ผู้ส่งมอบ', deliverer || 'ยังไม่มี (รอรับเรื่อง)'),
+      ]
+    : [
+        flexRow('🆔 เลขคำขอ', code || '-'),
+        flexRow('🚚 ผู้ส่งมอบ', deliverer || 'รอเจ้าหน้าที่รับเรื่อง'),
+        flexRow('🎯 วัตถุประสงค์', String(data['วัตถุประสงค์'] || '-')),
+        flexRow('📍 สถานที่ใช้งาน', String(data['สถานที่ใช้งาน'] || data['สถานที่'] || '-')),
+        ...(when ? [flexRow('🕐 วันที่/เวลารับ', when)] : []),
+        flexRow('📅 ครบกำหนดคืน', String(data['วันที่ครบกำหนด'] || '-')),
+        ...(audience === 'viewer' ? [flexRow('📌 สถานะ', st)] : []),
+      ];
+
+  const bodyContents = [itemsBox, { type: 'separator', margin: 'md' }, { type: 'box', layout: 'vertical', spacing: 'sm', contents: rows }];
+  if (next) {
+    bodyContents.push({ type: 'box', layout: 'vertical', backgroundColor: isStaff ? '#fffbeb' : '#eff6ff', cornerRadius: '10px', paddingAll: '12px', margin: 'md',
+      contents: [{ type: 'text', text: (isStaff ? '👉 ขั้นตอนของคุณ: ' : '👉 ขั้นตอนถัดไป: ') + next, size: 'xs', color: isStaff ? '#92400e' : '#1e40af', wrap: true }] });
+  }
+  if (audience !== 'viewer') {
+    bodyContents.push({ type: 'separator', margin: 'md' });
+    bodyContents.push({
+      type: 'box', layout: 'vertical', alignItems: 'center', margin: 'md',
+      contents: [
+        { type: 'image', url: 'https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=' + encodeURIComponent(code), size: 'md', aspectRatio: '1:1' },
+        { type: 'text', text: 'QR Code คำขอยืม: ' + code, size: 'xxs', color: '#94a3b8', margin: 'xs', align: 'center' },
+      ],
     });
   }
 
-  const flex = {
+  const buttons = isStaff ? borrowStaffButtons(code, st) : isRequester ? borrowRequesterButtons(code, st) : [];
+  return {
     type: 'bubble',
     size: 'mega',
     header: {
-      type: 'box',
-      layout: 'vertical',
-      backgroundColor: meta.color,
-      paddingAll: '20px',
+      type: 'box', layout: 'vertical', backgroundColor: stage.color, paddingAll: '20px',
       contents: [
-        { type: 'text', text: meta.icon + ' ' + status, color: '#ffffff', size: 'xl', weight: 'bold' },
-        { type: 'text', text: meta.desc, color: '#ffffff', size: 'sm', margin: 'sm' },
+        { type: 'text', text: stage.icon + ' ' + st, color: '#ffffff', size: 'xl', weight: 'bold' },
+        { type: 'text', text: desc, color: '#ffffff', size: 'sm', margin: 'sm', wrap: true },
+        ...(audience === 'viewer' ? [] : [{ type: 'text', text: isStaff ? 'สำหรับ: เจ้าหน้าที่ (ผู้ส่งมอบ)' : 'สำหรับ: ผู้ยืม (ผู้รับ)', color: '#ffffff', size: 'xxs', margin: 'md', weight: 'bold' }]),
       ],
     },
-    body: {
-      type: 'box',
-      layout: 'vertical',
-      spacing: 'md',
-      paddingAll: '20px',
-      contents: [
-        Array.isArray(data['รายการอุปกรณ์']) && data['รายการอุปกรณ์'].length > 0
-          ? {
-              type: 'box',
-              layout: 'vertical',
-              backgroundColor: '#f8fafc',
-              cornerRadius: '12px',
-              paddingAll: '16px',
-              contents: [
-                { type: 'text', text: `อุปกรณ์ที่ยืม (${data['รายการอุปกรณ์'].length} รายการ)`, size: 'xs', color: '#64748b' },
-                ...data['รายการอุปกรณ์'].map((item) => ({
-                  type: 'text',
-                  text: `• ${item['ชื่ออุปกรณ์']} (x${item['จำนวน']})`,
-                  size: 'sm',
-                  weight: 'bold',
-                  color: '#0f172a',
-                  wrap: true,
-                  margin: 'xs',
-                })),
-              ],
-            }
-          : {
-              type: 'box',
-              layout: 'vertical',
-              backgroundColor: '#f8fafc',
-              cornerRadius: '12px',
-              paddingAll: '16px',
-              contents: [
-                { type: 'text', text: 'อุปกรณ์ที่ยืม', size: 'xs', color: '#64748b' },
-                { type: 'text', text: String(data['ชื่ออุปกรณ์'] || '-'), size: 'xl', weight: 'bold', color: '#0f172a', wrap: true },
-                { type: 'text', text: 'จำนวน ' + (data['จำนวน'] || 1) + ' รายการ', size: 'sm', color: '#64748b', margin: 'xs' },
-              ],
-            },
-        { type: 'separator', margin: 'md' },
-        {
-          type: 'box',
-          layout: 'vertical',
-          spacing: 'sm',
-          contents: [
-            flexRow('🆔 เลขคำขอ', String(data['รหัส'] || '-')),
-            flexRow('👤 ผู้ขอยืม', String(data['ผู้ขอยืม'] || '-')),
-            flexRow('🏢 หน่วยงาน', String(data['หน่วยงาน'] || '-')),
-            flexRow('📞 ติดต่อ', String(data['เบอร์ติดต่อ'] || '-')),
-            flexRow('🎯 วัตถุประสงค์', String(data['วัตถุประสงค์'] || '-')),
-            flexRow('📍 สถานที่ใช้งาน', String(data['สถานที่ใช้งาน'] || data['สถานที่'] || '-')),
-            ...(data['วันที่ต้องการรับ'] ? [flexRow('🕐 วันที่/เวลาต้องการรับ', String(data['วันที่ต้องการรับ']) + (data['เวลาที่ต้องการรับ'] ? ' เวลา ' + data['เวลาที่ต้องการรับ'] + ' น.' : ''))] : []),
-            flexRow('📅 ครบกำหนดคืน', String(data['วันที่ครบกำหนด'] || '-')),
-          ],
-        },
-        { type: 'separator', margin: 'md' },
-        {
-          type: 'box',
-          layout: 'vertical',
-          alignItems: 'center',
-          margin: 'md',
-          contents: [
-            {
-              type: 'image',
-              url: 'https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=' + encodeURIComponent(String(data['รหัส'] || '')),
-              size: 'md',
-              aspectRatio: '1:1',
-            },
-            { type: 'text', text: 'QR Code คำขอยืม: ' + String(data['รหัส'] || ''), size: 'xxs', color: '#94a3b8', margin: 'xs', align: 'center' },
-          ],
-        },
-      ],
-    },
+    body: { type: 'box', layout: 'vertical', spacing: 'md', paddingAll: '20px', contents: bodyContents },
     footer: {
-      type: 'box',
-      layout: 'vertical',
-      spacing: 'sm',
-      paddingAll: '16px',
-      backgroundColor: '#f1f5f9',
-      contents: [...footerButtons, { type: 'text', text: '⏱ ' + nowStr() + ' | ' + SYSTEM_NAME, size: 'xxs', color: '#94a3b8', align: 'center', margin: 'sm' }],
+      type: 'box', layout: 'vertical', spacing: 'sm', paddingAll: '16px', backgroundColor: '#f1f5f9',
+      contents: [...buttons, { type: 'text', text: '⏱ ' + nowStr() + ' | ' + SYSTEM_NAME, size: 'xxs', color: '#94a3b8', align: 'center', margin: 'sm' }],
     },
   };
+}
 
-  return sendLineFlex(meta.icon + ' ' + status + ': ' + (data['ชื่ออุปกรณ์'] || ''), flex, targetId);
+// ส่งการ์ดแจ้งเตือนการยืม — ไม่ระบุ targetId = กลุ่มแอดมิน (การ์ดของเจ้าหน้าที่), ระบุ targetId = ผู้ยืมส่วนตัว (การ์ดของผู้รับ)
+// ระบุ audience เองได้ เช่น ส่งการ์ดเจ้าหน้าที่ให้แอดมินรายบุคคล
+async function sendBorrowingFlex(data, status, targetId, audience) {
+  const aud = audience || (targetId ? 'requester' : 'staff');
+  const flex = buildBorrowingBubble(data, status, aud);
+  const stage = BORROW_STAGE[status] || { icon: '📦' };
+  const label = aud === 'staff' ? stage.icon + ' ' + status + ': ' + (data['ชื่ออุปกรณ์'] || '') : stage.icon + ' คำขอยืมของคุณ: ' + status;
+  return sendLineFlex(label, flex, targetId);
 }
 
 async function sendVehicleUsageFlex(data, targetId) {
@@ -677,6 +674,7 @@ module.exports = {
   getLineGroupId,
   sendLineFlex,
   sendBorrowingFlex,
+  buildBorrowingBubble,
   sendVehicleUsageFlex,
   sendBookingFlex,
   buildBookingBubble,

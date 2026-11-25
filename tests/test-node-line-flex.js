@@ -296,6 +296,61 @@ async function runTests() {
   }
   console.log('  ✅ Test 9: Survey command -> Flex with LIFF survey link');
 
+  // Test 10: การ์ดการยืมแยกตามบทบาท — กลุ่มแอดมิน/เจ้าหน้าที่ (ผู้ส่งมอบ) กับ ผู้ยืม (ผู้รับ) ต้องไม่ใช่การ์ดใบเดียวกัน
+  {
+    const { buildBorrowingBubble } = require('../backend-node/lib/line');
+    const STAFF_ONLY = ['รับเรื่องคำขอนี้', 'ส่งมอบอุปกรณ์แล้ว', 'ยืนยันรับคืน', 'รับคืน (ชำรุด)', 'เปิดดูในระบบ'];
+    const REQUESTER_ONLY = ['แจ้งคืนอุปกรณ์', 'ขอขยายเวลาคืน', 'ประเมินความพึงพอใจ', 'ยืมอุปกรณ์อีกครั้ง', 'รายการยืมของฉัน'];
+    const sample = { 'รหัส': 'BR-20261125-001', 'ชื่ออุปกรณ์': 'Notebook', 'จำนวน': 1, 'ผู้ขอยืม': 'สมชาย ใจดี', 'หน่วยงาน': 'OPD', 'เบอร์ติดต่อ': '0812345678', 'วัตถุประสงค์': 'ประชุม', 'วันที่ครบกำหนด': '28/11/2026', 'ผู้รับเรื่อง': 'สมหญิง เจ้าหน้าที่' };
+    const walk = (n, f) => { if (Array.isArray(n)) n.forEach((x) => walk(x, f)); else if (n && typeof n === 'object') { f(n); Object.values(n).forEach((x) => walk(x, f)); } };
+    const textsOf = (bubble) => { const out = []; walk(bubble, (n) => { if (n.type === 'text') out.push(n.text); if (n.action && n.action.label) out.push(n.action.label); }); return out.join('\n'); };
+    // เฉพาะป้ายปุ่ม (ข้อความบรรยายสถานะอาจมีคำว่า "ส่งมอบอุปกรณ์แล้ว" ได้ ไม่ใช่ปุ่ม)
+    const labelsOf = (bubble) => { const out = []; walk(bubble, (n) => { if (n.action && n.action.label) out.push(n.action.label); }); return out.join('\n'); };
+
+    for (const st of ['รอรับเรื่อง', 'รับเรื่องแล้ว', 'อยู่ในระหว่างการยืม', 'ถึงวันครบกำหนดคืน', 'ขอขยายเวลา', 'อนุมัติขยายเวลา', 'อยู่ในระหว่างการคืน', 'คืนเสร็จสิ้น', 'ยกเลิก']) {
+      const staff = buildBorrowingBubble(sample, st, 'staff'), req = buildBorrowingBubble(sample, st, 'requester'), view = buildBorrowingBubble(sample, st, 'viewer');
+      for (const b of [staff, req, view]) {
+        assert.equal(b.type, 'bubble');
+        walk(b, (n) => { if (n.type === 'text') assert.ok(String(n.text).length > 0, 'empty text node in ' + st); });
+        assert.ok(JSON.stringify(b).length < 9000, 'bubble too large');
+      }
+      const st_ = textsOf(staff), rq = textsOf(req), vw = textsOf(view);
+      REQUESTER_ONLY.forEach((t) => assert.ok(!labelsOf(staff).includes(t), `staff card (${st}) must not have requester button "${t}"`));
+      STAFF_ONLY.forEach((t) => assert.ok(!labelsOf(req).includes(t), `requester card (${st}) must not have staff button "${t}"`));
+      assert.equal(labelsOf(view), '', `viewer card (${st}) has no buttons at all`);
+      assert.ok(st_.includes('สำหรับ: เจ้าหน้าที่ (ผู้ส่งมอบ)') && st_.includes('ผู้รับ (ผู้ยืม)'), 'staff card names both roles');
+      assert.ok(rq.includes('สำหรับ: ผู้ยืม (ผู้รับ)') && rq.includes('ผู้ส่งมอบ'), 'requester card names both roles');
+      assert.ok(st_.includes('0812345678') && !rq.includes('0812345678') && !vw.includes('0812345678'), 'phone only on the staff card');
+      assert.ok(vw.includes(st) && !vw.includes('QR Code'), 'viewer: status only, no QR');
+    }
+    // ปุ่มตามสถานะ
+    assert.ok(textsOf(buildBorrowingBubble(sample, 'รอรับเรื่อง', 'staff')).includes('รับเรื่องคำขอนี้'));
+    assert.ok(textsOf(buildBorrowingBubble(sample, 'รับเรื่องแล้ว', 'staff')).includes('ส่งมอบอุปกรณ์แล้ว'));
+    const ret = textsOf(buildBorrowingBubble(sample, 'อยู่ในระหว่างการคืน', 'staff'));
+    assert.ok(ret.includes('ยืนยันรับคืนอุปกรณ์') && ret.includes('รับคืน (ชำรุด)'));
+    assert.ok(textsOf(buildBorrowingBubble(sample, 'อยู่ในระหว่างการยืม', 'requester')).includes('แจ้งคืนอุปกรณ์'));
+    assert.ok(!textsOf(buildBorrowingBubble(sample, 'ขอขยายเวลา', 'requester')).includes('ขอขยายเวลาคืน'), 'no second extension request while one is pending');
+    assert.ok(textsOf(buildBorrowingBubble(sample, 'คืนเสร็จสิ้น', 'requester')).includes('ประเมินความพึงพอใจ'));
+    assert.ok(textsOf(buildBorrowingBubble({ ...sample, 'ผู้รับเรื่อง': '' }, 'รอรับเรื่อง', 'requester')).includes('รอเจ้าหน้าที่รับเรื่อง'), 'no deliverer yet');
+    // หลายรายการ
+    const multi = { ...sample, 'รายการอุปกรณ์': [{ 'ชื่ออุปกรณ์': 'A', 'จำนวน': 1 }, { 'ชื่ออุปกรณ์': 'B', 'จำนวน': 2 }] };
+    assert.ok(textsOf(buildBorrowingBubble(multi, 'รอรับเรื่อง', 'requester')).includes('• B (x2)'));
+
+    // ส่งจริง: กลุ่ม (ไม่ระบุ targetId) = การ์ดเจ้าหน้าที่, ส่วนตัว (ระบุ targetId) = การ์ดผู้ยืม — แยกเป็น 2 ข้อความ
+    capturedPushes = [];
+    await sendBorrowingFlex(sample, 'รอรับเรื่อง');
+    await sendBorrowingFlex(sample, 'รอรับเรื่อง', 'U-borrower-1');
+    assert.equal(capturedPushes.length, 2);
+    const [toGroup, toUser] = capturedPushes;
+    assert.equal(toGroup.body.to, 'test-group-67890'); assert.equal(toUser.body.to, 'U-borrower-1');
+    const gTxt = textsOf(toGroup.body.messages[0].contents), uTxt = textsOf(toUser.body.messages[0].contents);
+    assert.ok(gTxt.includes('รับเรื่องคำขอนี้') && !uTxt.includes('รับเรื่องคำขอนี้'));
+    assert.ok(uTxt.includes('รายการยืมของฉัน') && !gTxt.includes('รายการยืมของฉัน'));
+    assert.notEqual(toGroup.body.messages[0].altText, toUser.body.messages[0].altText, 'different alt text per role');
+    assert.match(toUser.body.messages[0].altText, /คำขอยืมของคุณ/);
+    console.log('  ✅ Test 10: Borrow cards split by role (staff/deliverer vs borrower/receiver) for all statuses');
+  }
+
   console.log('\n🎉 ALL LINE FLEX TESTS PASSED SUCCESSFULLY!');
 }
 

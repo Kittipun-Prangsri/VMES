@@ -29,6 +29,7 @@ const {
   deleteBorrowing,
   getMyActiveBorrowings,
   requestReturnViaLiff,
+  getBorrowCatalog,
 } = require('./handlers/borrowing');
 const { saveUser, deleteUser, requestPasswordResetNotification, autoLinkLineUser, bindLineByCitizenId, getLiffUserProfile, registerLiffUser } = require('./handlers/users');
 const { getLiffSurveyInfo, saveLiffSurveyItem, saveLiffSurveyPeripheral, uploadLiffSurveyPhoto, resolveLiffSurveyTag } = require('./handlers/liffSurvey');
@@ -113,6 +114,7 @@ const API_WHITELIST = {
   deleteBorrowing,
   getMyActiveBorrowings,
   requestReturnViaLiff,
+  getBorrowCatalog,
 
   // Users
   saveUser,
