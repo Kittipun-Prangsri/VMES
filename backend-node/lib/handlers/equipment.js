@@ -302,7 +302,16 @@ async function bulkSetEquipmentUnit(categoryOrLocation, unit, adminCode, dryRun)
     }
     const todo = hit.filter((e) => String(e['หน่วยงานที่รับผิดชอบ'] || '').trim() !== u);
     if (dryRun) return { success: true, matched: hit.length, willChange: todo.length };
-    for (const e of todo) await setDoc(SHEETS.EQUIPMENT, e['รหัส'], { ...e, 'หน่วยงานที่รับผิดชอบ': u });
+    // เขียนเป็นชุดพร้อมกัน (ทีละชิ้นต่อกัน 290 รายการอาจเกินเวลาของ serverless function จนบันทึกไม่ครบ)
+    const failed = [];
+    for (let i = 0; i < todo.length; i += 15) {
+      await Promise.all(todo.slice(i, i + 15).map((e) =>
+        setDoc(SHEETS.EQUIPMENT, e['รหัส'], { ...e, 'หน่วยงานที่รับผิดชอบ': u }).catch((err) => { failed.push(e['รหัส'] + ': ' + err.message); })));
+    }
+    if (failed.length) {
+      await logAudit('ตั้งหน่วยงานที่รับผิดชอบ (บางรายการล้มเหลว)', 'admin', code + ' -> ' + u + ' ล้มเหลว ' + failed.length + ' รายการ');
+      return { success: false, message: 'บันทึกไม่ครบ: สำเร็จ ' + (todo.length - failed.length) + ' ล้มเหลว ' + failed.length + ' รายการ — กดซ้ำอีกครั้งเพื่อทำส่วนที่เหลือ (' + failed[0] + ')' };
+    }
     await logAudit(byCode ? 'ตั้งหน่วยงานที่รับผิดชอบตามหมวด' : 'ตั้งหน่วยงานที่รับผิดชอบตามที่เก็บ', 'admin', code + ' -> ' + u + ' (' + todo.length + ' รายการ)');
     return { success: true, matched: hit.length, updated: todo.length, unit: u };
   } catch (err) {
