@@ -5350,7 +5350,7 @@ input, select, textarea, button {
       <div class="field full"><label>เลือกอุปกรณ์ * (พิมพ์ค้นหาชื่อหรือรหัสอุปกรณ์ได้)</label>
         <input type="text" id="b_eq_search" placeholder="🔍 พิมพ์ค้นหาอุปกรณ์ หรือ รหัสครุภัณฑ์..." class="form-input w-full px-3.5 py-2 bg-indigo-50/60 border border-indigo-200 rounded-xl text-slate-800 text-xs font-medium focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:outline-none mb-2" oninput="window._filterEquipSelect(this.value)">
         <select id="b_eq" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-indigo-500 text-sm font-medium" onchange="window._updateAvail(this.value)">
-          ${DATA.equipment.map(e => {
+          ${DATA.equipment.filter(e => BorrowAvail.isBorrowPoolEquipment(e)).map(e => {
             const avail = getAvail(e['รหัส']);
             // ไม่ disable ตัวเลือกที่ "วันนี้" ไม่ว่าง — อาจว่างในช่วงวันที่ผู้ใช้จะเลือก (ตรวจจริงอีกครั้งตอนบันทึก)
             return `<option value="${esc(e['รหัส'])}|${esc(e['ชื่ออุปกรณ์'])}" ${eqId === e['รหัส'] ? 'selected' : ''}>
@@ -5534,7 +5534,9 @@ input, select, textarea, button {
 
     function openExtensionModal(row) {
       const b = DATA.borrowing.find(x => x._row === row || x._row === +row || String(x['รหัส']) === String(row) || String(x.id) === String(row));
-      const defaultNext = new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0];
+      const _todayL = new Date().toLocaleDateString('en-CA');
+      const _curDue = BorrowAvail.toIso(b['วันที่ครบกำหนด']);
+      const defaultNext = BorrowAvail.addDays(_curDue && _curDue > _todayL ? _curDue : _todayL, 7);
 
       openModal('⏳ ขอขยายเวลาการยืม', `
         <div style="margin-bottom:14px; background:#f8fafc; padding:14px; border-radius:12px;">
@@ -5571,7 +5573,7 @@ input, select, textarea, button {
           <div><strong>ผู้ยืม:</strong> ${esc(b['ผู้ขอยืม'])}</div>
           <div><strong>เหตุผลขอขยาย:</strong> <span style="color:var(--warning); font-weight:600">${esc(b['เหตุผลขอขยายเวลา'] || b['หมายเหตุ'] || '-')}</span></div>
           <div class="field" style="margin-top:10px"><label>กำหนดวันคืนใหม่ *</label>
-            <input id="app_ext_date" type="date" value="${esc(b['วันที่ครบกำหนด'])}">
+            <input id="app_ext_date" type="date" value="${esc(BorrowAvail.toIso(b['วันที่ขอขยายเป็น']) || BorrowAvail.toIso(b['วันที่ครบกำหนด']))}">
           </div>
         </div>
       `, () => {

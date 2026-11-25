@@ -52,6 +52,7 @@ function checkBorrowRequest(data, equipments, borrowings, today) {
     const equip = (equipments || []).find((e) => e['รหัส'] === l.id);
     if (!equip) return { error: `ไม่พบข้อมูลอุปกรณ์รหัส ${l.id || '-'} ในระบบ` };
     if (!(l.qty > 0)) return { error: `จำนวนที่ยืม "${equip['ชื่ออุปกรณ์']}" ต้องมากกว่า 0` };
+    if (!BA.isBorrowPoolEquipment(equip)) return { error: `ไม่สามารถยืมได้: "${equip['ชื่ออุปกรณ์']}" เป็นอุปกรณ์ประจำหน่วยงาน ${equip['หน่วยงานที่รับผิดชอบ']} (ยืมผ่านระบบได้เฉพาะอุปกรณ์ของงานสารสนเทศ)` };
     if (!BA.isBorrowableStatus(equip['สถานะ'])) return { error: `ไม่สามารถยืมได้: อุปกรณ์ "${equip['ชื่ออุปกรณ์']}" อยู่ในสถานะ ${equip['สถานะ']}` };
 
     const busy = BA.busyWindows(equip['รหัส'], borrowings, today);
@@ -176,14 +177,74 @@ async function updateBorrowingStatus(code, newStatus, receiver, user, condition,
   }
 }
 
+// ============== ขยายเวลายืม (ผู้ยืมขอ -> เจ้าหน้าที่อนุมัติ/ไม่อนุมัติ) ==============
+// ใช้ได้ทั้งจากเว็บและจากปุ่มในแชท LINE: ผู้ยืมขอ "+N วัน" -> การ์ดเจ้าหน้าที่มีปุ่มอนุมัติ/ไม่อนุมัติ
+// ระบบตรวจทุกครั้งว่าช่วงที่ขอเพิ่มไม่ชนคิวยืมคนถัดไปของอุปกรณ์ชิ้นเดียวกัน (ทั้งตอนขอและตอนอนุมัติ)
+const EXTENDABLE_STATUSES = ['อยู่ในระหว่างการยืม', 'ถึงวันครบกำหนดคืน'];
+const MAX_EXTENSION_DAYS = 60;
+
+// เก็บวันที่ในรูปแบบเดียวกับที่คำขอใช้อยู่ (ฟอร์ม LIFF = dd/mm/yyyy, เว็บ = yyyy-mm-dd)
+function formatLike(sample, iso) {
+  return /^\d{1,2}\/\d{1,2}\/\d{4}/.test(String(sample || '')) ? iso.split('-').reverse().join('/') : iso;
+}
+
+async function isStaffUserName(user) {
+  if (user === 'system') return true;
+  const usersList = await getUsers();
+  const found = usersList.find((u) => String(u['ชื่อ-นามสกุล']).trim().toLowerCase() === String(user || '').trim().toLowerCase());
+  const role = found ? String(found['บทบาท'] || found.role || '').trim().toLowerCase() : '';
+  return ['superadmin', 'admin', 'manager', 'ผู้ดูแลระบบ', 'ผู้ดูแลระบบสูงสุด', 'ผู้ดูแล', 'ผู้จัดการ'].includes(role)
+    || role.includes('admin') || role.includes('manager');
+}
+
+// ตรวจว่าขยายถึง newIso แล้วไม่ชนคิวของคนอื่น -> '' ถ้าผ่าน หรือข้อความ error (ฟังก์ชันล้วนส่วนใหญ่ ทดสอบได้)
+function checkExtensionConflict(item, newIso, equipments, borrowings, today) {
+  const curDue = BA.toIso(item['วันที่ครบกำหนด']);
+  // ส่วนที่เลยกำหนดไปแล้วถึงวันนี้ถูกกันไว้อยู่แล้ว (ของยังไม่กลับ) — ตรวจเฉพาะช่วงที่ "ขยายเพิ่ม"
+  let from = curDue ? BA.addDays(curDue, 1) : today;
+  if (from < today) from = today;
+  if (newIso < from) return '';
+  for (const l of BA.linesOf(item)) {
+    const equip = (equipments || []).find((e) => e['รหัส'] === l.id);
+    if (!equip) continue;
+    const busy = BA.busyWindows(l.id, borrowings, today, { excludeCode: item['รหัส'] });
+    const available = BA.availableFor(equip['จำนวน'], busy, from, newIso);
+    if (available < l.qty) {
+      // วันที่ว่างอีกครั้ง = หลังวันแรกที่ชนคิว (ไม่ใช่วันที่ว่างอยู่ก่อนถึงคิวของคนอื่น)
+      let clash = from;
+      while (clash < newIso && BA.availableFor(equip['จำนวน'], busy, clash, clash) >= l.qty) clash = BA.addDays(clash, 1);
+      const next = BA.nextFreeDate(equip['จำนวน'], busy, clash, l.qty);
+      return `ขยายเวลาไม่ได้: "${equip['ชื่ออุปกรณ์']}" มีคนจองคิวต่อในช่วง ${fmtDate(from)} – ${fmtDate(newIso)}`
+        + (next ? ` (ว่างอีกครั้งตั้งแต่ ${fmtDate(next)})` : '') + ' — เลือกวันที่สั้นลงหรือคืนตามกำหนดเดิม';
+    }
+  }
+  return '';
+}
+
 async function requestBorrowExtension(code, newDueDate, reason, user) {
   try {
     const item = await getDoc(SHEETS.BORROWING, code);
     if (!item) throw new Error('ไม่พบข้อมูลคำขอยืม');
+    if (item['สถานะ'] === 'ขอขยายเวลา') throw new Error('คำขอนี้ส่งขอขยายเวลาไปแล้ว กำลังรอเจ้าหน้าที่พิจารณา');
+    if (!EXTENDABLE_STATUSES.includes(item['สถานะ'])) throw new Error('ขอขยายเวลาได้เฉพาะรายการที่กำลังยืมอยู่ (สถานะปัจจุบัน: ' + item['สถานะ'] + ')');
 
+    const today = todayStr();
+    const newIso = BA.toIso(newDueDate);
+    if (!newIso) throw new Error('วันที่ขอขยายเวลาไม่ถูกต้อง');
+    const curDue = BA.toIso(item['วันที่ครบกำหนด']);
+    const base = curDue && curDue > today ? curDue : today;
+    if (newIso <= today) throw new Error('วันที่ขอต้องเป็นวันหลังวันนี้');
+    if (curDue && newIso <= curDue) throw new Error('วันที่ขอต้องเป็นวันหลังวันครบกำหนดเดิม (' + fmtDate(curDue) + ')');
+    if (newIso > BA.addDays(base, MAX_EXTENSION_DAYS)) throw new Error('ขยายเวลาได้ไม่เกิน ' + MAX_EXTENSION_DAYS + ' วันต่อครั้ง');
+
+    const conflict = checkExtensionConflict(item, newIso, await getEquipment(), await getBorrowing(), today);
+    if (conflict) return { success: false, message: conflict };
+
+    const shown = formatLike(item['วันที่ครบกำหนด'], newIso);
     item['สถานะ'] = 'ขอขยายเวลา';
-    item['เหตุผลขอขยายเวลา'] = reason;
-    item['หมายเหตุ'] = (item['หมายเหตุ'] ? item['หมายเหตุ'] + ' | ' : '') + 'ขอขยายคืนเป็น ' + newDueDate + ': ' + reason;
+    item['วันที่ขอขยายเป็น'] = shown;
+    item['เหตุผลขอขยายเวลา'] = reason || '';
+    item['หมายเหตุ'] = (item['หมายเหตุ'] ? item['หมายเหตุ'] + ' | ' : '') + 'ขอขยายคืนเป็น ' + shown + (reason ? ': ' + reason : '');
     await setDoc(SHEETS.BORROWING, item['รหัส'], item);
 
     await sendBorrowingFlex(item, 'ขอขยายเวลา');
@@ -192,23 +253,32 @@ async function requestBorrowExtension(code, newDueDate, reason, user) {
       await sendBorrowingFlex(item, 'ขอขยายเวลา', userLineId);
     }
 
-    await logAudit('ขอขยายเวลาการยืม', user || 'system', item['รหัส'] + ' -> คืนวันที่ ' + newDueDate);
-    return { success: true, message: 'ส่งคำขอขยายเวลาเรียบร้อยแล้ว' };
+    await logAudit('ขอขยายเวลาการยืม', user || 'system', item['รหัส'] + ' -> คืนวันที่ ' + shown);
+    return { success: true, message: 'ส่งคำขอขยายเวลาเรียบร้อยแล้ว', newDueDate: shown };
   } catch (err) {
     return { success: false, message: err.message };
   }
 }
 
+// newDueDate ว่าง = ใช้วันที่ที่ผู้ยืมขอไว้ (ปุ่มอนุมัติในแชทไม่ต้องกรอกอะไร)
 async function approveBorrowExtension(code, newDueDate, approver) {
   try {
+    if (!(await isStaffUserName(approver))) throw new Error('คุณไม่มีสิทธิ์อนุมัติการขยายเวลา (เฉพาะเจ้าหน้าที่)');
     const item = await getDoc(SHEETS.BORROWING, code);
     if (!item) throw new Error('ไม่พบข้อมูลคำขอยืม');
+    if (item['สถานะ'] !== 'ขอขยายเวลา') throw new Error('คำขอนี้ไม่ได้อยู่ในสถานะรออนุมัติขยายเวลา (สถานะปัจจุบัน: ' + item['สถานะ'] + ')');
 
-    item['วันที่ครบกำหนด'] = newDueDate;
+    const newIso = BA.toIso(newDueDate) || BA.toIso(item['วันที่ขอขยายเป็น']);
+    if (!newIso) throw new Error('ไม่พบวันที่ขอขยาย กรุณาระบุกำหนดวันคืนใหม่');
+    const conflict = checkExtensionConflict(item, newIso, await getEquipment(), await getBorrowing(), todayStr());
+    if (conflict) return { success: false, message: conflict };
+
+    const shown = formatLike(item['วันที่ครบกำหนด'], newIso);
+    item['วันที่ครบกำหนด'] = shown;
     item['สถานะ'] = 'อยู่ในระหว่างการยืม';
-    item['ผู้รับเรื่อง'] = approver;
-    item['หมายเหตุ'] = (item['หมายเหตุ'] ? item['หมายเหตุ'] + ' | ' : '') + 'อนุมัติขยายเวลาถึง ' + newDueDate;
-
+    item['ผู้อนุมัติขยายเวลา'] = approver;
+    item['วันที่ขอขยายเป็น'] = '';
+    item['หมายเหตุ'] = (item['หมายเหตุ'] ? item['หมายเหตุ'] + ' | ' : '') + 'อนุมัติขยายเวลาถึง ' + shown + ' (โดย ' + approver + ')';
     await setDoc(SHEETS.BORROWING, item['รหัส'], item);
 
     await sendBorrowingFlex(item, 'อนุมัติขยายเวลา');
@@ -217,8 +287,35 @@ async function approveBorrowExtension(code, newDueDate, approver) {
       await sendBorrowingFlex(item, 'อนุมัติขยายเวลา', userLineId);
     }
 
-    await logAudit('อนุมัติขยายเวลายืม', approver || 'system', item['รหัส'] + ' -> ' + newDueDate);
-    return { success: true, message: 'อนุมัติขยายเวลาการยืมสำเร็จ' };
+    await logAudit('อนุมัติขยายเวลายืม', approver || 'system', item['รหัส'] + ' -> ' + shown);
+    return { success: true, message: 'อนุมัติขยายเวลาการยืมสำเร็จ', newDueDate: shown };
+  } catch (err) {
+    return { success: false, message: err.message };
+  }
+}
+
+async function rejectBorrowExtension(code, approver, reason) {
+  try {
+    if (!(await isStaffUserName(approver))) throw new Error('คุณไม่มีสิทธิ์ดำเนินการ (เฉพาะเจ้าหน้าที่)');
+    const item = await getDoc(SHEETS.BORROWING, code);
+    if (!item) throw new Error('ไม่พบข้อมูลคำขอยืม');
+    if (item['สถานะ'] !== 'ขอขยายเวลา') throw new Error('คำขอนี้ไม่ได้อยู่ในสถานะรออนุมัติขยายเวลา (สถานะปัจจุบัน: ' + item['สถานะ'] + ')');
+
+    const asked = item['วันที่ขอขยายเป็น'];
+    item['สถานะ'] = 'อยู่ในระหว่างการยืม'; // กลับไปยืมตามกำหนดเดิม
+    item['วันที่ขอขยายเป็น'] = '';
+    item['หมายเหตุ'] = (item['หมายเหตุ'] ? item['หมายเหตุ'] + ' | ' : '') + 'ไม่อนุมัติขยายเวลา' + (asked ? ' (ขอถึง ' + asked + ')' : '') + (reason ? ': ' + reason : '') + ' (โดย ' + approver + ')';
+    await setDoc(SHEETS.BORROWING, item['รหัส'], item);
+
+    // สถานะ 'ไม่อนุมัติขยายเวลา' ใช้เฉพาะหัวการ์ดแจ้งเตือน (สถานะจริงของคำขอคือกำลังยืมตามเดิม)
+    await sendBorrowingFlex(item, 'ไม่อนุมัติขยายเวลา');
+    const userLineId = await resolveBorrowerLineId(item);
+    if (userLineId) {
+      await sendBorrowingFlex(item, 'ไม่อนุมัติขยายเวลา', userLineId);
+    }
+
+    await logAudit('ไม่อนุมัติขยายเวลายืม', approver || 'system', item['รหัส'] + (reason ? ' | ' + reason : ''));
+    return { success: true, message: 'บันทึกการไม่อนุมัติขยายเวลาแล้ว' };
   } catch (err) {
     return { success: false, message: err.message };
   }
@@ -333,7 +430,7 @@ async function getBorrowCatalog() {
         busyBy.get(l.id).push({ s: w.s, e: w.e, q: l.qty });
       });
     });
-    const items = equips.filter((e) => e['รหัส']).map((e) => ({
+    const items = equips.filter((e) => e['รหัส'] && BA.isBorrowPoolEquipment(e)).map((e) => ({
       'รหัส': e['รหัส'], 'รหัสครุภัณฑ์': e['รหัสครุภัณฑ์'] || '', 'ชื่ออุปกรณ์': e['ชื่ออุปกรณ์'] || '',
       'ยี่ห้อ': e['ยี่ห้อ'] || '', 'รุ่น': e['รุ่น'] || '', 'Serial': e['Serial'] || '',
       'หมวดหมู่': e['หมวดหมู่'] || '', 'ที่เก็บ': e['ที่เก็บ'] || '', 'หน่วยนับ': e['หน่วยนับ'] || 'เครื่อง',
@@ -358,6 +455,9 @@ module.exports = {
   markEquipmentDamaged,
   requestBorrowExtension,
   approveBorrowExtension,
+  rejectBorrowExtension,
+  checkExtensionConflict,
+  EXTENDABLE_STATUSES,
   getBorrowingByCode,
   deleteBorrowing,
   getMyActiveBorrowings,

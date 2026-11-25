@@ -111,5 +111,17 @@ const reset = () => { store.borrowing = {}; sent.length = 0; };
   for (const secret of ['สมชาย', '0812345678', 'U1', 'OPD']) assert.ok(!dump.includes(secret), 'catalog must not contain ' + secret);
   assert.deepEqual(cat.categories, [{ name: 'คอมพิวเตอร์', code: '7440' }]);
   console.log('  ✅ catalog: busy windows only, no personal data');
+
+  // เฉพาะอุปกรณ์งานสารสนเทศเท่านั้นที่ยืมผ่านระบบได้ — ของหน่วยงานอื่นเป็นครุภัณฑ์ประจำหน่วยงานที่ใช้งานอยู่แล้ว
+  reset();
+  eq('IT1', { 'หน่วยงานที่รับผิดชอบ': 'งานสารสนเทศ' }); eq('IT2', { 'หน่วยงานที่รับผิดชอบ': 'ศูนย์คอมพิวเตอร์ (IT)' });
+  eq('OPD1', { 'หน่วยงานที่รับผิดชอบ': 'ผู้ป่วยนอก' }); eq('OLD1', {}); // OLD1 = ข้อมูลเก่าไม่ระบุหน่วยงาน -> ถือเป็นของงานสารสนเทศ
+  const cat2 = await B.getBorrowCatalog();
+  const ids = cat2.items.map((i) => i['รหัส']).sort();
+  assert.ok(ids.includes('IT1') && ids.includes('IT2') && ids.includes('OLD1') && !ids.includes('OPD1'), 'catalog lists only IT equipment: ' + ids);
+  const badOpd = await B.saveBorrowing(req([['OPD1', 1]], plus(1), plus(2)), 'x');
+  assert.equal(badOpd.success, false); assert.match(badOpd.message, /ประจำหน่วยงาน ผู้ป่วยนอก.*งานสารสนเทศ/);
+  assert.equal((await B.saveBorrowing(req([['IT1', 1]], plus(1), plus(2)), 'x')).success, true);
+  console.log('  ✅ only IT-unit equipment is borrowable (catalog + save)');
   console.log('\n🎉 ALL BORROWING TESTS PASSED');
 })().catch((e) => { console.error(e); process.exit(1); });

@@ -96,8 +96,11 @@ const BORROW_STAGE = {
     staff: 'ครบกำหนดคืนวันนี้ / เกินกำหนด — ติดตามผู้ยืม', user: 'ครบกำหนดคืนแล้ว — กรุณานำอุปกรณ์มาคืน หรือขอขยายเวลา',
     staffNext: 'ผู้ยืมยังไม่ได้คืนตามกำหนด', userNext: 'คืนแล้วกด “แจ้งคืนอุปกรณ์” เพื่อให้เจ้าหน้าที่ตรวจรับ' },
   'ขอขยายเวลา': { color: '#d97706', icon: '⏳',
-    staff: 'ผู้ยืมขอขยายเวลาส่งคืน — พิจารณาอนุมัติได้ในระบบ', user: 'ส่งคำขอขยายเวลาแล้ว — รอเจ้าหน้าที่พิจารณา',
-    staffNext: 'อนุมัติหรือปฏิเสธได้ที่หน้ายืม-คืนในระบบ', userNext: 'ระหว่างรอ ยังต้องถืออุปกรณ์ไว้ตามเดิม' },
+    staff: 'ผู้ยืมขอขยายเวลาส่งคืน — รอเจ้าหน้าที่พิจารณา', user: 'ส่งคำขอขยายเวลาแล้ว — รอเจ้าหน้าที่พิจารณา',
+    staffNext: 'กด “อนุมัติ” หรือ “ไม่อนุมัติ” ได้เลย (ระบบตรวจให้ว่าไม่ชนคิวยืมของคนถัดไป)', userNext: 'ระหว่างรอ ยังต้องถืออุปกรณ์ไว้ตามเดิม จะแจ้งผลให้ทราบทางแชทนี้' },
+  'ไม่อนุมัติขยายเวลา': { color: '#ef4444', icon: '🚫',
+    staff: 'ไม่อนุมัติขยายเวลา — ผู้ยืมต้องคืนตามกำหนดเดิม', user: 'เจ้าหน้าที่ไม่อนุมัติขยายเวลา — กรุณาคืนตามกำหนดเดิม',
+    staffNext: '', userNext: 'โปรดนำอุปกรณ์มาคืนภายในวันที่ครบกำหนดเดิม' },
   'อนุมัติขยายเวลา': { color: '#10b981', icon: '👍',
     staff: 'อนุมัติขยายเวลาเรียบร้อย', user: 'เจ้าหน้าที่อนุมัติขยายเวลาแล้ว — ครบกำหนดใหม่ตามด้านล่าง', staffNext: '', userNext: '' },
   'อยู่ในระหว่างการคืน': { color: '#06b6d4', icon: '🔄',
@@ -114,6 +117,10 @@ function borrowStaffButtons(code, status) {
   const out = [];
   if (status === 'รอรับเรื่อง') out.push(btn('primary', '#3b82f6', '✅ รับเรื่องคำขอนี้', 'รับเรื่อง ' + code));
   else if (status === 'รับเรื่องแล้ว') out.push(btn('primary', '#8b5cf6', '📦 ส่งมอบอุปกรณ์แล้ว', 'ส่งมอบ ' + code));
+  else if (status === 'ขอขยายเวลา') {
+    out.push(btn('primary', '#10b981', '👍 อนุมัติขยายเวลา', 'อนุมัติขยาย ' + code));
+    out.push(btn('secondary', null, '🚫 ไม่อนุมัติ', 'ไม่อนุมัติขยาย ' + code));
+  }
   else if (status === 'อยู่ในระหว่างการคืน') {
     out.push(btn('primary', '#10b981', '✅ ยืนยันรับคืนอุปกรณ์', 'ยืนยันคืน ' + code));
     out.push(btn('secondary', null, '⚠️ รับคืน (ชำรุด)', 'ยืนยันคืนชำรุด ' + code));
@@ -125,7 +132,7 @@ function borrowStaffButtons(code, status) {
 // ปุ่มของ "ผู้รับ" (ผู้ยืม) ตามสถานะ
 function borrowRequesterButtons(code, status) {
   const out = [];
-  if (['อยู่ในระหว่างการยืม', 'ถึงวันครบกำหนดคืน', 'ขอขยายเวลา', 'อนุมัติขยายเวลา'].includes(status)) {
+  if (['อยู่ในระหว่างการยืม', 'ถึงวันครบกำหนดคืน', 'ขอขยายเวลา', 'อนุมัติขยายเวลา', 'ไม่อนุมัติขยายเวลา'].includes(status)) {
     out.push({ type: 'button', style: 'primary', color: '#06b6d4', height: 'sm', action: { type: 'uri', label: '🔄 แจ้งคืนอุปกรณ์', uri: LIFF_URL + '?tab=return' } });
     if (status !== 'ขอขยายเวลา') {
       out.push({ type: 'button', style: 'secondary', height: 'sm', action: { type: 'message', label: '⏳ ขอขยายเวลาคืน', text: 'ขอขยายเวลา ' + code } });
@@ -190,6 +197,11 @@ function buildBorrowingBubble(data, status, audience) {
         ...(audience === 'viewer' ? [flexRow('📌 สถานะ', st)] : []),
       ];
 
+  // คำขอขยายเวลาที่รออยู่: แสดงวันที่ที่ขอ + เหตุผล ให้ทั้งผู้พิจารณาและผู้ขอเห็นตรงกัน
+  if (st === 'ขอขยายเวลา' && audience !== 'viewer') {
+    rows.push(flexRow('⏳ ขอขยายเป็น', String(data['วันที่ขอขยายเป็น'] || '-')));
+    if (data['เหตุผลขอขยายเวลา']) rows.push(flexRow('📝 เหตุผล', String(data['เหตุผลขอขยายเวลา'])));
+  }
   const bodyContents = [itemsBox, { type: 'separator', margin: 'md' }, { type: 'box', layout: 'vertical', spacing: 'sm', contents: rows }];
   if (next) {
     bodyContents.push({ type: 'box', layout: 'vertical', backgroundColor: isStaff ? '#fffbeb' : '#eff6ff', cornerRadius: '10px', paddingAll: '12px', margin: 'md',

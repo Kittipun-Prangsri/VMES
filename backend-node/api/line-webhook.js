@@ -4,14 +4,15 @@
 // ที่แก้ตามที่ยืนยันแล้ว (ดูกิ่งที่ 6 ด้านล่าง)
 
 const crypto = require('crypto');
-const { SYSTEM_NAME, safeTruncate, safeGet, nowStr } = require('../lib/util');
+const { SYSTEM_NAME, safeTruncate, safeGet, nowStr, todayStr } = require('../lib/util');
+const BA = require('../lib/borrowAvailability');
 const { replyLineFlex, flexRow, buildBookingBubble, buildBorrowingBubble, LIFF_BOOKING_URL, LIFF_SURVEY_URL } = require('../lib/line');
 const { SHEETS, getDoc } = require('../lib/firestore');
 const { isStaffRole } = require('../lib/auth');
 const { getUserByLineId, getMyBookings, changeBookingStatus } = require('../lib/handlers/booking');
 const { getVehicles } = require('../lib/handlers/vehicles');
 const { getEquipment } = require('../lib/handlers/equipment');
-const { getBorrowing, updateBorrowingStatus, getMyActiveBorrowings } = require('../lib/handlers/borrowing');
+const { getBorrowing, updateBorrowingStatus, getMyActiveBorrowings, requestBorrowExtension, approveBorrowExtension, rejectBorrowExtension, EXTENDABLE_STATUSES } = require('../lib/handlers/borrowing');
 
 const { bindLineByCitizenId, getUserNameByLineId } = require('../lib/handlers/users');
 
@@ -1048,6 +1049,114 @@ async function handleHandoverBorrowing(replyToken, userId, userMessage) {
 // เจ้าหน้าที่ต้องตรวจรับของจริงก่อนปิดงานเป็น "คืนเสร็จสิ้น" — ค่าเริ่มต้นถือว่าสภาพปกติ
 // ถ้าของชำรุดให้ใช้คำสั่ง "ยืนยันคืนชำรุด BR-xxx" แทน ระบบจะปรับสถานะอุปกรณ์ชิ้นนั้นเป็น
 // ชำรุดให้อัตโนมัติ (ดู markEquipmentDamaged ใน updateBorrowingStatus)
+// ============== ขยายเวลายืมผ่านแชท ==============
+// ผู้ยืมกดปุ่ม "ขอขยายเวลาคืน" บนการ์ด -> เลือก +1/+3/+7 วัน (หรือพิมพ์วันที่) -> การ์ดเจ้าหน้าที่มีปุ่มอนุมัติ/ไม่อนุมัติ
+// เช็กความเป็นเจ้าของจาก LINE_USER_ID ที่บันทึกไว้ตอนยืม และเช็กสิทธิ์เจ้าหน้าที่จาก LINE userId ของคนกดจริง
+// ส่วนการตรวจชนคิวของคนอื่นอยู่ใน requestBorrowExtension / approveBorrowExtension (ตรวจทั้งตอนขอและตอนอนุมัติ)
+const EXT_QUICK_DAYS = [1, 3, 7];
+const EXT_MAX_DAYS = 30;
+const dmyOf = (iso) => (iso ? iso.split('-').reverse().join('/') : '-');
+
+function resultBubble(ok, title, text) {
+  return simpleErrorBubble(ok ? '#10b981' : '#ef4444', title, text);
+}
+
+async function handleExtensionRequest(replyToken, userId, userMessage) {
+  const match = userMessage.match(/BR-[A-Z0-9-]+/i);
+  if (!match) {
+    await replyLineFlex(replyToken, '❌ ไม่ระบุรหัสคำขอ', simpleErrorBubble('#ef4444', '❌ ไม่ระบุรหัสคำขอ', 'พิมพ์เช่น "ขอขยายเวลา BR-20260812-001 3 วัน" หรือกดปุ่ม "ขอขยายเวลาคืน" บนการ์ดคำขอของคุณ'));
+    return;
+  }
+  const code = match[0].toUpperCase();
+  const all = await safeGet(getBorrowing);
+  const item = all.find((b) => String(b['รหัส'] || '').toUpperCase() === code);
+  if (!item) {
+    await replyLineFlex(replyToken, '❌ ไม่พบคำขอ', simpleErrorBubble('#ef4444', '❌ ไม่พบคำขอยืม', 'ไม่พบคำขอยืมรหัส ' + safeTruncate(code, 25)));
+    return;
+  }
+  if (String(item['LINE_USER_ID'] || '') !== String(userId)) {
+    await replyLineFlex(replyToken, '🚫 ไม่ใช่คำขอของคุณ', simpleErrorBubble('#ef4444', '🚫 ไม่ใช่คำขอของคุณ', 'ขอขยายเวลาได้เฉพาะคำขอที่คุณเป็นผู้ยืม (ยืมผ่าน LINE ด้วยบัญชีนี้)'));
+    return;
+  }
+  if (item['สถานะ'] === 'ขอขยายเวลา') {
+    await replyLineFlex(replyToken, 'ส่งคำขอไปแล้ว', simpleErrorBubble('#f59e0b', '⏳ ส่งคำขอขยายเวลาไปแล้ว', 'คำขอ ' + code + ' ขอขยายเป็น ' + (item['วันที่ขอขยายเป็น'] || '-') + ' กำลังรอเจ้าหน้าที่พิจารณา'));
+    return;
+  }
+  if (!EXTENDABLE_STATUSES.includes(item['สถานะ'])) {
+    await replyLineFlex(replyToken, '❌ ขอขยายเวลาไม่ได้', simpleErrorBubble('#ef4444', '❌ ขอขยายเวลาไม่ได้', 'ขอขยายเวลาได้เฉพาะรายการที่กำลังยืมอยู่ (สถานะปัจจุบัน: ' + (item['สถานะ'] || '-') + ')'));
+    return;
+  }
+
+  // ผู้ยืมระบุมาเป็น "N วัน" หรือวันที่ (dd/mm/yyyy, yyyy-mm-dd) — ถ้าไม่ระบุ ให้เลือกจากปุ่ม
+  const rest = userMessage.replace(match[0], '').replace(/ขอขยายเวลา(คืน)?/g, ' ');
+  const dm = /(\d{1,2}\/\d{1,2}\/\d{4})/.exec(rest) || /(\d{4}-\d{2}-\d{2})/.exec(rest);
+  const nm = !dm && /(\d{1,3})\s*(?:วัน)?/.exec(rest);
+  const today = todayStr();
+  const curDue = BA.toIso(item['วันที่ครบกำหนด']);
+  const base = curDue && curDue > today ? curDue : today; // เลยกำหนดแล้ว นับต่อจากวันนี้
+
+  if (!dm && !nm) {
+    const flex = {
+      type: 'bubble', size: 'mega',
+      header: { type: 'box', layout: 'vertical', backgroundColor: '#d97706', paddingAll: '20px', contents: [
+        { type: 'text', text: '⏳ ขอขยายเวลาคืน', color: '#ffffff', size: 'lg', weight: 'bold' },
+        { type: 'text', text: 'คำขอ ' + code, color: '#ffffff', size: 'xs', margin: 'xs' } ] },
+      body: { type: 'box', layout: 'vertical', spacing: 'sm', paddingAll: '20px', contents: [
+        { type: 'text', text: 'กำหนดคืนเดิม: ' + dmyOf(curDue), size: 'sm', color: '#0f172a', weight: 'bold' },
+        { type: 'text', text: 'ต้องการขยายออกไปอีกกี่วัน?', size: 'sm', color: '#64748b', margin: 'sm' },
+        ...EXT_QUICK_DAYS.map((n) => ({ type: 'button', style: 'primary', color: '#d97706', height: 'sm', action: { type: 'message', label: `+${n} วัน (คืนถึง ${dmyOf(BA.addDays(base, n))})`, text: `ขอขยายเวลา ${code} ${n} วัน` } })),
+        { type: 'text', text: 'หรือพิมพ์: ขอขยายเวลา ' + code + ' 25/12/2026', size: 'xxs', color: '#94a3b8', wrap: true, margin: 'md' },
+      ] },
+    };
+    await replyLineFlex(replyToken, '⏳ ขอขยายเวลาคืน ' + code, flex);
+    return;
+  }
+  let newIso;
+  if (dm) newIso = BA.toIso(dm[1]);
+  else {
+    const n = +nm[1];
+    if (!(n >= 1 && n <= EXT_MAX_DAYS)) {
+      await replyLineFlex(replyToken, '❌ จำนวนวันไม่ถูกต้อง', simpleErrorBubble('#ef4444', '❌ จำนวนวันไม่ถูกต้อง', `ขอขยายได้ครั้งละ 1–${EXT_MAX_DAYS} วัน (หรือพิมพ์เป็นวันที่ เช่น 25/12/2026)`));
+      return;
+    }
+    newIso = BA.addDays(base, n);
+  }
+  if (!newIso) {
+    await replyLineFlex(replyToken, '❌ วันที่ไม่ถูกต้อง', simpleErrorBubble('#ef4444', '❌ วันที่ไม่ถูกต้อง', 'พิมพ์วันที่เป็น วว/ดด/ปปปป เช่น 25/12/2026'));
+    return;
+  }
+  const res = await requestBorrowExtension(code, newIso, 'ขอขยายเวลาผ่าน LINE', item['ผู้ขอยืม']);
+  if (res.success) {
+    await replyLineFlex(replyToken, '⏳ ส่งคำขอขยายเวลาแล้ว', resultBubble(true, '⏳ ส่งคำขอขยายเวลาแล้ว', `ขอคืนถึง ${res.newDueDate} รอเจ้าหน้าที่พิจารณา ผลจะแจ้งให้ทราบทางแชทนี้`));
+  } else {
+    await replyLineFlex(replyToken, '❌ ขอขยายเวลาไม่สำเร็จ', resultBubble(false, '❌ ขอขยายเวลาไม่สำเร็จ', res.message || 'เกิดข้อผิดพลาด'));
+  }
+}
+
+// approve = true: "อนุมัติขยาย BR-xxx", false: "ไม่อนุมัติขยาย BR-xxx [เหตุผล]" (เฉพาะเจ้าหน้าที่)
+async function handleExtensionDecision(replyToken, userId, userMessage, approve) {
+  const match = userMessage.match(/BR-[A-Z0-9-]+/i);
+  if (!match) {
+    await replyLineFlex(replyToken, '❌ ไม่ระบุรหัสคำขอ', simpleErrorBubble('#ef4444', '❌ ไม่ระบุรหัสคำขอ', 'พิมพ์เช่น "อนุมัติขยาย BR-20260812-001"'));
+    return;
+  }
+  const code = match[0].toUpperCase();
+  const staffName = await getUserNameByLineId(userId);
+  if (!staffName) {
+    await replyLineFlex(replyToken, '🚫 ไม่มีสิทธิ์', simpleErrorBubble('#ef4444', '🚫 ไม่มีสิทธิ์ดำเนินการ', 'บัญชี LINE นี้ยังไม่ได้ผูกกับบัญชีผู้ใช้ในระบบ เฉพาะเจ้าหน้าที่ที่ผูกบัญชีแล้วเท่านั้นที่อนุมัติการขยายเวลาได้'));
+    return;
+  }
+  const label = approve ? 'อนุมัติขยายเวลา' : 'ไม่อนุมัติขยายเวลา';
+  const reason = userMessage.slice(userMessage.toUpperCase().indexOf(code) + code.length).trim();
+  const res = approve ? await approveBorrowExtension(code, '', staffName) : await rejectBorrowExtension(code, staffName, reason);
+  if (res.success) {
+    const detail = approve ? `คืนใหม่: ${res.newDueDate} (โดย ${staffName})` : `คืนตามกำหนดเดิม (โดย ${staffName})`;
+    await replyLineFlex(replyToken, label + 'สำเร็จ ' + code, resultBubble(true, (approve ? '👍 ' : '🚫 ') + label + 'แล้ว', `คำขอ ${code} — ${detail}`));
+  } else {
+    await replyLineFlex(replyToken, '❌ ' + label + 'ไม่สำเร็จ', resultBubble(false, '❌ ' + label + 'ไม่สำเร็จ', res.message || 'เกิดข้อผิดพลาด'));
+  }
+}
+
 async function handleConfirmReturn(replyToken, userId, userMessage) {
   await handleBorrowingStaffAction(
     replyToken, userId, userMessage, 'คืนเสร็จสิ้น', 'ยืนยันรับคืน',
@@ -1370,6 +1479,17 @@ module.exports = async function handler(req, res) {
       // 1.8/1.9 ยืนยันรับคืน (เฉพาะเจ้าหน้าที่) — ต้องเช็คก่อนกิ่ง "คืน br-" ด้านล่างเสมอ เพราะ
       // "ยืนยันคืน br-..." เองก็มีคำว่า "คืน br-" เป็น substring อยู่ในตัว ถ้าสลับลำดับจะถูก
       // กิ่งแจ้งคืน (ของผู้ยืม) ตัดหน้าไปก่อน ไม่มีทางมาถึงกิ่งนี้เลย
+      // ขยายเวลา — "ไม่อนุมัติขยาย" ต้องมาก่อน "อนุมัติขยาย" (มีคำนั้นเป็น substring) และต้องมาก่อนกิ่ง "คืน br-" ของผู้ยืม
+      // เพราะผู้ยืมอาจพิมพ์ "ขอขยายเวลาคืน BR-..." ซึ่งมีคำว่า "คืน br-" อยู่ในตัว
+      else if (msgLower.indexOf('ไม่อนุมัติขยาย') !== -1 && /br-/i.test(userMessage)) {
+        await handleExtensionDecision(replyToken, userId, userMessage, false);
+      }
+      else if (msgLower.indexOf('อนุมัติขยาย') !== -1 && /br-/i.test(userMessage)) {
+        await handleExtensionDecision(replyToken, userId, userMessage, true);
+      }
+      else if (msgLower.indexOf('ขอขยายเวลา') !== -1 && /br-/i.test(userMessage)) {
+        await handleExtensionRequest(replyToken, userId, userMessage);
+      }
       else if (msgLower.indexOf('ยืนยันคืนชำรุด br-') !== -1) {
         await handleConfirmReturnDamaged(replyToken, userId, userMessage);
       }
