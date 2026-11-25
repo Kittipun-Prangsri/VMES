@@ -83,9 +83,10 @@ async function registerLiffUser(lineUserId, displayName, name, phone, dept) {
     // หน่วยงานที่พิมพ์ตรงกับรายชื่อหลัก (ต่างแค่ช่องว่าง/ตัวพิมพ์) ให้เก็บตามชื่อในรายชื่อหลัก ข้อมูลจะไม่แตกเป็นหลายสะกด
     let cleanDept = String(dept || '').replace(/\s+/g, ' ').trim();
     try {
-      const key = (v) => String(v || '').replace(/\s+/g, '').toLowerCase();
-      const hit = (await listDocs(SHEETS.DEPARTMENTS)).find((d) => key(d['ชื่อหน่วยงาน']) === key(cleanDept));
-      if (hit && cleanDept) cleanDept = String(hit['ชื่อหน่วยงาน']).replace(/\s+/g, ' ').trim();
+      const DeptMaster = require('../departmentsMaster');
+      const dbNames = (await listDocs(SHEETS.DEPARTMENTS)).map((d) => d['ชื่อหน่วยงาน']);
+      const hit = cleanDept && DeptMaster.find(cleanDept, dbNames);
+      if (hit) cleanDept = hit;
     } catch (e) { /* ไม่มีรายชื่อหลักก็ใช้ตามที่กรอก */ }
 
     const data = {

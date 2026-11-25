@@ -24,11 +24,13 @@ const call = async (fn, args) => {
   assert.ok(!JSON.stringify(cat.json).includes('23000'), 'catalog exposes no asset value');
   store.departments = [{ 'รหัส': 'D1', 'ชื่อหน่วยงาน': 'งานสารสนเทศ', 'หัวหน้า': 'นายลับ', 'เบอร์โทร': '0899999999' }, { 'รหัส': 'D2', 'ชื่อหน่วยงาน': ' ห้องคลอด ' }, { 'รหัส': 'D3', 'ชื่อหน่วยงาน': 'ห้องคลอด' }];
   const dn = await call('getDepartmentNames');
-  assert.equal(dn.status, 200); assert.deepEqual(dn.json.names, ['ห้องคลอด', 'งานสารสนเทศ'].sort((a, b) => a.localeCompare(b, 'th')), 'names only, deduped, sorted');
+  assert.equal(dn.status, 200); assert.ok(dn.json.names.includes('งานสารสนเทศ') && dn.json.names.includes('งานโภชนศาสตร์'), 'real hospital departments always offered');
+  assert.ok(!dn.json.names.includes('ห้องคลอด'), 'legacy/test department hidden');
+  assert.equal(new Set(dn.json.names.map((n) => n.replace(/\s+/g, ''))).size, dn.json.names.length, 'deduped');
   assert.ok(!JSON.stringify(dn.json).includes('0899999999') && !JSON.stringify(dn.json).includes('นายลับ'), 'no head/phone leaked');
-  const reg = await call('registerLiffUser', ['U-new', 'disp', 'สมหญิง', '0811111111', 'ห้อง  คลอด']);
+  const reg = await call('registerLiffUser', ['U-new', 'disp', 'สมหญิง', '0811111111', 'งาน  สารสนเทศ']);
   assert.equal(reg.json.success, true);
-  assert.equal(store.users.find((u) => u['LINE ID'] === 'U-new')['หน่วยงาน'], 'ห้องคลอด', 'registered department uses the master spelling');
+  assert.equal(store.users.find((u) => u['LINE ID'] === 'U-new')['หน่วยงาน'], 'งานสารสนเทศ', 'registered department uses the master spelling');
   const reg2 = await call('registerLiffUser', ['U-new2', 'disp', 'สมชาย', '0822222222', 'แผนกใหม่ที่ยังไม่มี']);
   assert.equal(store.users.find((u) => u['LINE ID'] === 'U-new2')['หน่วยงาน'], 'แผนกใหม่ที่ยังไม่มี', 'unknown department is kept as typed');
   const sug = await call('getBorrowSuggestions');

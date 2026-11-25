@@ -4,6 +4,7 @@
 const { SHEETS, setDoc, deleteDoc, listDocs } = require('../firestore');
 const { newId, logAudit } = require('../util');
 const { verifyAdmin } = require('../auth');
+const DeptMaster = require('../departmentsMaster');
 
 async function getDepartments() {
   return listDocs(SHEETS.DEPARTMENTS);
@@ -43,15 +44,9 @@ async function saveDepartment(data, adminCode) {
 // รายชื่อหน่วยงานสำหรับช่องเลือกบน LIFF (สาธารณะ — คืนเฉพาะชื่อ ไม่ส่งหัวหน้า/เบอร์โทร/จำนวนคน)
 async function getDepartmentNames() {
   try {
-    const seen = new Set();
-    const names = [];
-    (await listDocs(SHEETS.DEPARTMENTS)).forEach((d) => {
-      const n = normName(d['ชื่อหน่วยงาน']);
-      const k = n.toLowerCase();
-      if (n && !seen.has(k)) { seen.add(k); names.push(n); }
-    });
-    names.sort((a, b) => a.localeCompare(b, 'th'));
-    return { success: true, names };
+    // รายชื่อจริงของโรงพยาบาล + หน่วยงานที่ผู้ดูแลเพิ่มเอง − ชื่อทดสอบ/ชื่อเก่า (ดู departmentsMaster.js)
+    const dbNames = (await listDocs(SHEETS.DEPARTMENTS)).map((d) => d['ชื่อหน่วยงาน']);
+    return { success: true, names: DeptMaster.merge(dbNames) };
   } catch (err) {
     return { success: false, message: err.message };
   }

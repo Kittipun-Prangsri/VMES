@@ -774,7 +774,7 @@ function equipForm(e) {
     }
   }
   const sec = (t) => `<div class="field full" style="margin-top:6px;"><div style="font-weight:700; color:#0f766e; font-size:13px; border-bottom:1px solid #e2e8f0; padding-bottom:4px;">${t}</div></div>`;
-  const depts = (DATA.departments || []).map(d => d['ชื่อหน่วยงาน']).filter(Boolean);
+  const depts = eqDeptNames();
   const curDept = e['หน่วยงานที่รับผิดชอบ'] || '';
   return `
     <div class="form-grid">
@@ -1235,13 +1235,14 @@ async function autoAssignCategories() {
 // ------------------------------------------------------------------ 7) ช่องหน่วยงานแบบพิมพ์ค้นหา + เพิ่มหน่วยงานใหม่ได้ (ใช้ร่วมกับฟอร์มใบส่งมอบ)
 // เดิมเป็น <select> ตายตัวจากตารางหน่วยงาน: หน่วยงานที่ยังไม่มีในตาราง (เช่น ห้องคลอด) จึงหาไม่เจอและเพิ่มไม่ได้
 function eqDeptNames() {
+  const db = (DATA.departments || []).map(d => eqNorm(d['ชื่อหน่วยงาน']));
+  if (typeof DeptMaster !== 'undefined') return DeptMaster.merge(db); // รายชื่อจริง + ที่ผู้ดูแลเพิ่มเอง − ชื่อทดสอบ/ชื่อเก่า
   const seen = new Set();
-  return (DATA.departments || []).map(d => eqNorm(d['ชื่อหน่วยงาน'])).filter(n => n && !seen.has(n.toLowerCase()) && seen.add(n.toLowerCase()))
-    .sort((a, b) => a.localeCompare(b, 'th'));
+  return db.filter(n => n && !seen.has(n.toLowerCase()) && seen.add(n.toLowerCase())).sort((a, b) => a.localeCompare(b, 'th'));
 }
 function eqDeptFind(name) {
-  const n = eqNorm(name).toLowerCase();
-  return n ? eqDeptNames().find(x => x.toLowerCase() === n) : undefined;
+  const n = eqNorm(name).replace(/\s+/g, '').toLowerCase(); // ไม่สนช่องว่าง/ตัวพิมพ์ ("งาน  พัสดุ" = "งานพัสดุ")
+  return n ? eqDeptNames().find(x => x.replace(/\s+/g, '').toLowerCase() === n) : undefined;
 }
 // onChangeJs: โค้ด JS (สตริง) ที่รันเมื่อค่าเปลี่ยน เช่น รีเฟรชรายชื่อเจ้าหน้าที่ของหน่วยงานนั้น
 function eqDeptInputHtml(id, value, onChangeJs, placeholder) {
