@@ -448,7 +448,39 @@ async function getBorrowCatalog() {
   }
 }
 
+// คำแนะนำช่องสถานที่/วัตถุประสงค์บนหน้ายืม (LIFF): ข้อความที่คนอื่นใช้บ่อยจากคำขอเก่า
+// ไม่ส่งชื่อคน/เบอร์/รหัส และเอาเฉพาะข้อความที่ซ้ำหลายครั้ง (กันข้อความส่วนตัวของคนเดียวหลุดออกไป)
+function topTexts(borrowings, field, minCount, limit) {
+  const norm = (v) => String(v == null ? '' : v).replace(/\s+/g, ' ').trim();
+  const map = new Map();
+  borrowings.forEach((b) => {
+    if (b['สถานะ'] === 'ยกเลิก') return;
+    const t = norm(b[field]);
+    if (!t || t.length > 60 || /\d{9,}/.test(t) || /https?:|@/.test(t)) return; // ยาวเกิน/มีเลขยาว (เช่นเบอร์โทร)/ลิงก์/อีเมล = ไม่ใช่ข้อความทั่วไป
+    const k = t.replace(/\s+/g, '').toLowerCase(); // 'ห้องประชุม ทับทิม' กับ 'ห้องประชุมทับทิม' = ที่เดียวกัน
+    const cur = map.get(k) || { name: t, count: 0, last: '' };
+    cur.count++;
+    const when = String(b['วันที่บันทึก'] || b['วันที่ขอยืม'] || '');
+    if (when > cur.last) { cur.last = when; cur.name = t; } // ใช้การสะกดล่าสุด
+    map.set(k, cur);
+  });
+  return Array.from(map.values()).filter((x) => x.count >= minCount)
+    .sort((a, b) => b.count - a.count || (a.last < b.last ? 1 : -1)).slice(0, limit)
+    .map((x) => ({ name: x.name, count: x.count }));
+}
+
+async function getBorrowSuggestions() {
+  try {
+    const borrowings = await getBorrowing();
+    return { success: true, locations: topTexts(borrowings, 'สถานที่ใช้งาน', 2, 12), purposes: topTexts(borrowings, 'วัตถุประสงค์', 3, 8) };
+  } catch (err) {
+    return { success: false, message: err.message };
+  }
+}
+
 module.exports = {
+  getBorrowSuggestions,
+  topTexts,
   getBorrowing,
   saveBorrowing,
   updateBorrowingStatus,

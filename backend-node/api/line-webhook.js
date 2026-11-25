@@ -262,38 +262,59 @@ async function handleVehicleStatus(replyToken) {
   await replyLineFlex(replyToken, '🚗 สรุปสถานะรถยนต์', flexContent);
 }
 
+// รายการอุปกรณ์ที่ "ยืมได้จริง" ตามกติกาเดียวกับหน้ายืมบน LIFF: เฉพาะคลังของงานสารสนเทศ (ไม่รวมประจำจุด/ชำรุด/กำลังถูกยืม)
+// รวมเครื่องชื่อ/ยี่ห้อ/รุ่นเดียวกันเป็นบรรทัดเดียวพร้อมจำนวนที่ว่าง "วันนี้" (นับตามช่วงวันที่ที่ถูกจอง)
+function buildEquipmentAvailabilityRows(equipment, borrowings, today) {
+  const groups = new Map();
+  (equipment || []).forEach((e) => {
+    if (!e['รหัส'] || !BA.isBorrowPoolEquipment(e) || !BA.isBorrowableStatus(e['สถานะ'])) return;
+    const key = [e['ชื่ออุปกรณ์'], e['ยี่ห้อ'], e['รุ่น']].map((v) => String(v || '').trim().toLowerCase()).join('|');
+    if (!groups.has(key)) groups.set(key, { name: e['ชื่ออุปกรณ์'] || e['รหัส'], brand: e['ยี่ห้อ'] || '', model: e['รุ่น'] || '', units: 0, free: 0, nextFree: '', locs: new Set() });
+    const g = groups.get(key);
+    const busy = BA.busyWindows(e['รหัส'], borrowings, today);
+    const stock = parseFloat(e['จำนวน']) || 0;
+    const avail = BA.availableFor(stock, busy, today, today);
+    g.units += stock;
+    g.free += avail;
+    if (e['ที่เก็บ']) g.locs.add(String(e['ที่เก็บ']).trim());
+    if (avail < 1) {
+      const nf = BA.nextFreeDate(stock, busy, today, 1);
+      if (nf && (!g.nextFree || nf < g.nextFree)) g.nextFree = nf;
+    }
+  });
+  return Array.from(groups.values()).sort((a, b) => (b.free > 0) - (a.free > 0) || String(a.name).localeCompare(String(b.name), 'th'));
+}
+
 async function handleEquipmentStock(replyToken) {
   try {
-    const equipment = await safeGet(getEquipment);
-    if (equipment.length === 0) {
-      const flexContent = simpleErrorBubble('#ef4444', '💻 คลังอุปกรณ์', '❌ ไม่พบข้อมูลอุปกรณ์ในคลัง');
-      await replyLineFlex(replyToken, '💻 ไม่พบข้อมูลอุปกรณ์ในคลัง', flexContent);
+    const [equipment, borrowings] = await Promise.all([safeGet(getEquipment), safeGet(getBorrowing)]);
+    const today = todayStr();
+    const groups = buildEquipmentAvailabilityRows(equipment, borrowings, today);
+    const liffBorrow = { type: 'button', style: 'primary', color: '#4f46e5', height: 'sm', action: { type: 'uri', label: '📦 ทำรายการยืมอุปกรณ์ (LIFF)', uri: 'https://liff.line.me/2011083425-G0pup6PQ' } };
+
+    if (groups.length === 0) {
+      const flexContent = simpleErrorBubble('#ef4444', '💻 อุปกรณ์ที่ยืมได้', 'ขณะนี้ไม่มีอุปกรณ์ที่เปิดให้ยืม (ครุภัณฑ์ประจำจุดของแต่ละหน่วยงานไม่อยู่ในรายการยืม)');
+      await replyLineFlex(replyToken, '💻 ไม่มีอุปกรณ์ที่ยืมได้', flexContent);
       return;
     }
 
-    const rows = equipment.slice(0, 10).map((eq, idx) => {
-      const name = safeTruncate(eq['ชื่ออุปกรณ์'] || eq['รหัส'], 25, 'อุปกรณ์');
-      const category = safeTruncate(eq['หมวดหมู่'], 15, 'ทั่วไป');
-      const qty = parseFloat(eq['จำนวน']) || 0;
-      const unit = safeTruncate(eq['หน่วยนับ'], 8, 'รายการ');
+    const shown = groups.slice(0, 10);
+    const rows = shown.map((g, idx) => {
+      const sub = [[g.brand, g.model].filter(Boolean).join(' '), g.locs.size ? '📍 ' + Array.from(g.locs).slice(0, 2).join(' · ') : ''].filter(Boolean).join(' · ');
+      const free = g.free > 0;
+      const right = free ? 'ว่าง ' + g.free + '/' + g.units : (g.nextFree ? 'ว่าง ' + g.nextFree.split('-').reverse().join('/') : 'ไม่ว่าง');
       return {
-        type: 'box',
-        layout: 'horizontal',
-        spacing: 'sm',
-        margin: idx === 0 ? 'none' : 'sm',
-        alignItems: 'center',
+        type: 'box', layout: 'horizontal', spacing: 'sm', margin: idx === 0 ? 'none' : 'md', alignItems: 'center',
         contents: [
-          { type: 'text', text: '📦', flex: 1, size: 'sm' },
+          { type: 'text', text: free ? '✅' : '⏳', flex: 1, size: 'sm' },
           {
-            type: 'box',
-            layout: 'vertical',
-            flex: 6,
+            type: 'box', layout: 'vertical', flex: 6,
             contents: [
-              { type: 'text', text: name, size: 'sm', weight: 'bold', color: '#0f172a' },
-              { type: 'text', text: category, size: 'xxs', color: '#64748b' },
+              { type: 'text', text: safeTruncate(g.name, 30, 'อุปกรณ์'), size: 'sm', weight: 'bold', color: '#0f172a', wrap: true },
+              ...(sub ? [{ type: 'text', text: safeTruncate(sub, 48), size: 'xxs', color: '#64748b', wrap: true }] : []),
             ],
           },
-          { type: 'text', text: String(qty) + ' ' + String(unit), size: 'sm', color: qty > 0 ? '#0f172a' : '#ef4444', align: 'end', flex: 4, weight: 'bold' },
+          { type: 'text', text: right, size: 'xs', color: free ? '#059669' : '#b45309', align: 'end', flex: 4, weight: 'bold', wrap: true },
         ],
       };
     });
@@ -302,45 +323,26 @@ async function handleEquipmentStock(replyToken) {
       type: 'bubble',
       size: 'mega',
       header: {
-        type: 'box',
-        layout: 'vertical',
-        backgroundColor: '#0d9488',
-        paddingAll: '20px',
+        type: 'box', layout: 'vertical', backgroundColor: '#0d9488', paddingAll: '20px',
         contents: [
-          { type: 'text', text: '💻 คลังอุปกรณ์คงเหลือ', color: '#ffffff', size: 'lg', weight: 'bold' },
-          { type: 'text', text: 'รายการพัสดุและอุปกรณ์ที่พร้อมให้ยืม', color: '#ccfbf1', size: 'xs', margin: 'xs' },
+          { type: 'text', text: '💻 อุปกรณ์ที่ยืมได้', color: '#ffffff', size: 'lg', weight: 'bold' },
+          { type: 'text', text: 'เฉพาะคลังงานสารสนเทศ · ความว่างของวันนี้ ' + today.split('-').reverse().join('/'), color: '#ccfbf1', size: 'xs', margin: 'xs', wrap: true },
         ],
       },
       body: {
-        type: 'box',
-        layout: 'vertical',
-        spacing: 'md',
-        paddingAll: '20px',
+        type: 'box', layout: 'vertical', spacing: 'md', paddingAll: '20px',
         contents: [
-          { type: 'box', layout: 'vertical', spacing: 'sm', contents: rows },
-          ...(equipment.length > 10
-            ? [
-                {
-                  type: 'text',
-                  text: `* แสดง 10 รายการแรก จากทั้งหมด ${equipment.length} รายการ`,
-                  size: 'xxs',
-                  color: '#64748b',
-                  margin: 'md',
-                  style: 'italic',
-                },
-              ]
-            : []),
+          { type: 'box', layout: 'vertical', contents: rows },
+          ...(groups.length > shown.length ? [{ type: 'text', text: `* แสดง ${shown.length} จาก ${groups.length} กลุ่ม — ดูทั้งหมดได้ที่หน้ายืม (LIFF)`, size: 'xxs', color: '#64748b', margin: 'md', wrap: true }] : []),
+          { type: 'text', text: 'เลือกวันรับ–คืนในหน้ายืม ระบบจะแสดงเฉพาะเครื่องที่ว่างในช่วงนั้น', size: 'xxs', color: '#94a3b8', margin: 'md', wrap: true },
         ],
       },
       footer: {
-        type: 'box',
-        layout: 'vertical',
-        paddingAll: '12px',
-        backgroundColor: '#f1f5f9',
-        contents: [{ type: 'text', text: SYSTEM_NAME, size: 'xxs', color: '#94a3b8', align: 'center' }],
+        type: 'box', layout: 'vertical', spacing: 'sm', paddingAll: '12px', backgroundColor: '#f1f5f9',
+        contents: [liffBorrow, { type: 'text', text: SYSTEM_NAME, size: 'xxs', color: '#94a3b8', align: 'center', margin: 'sm' }],
       },
     };
-    await replyLineFlex(replyToken, '💻 สรุปคลังอุปกรณ์คงเหลือ', flexContent);
+    await replyLineFlex(replyToken, '💻 คลังอุปกรณ์คงเหลือ (ที่ยืมได้)', flexContent);
   } catch (err) {
     console.error('handleEquipmentStock error:', err);
     const flexContent = simpleErrorBubble('#ef4444', '💻 คลังอุปกรณ์', 'เกิดข้อผิดพลาดในการดึงข้อมูลอุปกรณ์: ' + (err.message || err));
@@ -1557,4 +1559,5 @@ module.exports = async function handler(req, res) {
 };
 
 // ปิด bodyParser เพื่อให้ได้ raw body ไปตรวจลายเซ็น LINE
+module.exports.buildEquipmentAvailabilityRows = buildEquipmentAvailabilityRows;
 module.exports.config = { api: { bodyParser: false } };

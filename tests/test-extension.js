@@ -163,5 +163,28 @@ const reserve = (from, to) => { store.borrowing['BR-NEXT'] = { 'รหัส': '
   rep = await send('อนุมัติขยาย BR-X', 'U-staff'); assert.match(texts(rep.messages[0].contents), /ไม่ได้อยู่ในสถานะรออนุมัติ/);
   console.log('  ✅ chat: staff approve/reject buttons work, non-staff and unbound accounts refused');
 
+
+  // ---------- ปุ่ม "ดูรายการอุปกรณ์ที่ยืมได้" ต้องเป็นรายการยืมได้จริงตามระบบ ----------
+  setup();
+  const E = (id, o) => { store.equipment[id] = Object.assign({ 'รหัส': id, 'ชื่ออุปกรณ์': 'โน๊ดบุ๊ค Hp', 'รุ่น': '15s', 'จำนวน': 1, 'สถานะ': 'พร้อมยืม', 'ที่เก็บ': 'งานสารสนเทศ' }, o); };
+  store.equipment = {};
+  E('N1'); E('N2');                                            // โน้ตบุ๊กรุ่นเดียวกัน 2 เครื่อง
+  E('P1', { 'ชื่ออุปกรณ์': 'โปรเจคเตอร์', 'รุ่น': '' });
+  E('FIX', { 'ชื่ออุปกรณ์': 'คอมพิวเตอร์ตั้งโต๊ะ', 'สถานะ': 'ประจำจุด' });      // ประจำจุด = ใช้งานอยู่แล้ว
+  E('OPD', { 'ชื่ออุปกรณ์': 'เครื่องวัดความดัน', 'ที่เก็บ': 'ผู้ป่วยนอก (OPD)' });  // อยู่หน่วยงานอื่น
+  E('BRK', { 'ชื่ออุปกรณ์': 'เครื่องสำรองไฟ', 'สถานะ': 'ชำรุด' });
+  E('LNT', { 'ชื่ออุปกรณ์': 'เครื่องปริ้นเตอร์', 'สถานะ': 'อยู่ระหว่างยืม' });
+  store.borrowing = { 'BR-1': { 'รหัส': 'BR-1', 'สถานะ': 'อยู่ในระหว่างการยืม', 'รหัสอุปกรณ์': 'N1', 'จำนวน': 1, 'วันที่ต้องการรับ': dmy(plus(-1)), 'วันที่ครบกำหนด': dmy(plus(2)) } };
+  rep = await send('เช็คอุปกรณ์', 'U-borrower');
+  const stockText = texts(rep.messages[0].contents);
+  assert.ok(stockText.includes('โน๊ดบุ๊ค Hp') && stockText.includes('ว่าง 1/2'), 'groups same model and counts free today: ' + stockText);
+  assert.ok(stockText.includes('โปรเจคเตอร์') && stockText.includes('ว่าง 1/1'));
+  for (const hidden of ['คอมพิวเตอร์ตั้งโต๊ะ', 'เครื่องวัดความดัน', 'เครื่องสำรองไฟ', 'เครื่องปริ้นเตอร์']) assert.ok(!stockText.includes(hidden), hidden + ' must not be listed');
+  assert.ok(labels(rep.messages[0].contents).includes('ทำรายการยืมอุปกรณ์'));
+  store.equipment = { FIX: { 'รหัส': 'FIX', 'ชื่ออุปกรณ์': 'คอมพิวเตอร์ตั้งโต๊ะ', 'สถานะ': 'ประจำจุด', 'ที่เก็บ': 'งานสารสนเทศ', 'จำนวน': 1 } };
+  rep = await send('เช็คอุปกรณ์', 'U-borrower');
+  assert.match(texts(rep.messages[0].contents), /ไม่มีอุปกรณ์ที่เปิดให้ยืม/);
+  console.log('  ✅ chat "เช็คอุปกรณ์": only borrowable IT stock, grouped with free counts; deployed/other-dept/broken/lent hidden');
+
   console.log('\n🎉 ALL EXTENSION TESTS PASSED');
 })().catch((e) => { console.error(e); process.exit(1); });

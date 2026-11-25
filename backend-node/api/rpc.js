@@ -20,6 +20,7 @@ const PUBLIC_FUNCTIONS = new Set([
   'testMikrotikConnection',
   'setupSystem',
   // LIFF & Public Borrowing Form functions
+  'getBorrowSuggestions', // ข้อความสถานที่/วัตถุประสงค์ที่ใช้บ่อย (ซ้ำหลายครั้ง ไม่มีข้อมูลบุคคล) ให้ปุ่มลัดบนหน้ายืม LIFF
   'getBorrowCatalog', // รายการอุปกรณ์ + ช่วงวันที่ที่ถูกกันไว้ (ไม่มีข้อมูลบุคคล) สำหรับหน้าเลือกอุปกรณ์บน LIFF
   'getBorrowingByCode',
   'saveBorrowing',

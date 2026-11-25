@@ -22,6 +22,8 @@ const call = async (fn, args) => {
   const cat = await call('getBorrowCatalog');
   assert.equal(cat.status, 200); assert.equal(cat.json.success, true);
   assert.ok(!JSON.stringify(cat.json).includes('23000'), 'catalog exposes no asset value');
+  const sug = await call('getBorrowSuggestions');
+  assert.equal(sug.status, 200); assert.equal(sug.json.success, true);
   console.log('  ✅ getEquipment/getEquipmentCategories need login; borrow catalog stays public without asset values');
   console.log('\n🎉 ALL RPC AUTH TESTS PASSED');
 })().catch((e) => { console.error(e); process.exit(1); });

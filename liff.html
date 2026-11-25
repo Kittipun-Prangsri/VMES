@@ -1284,12 +1284,35 @@
     const qfToday = () => localISO(new Date());
 
     // ----- สถานที่: ที่เคยใช้ล่าสุด 3 แห่ง -----
+    // ที่ที่คนอื่นใช้บ่อย (backend รวมจากคำขอเก่า เฉพาะข้อความที่ซ้ำหลายครั้ง ไม่มีข้อมูลบุคคล) — โหลดครั้งเดียวตอนเปิดหน้า
+    let qfPopular = { locations: [], purposes: [] };
+    async function qfLoadPopular() {
+      try {
+        const res = await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fn: 'getBorrowSuggestions', args: [] }) });
+        const d = await res.json();
+        if (d && d.success) { qfPopular = { locations: d.locations || [], purposes: d.purposes || [] }; renderLocChips(); renderPurposeChips(); }
+      } catch (e) { /* ไม่มีคำแนะนำก็ใช้ฟอร์มได้ตามปกติ */ }
+    }
+    const qfKey = (v) => String(v || '').replace(/\s+/g, '').toLowerCase();
+    // สถานที่: ที่เคยใช้ล่าสุด 3 แห่ง + ที่คนอื่นใช้บ่อย — เมื่อเริ่มพิมพ์จะกรองเฉพาะที่ตรงกับตัวอักษรที่พิมพ์ (ทั้งสองแหล่งรวมกัน)
     function renderLocChips() {
       const box = $id('locChips'); if (!box) return;
-      const list = (qfLoad().locations || []).slice(0, 3);
       const cur = $id('locationInput').value.trim();
-      box.innerHTML = list.length ? '<span class="qf-label">ที่เคยใช้ล่าสุด (แตะเพื่อเลือก)</span>'
-        + list.map((l) => '<button type="button" class="qf-chip' + (l === cur ? ' on' : '') + '" data-v="' + qfEsc(l) + '" onclick="qfPickLoc(this.dataset.v)">📍 ' + qfEsc(l) + '</button>').join('') : '';
+      const recents = (qfLoad().locations || []).slice(0, 5);
+      const seen = new Set();
+      const all = [];
+      recents.concat((qfPopular.locations || []).map((x) => x.name)).forEach((l) => { const k = qfKey(l); if (k && !seen.has(k)) { seen.add(k); all.push(l); } });
+      const chip = (l) => '<button type="button" class="qf-chip' + (qfKey(l) === qfKey(cur) ? ' on' : '') + '" data-v="' + qfEsc(l) + '" onclick="qfPickLoc(this.dataset.v)">📍 ' + qfEsc(l) + '</button>';
+      if (cur) {
+        const k = qfKey(cur);
+        const hits = all.filter((l) => qfKey(l).includes(k) && qfKey(l) !== k).slice(0, 6);
+        box.innerHTML = hits.length ? '<span class="qf-label">ตรงกับที่พิมพ์ (แตะเพื่อเลือก)</span>' + hits.map(chip).join('') : '';
+        return;
+      }
+      const rec = recents.slice(0, 3), recKeys = new Set(rec.map(qfKey));
+      const pop = (qfPopular.locations || []).map((x) => x.name).filter((l) => !recKeys.has(qfKey(l))).slice(0, 6);
+      box.innerHTML = (rec.length ? '<span class="qf-label">ที่เคยใช้ล่าสุด</span>' + rec.map(chip).join('') : '')
+        + (pop.length ? '<span class="qf-label">ที่คนอื่นใช้บ่อย</span>' + pop.map(chip).join('') : '');
     }
     function qfPickLoc(v) { const el = $id('locationInput'); el.value = v; renderLocChips(); el.focus(); }
 
@@ -1304,6 +1327,7 @@
       const kinds = qfSelectedKinds();
       const out = [];
       (kinds.length ? kinds : ['other']).forEach((k) => (QF_PURPOSES[k] || QF_PURPOSES.other).forEach((p) => { if (!out.includes(p)) out.push(p); }));
+      (qfPopular.purposes || []).forEach((x) => { if (out.length < 8 && !x.name.includes(',') && !out.some((o) => qfKey(o) === qfKey(x.name))) out.push(x.name); });
       return out;
     }
     function renderPurposeChips() {
@@ -1395,7 +1419,7 @@
       const wrap = (name) => { const f = window[name]; window[name] = function () { const r = f.apply(this, arguments); renderPurposeChips(); renderRepeatBox(); return r; }; };
       wrap('renderChosen'); wrap('renderCart');
       document.addEventListener('DOMContentLoaded', () => {
-        renderLocChips(); renderPurposeChips(); renderDateChips(); renderRepeatBox();
+        renderLocChips(); renderPurposeChips(); renderDateChips(); renderRepeatBox(); qfLoadPopular();
         $id('locationInput').addEventListener('input', renderLocChips);
         $id('purposeInput').addEventListener('input', renderPurposeChips);
         $id('pickupDateInput').addEventListener('change', renderDateChips);

@@ -127,5 +127,20 @@ const reset = () => { store.borrowing = {}; sent.length = 0; };
   assert.equal((await B.saveBorrowing(req([['LOC1', 1]], plus(1), plus(2)), 'x')).success, true, 'IT stock w/o unit is borrowable');
   assert.equal((await B.saveBorrowing(req([['IT1', 1]], plus(1), plus(2)), 'x')).success, true);
   console.log('  ✅ only IT-unit equipment is borrowable (catalog + save)');
+
+  // คำแนะนำสถานที่/วัตถุประสงค์: รวมสะกดต่างช่องว่าง/ตัวพิมพ์, เอาเฉพาะที่ซ้ำ, ไม่หลุดข้อมูลบุคคล
+  reset();
+  const mkB = (i, loc, purpose, o) => { store.borrowing['S' + i] = Object.assign({ 'รหัส': 'S' + i, 'สถานะ': 'คืนเสร็จสิ้น', 'ผู้ขอยืม': 'สมชาย', 'เบอร์ติดต่อ': '0812345678', 'สถานที่ใช้งาน': loc, 'วัตถุประสงค์': purpose, 'วันที่บันทึก': '2026-11-0' + (i % 9 + 1) }, o); };
+  mkB(1, 'ห้องประชุมทับทิมจันทร์', 'ประชุม'); mkB(2, 'ห้องประชุม  ทับทิมจันทร์ ', 'ประชุม'); mkB(3, 'ห้องประชุมทับทิมจันทร์', 'ประชุม');
+  mkB(4, 'ห้องยา', 'อบรม'); mkB(5, 'ห้องยา', 'อบรม');
+  mkB(6, 'บ้านสมชาย 0812345678', 'ส่วนตัว'); mkB(7, 'บ้านสมชาย 0812345678', 'ส่วนตัว'); // มีเบอร์ -> ไม่แนะนำ
+  mkB(8, 'ที่ลับเฉพาะคนเดียว', 'x'); mkB(9, 'ห้องยา', 'อบรม', { 'สถานะ': 'ยกเลิก' });
+  const sg = await B.getBorrowSuggestions();
+  assert.equal(sg.success, true);
+  assert.deepEqual(sg.locations.map((x) => x.name + ':' + x.count), ['ห้องประชุมทับทิมจันทร์:3', 'ห้องยา:2'], 'merged spellings, repeated only, cancelled ignored, phone-like text dropped');
+  assert.deepEqual(sg.purposes.map((x) => x.name), ['ประชุม'], 'purposes need 3+ uses');
+  const sgDump = JSON.stringify(sg);
+  for (const secret of ['สมชาย', '0812345678', 'S1', 'ที่ลับ']) assert.ok(!sgDump.includes(secret), 'suggestions must not contain ' + secret);
+  console.log('  ✅ suggestions: popular locations/purposes only, anonymous');
   console.log('\n🎉 ALL BORROWING TESTS PASSED');
 })().catch((e) => { console.error(e); process.exit(1); });
