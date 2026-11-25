@@ -57,6 +57,7 @@
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <script src="ptouch-label.js"></script>
+  <script src="borrow-availability.js"></script>
   <script src="ocr-capture.js"></script>
   <script src="ocr-scanner-ui.js"></script>
   <script src="equipment-page.js"></script>
@@ -5334,12 +5335,14 @@ input, select, textarea, button {
     }
 
     function addBorrow(eqId, eqName) {
-      const getAvail = (id) => {
+      // ความว่างตามช่วงวันที่ [from, to] (ค่าเริ่มต้น = วันนี้) — ตัวเดียวกับที่ backend ตรวจตอนบันทึก:
+      // นับคำขอหลายรายการแยกตามชิ้น, นับ 'ขอขยายเวลา', ช่วงวันที่ไม่ทับกันยืมซ้ำได้
+      const todayLocal = new Date().toLocaleDateString('en-CA');
+      const getAvail = (id, from, to) => {
         const e = DATA.equipment.find(x => x['รหัส'] === id);
-        if (!e) return 0;
-        const total = parseFloat(e['จำนวน']) || 0;
-        const borrowed = DATA.borrowing.filter(b => b['รหัสอุปกรณ์'] === id && ['รอรับเรื่อง', 'รับเรื่องแล้ว', 'อยู่ในระหว่างการยืม', 'ถึงวันครบกำหนดคืน', 'อยู่ในระหว่างการคืน', 'ขอขยายเวลา'].includes(b['สถานะ'])).reduce((s, b) => s + (parseFloat(b['จำนวน']) || 0), 0);
-        return total - borrowed;
+        if (!e || !BorrowAvail.isBorrowableStatus(e['สถานะ'])) return 0;
+        const f = from || todayLocal;
+        return BorrowAvail.availableFor(e['จำนวน'], BorrowAvail.busyWindows(id, DATA.borrowing, todayLocal), f, to || f);
       };
 
       openModal('📦 คำขอยืมอุปกรณ์', `
@@ -5349,8 +5352,9 @@ input, select, textarea, button {
         <select id="b_eq" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-indigo-500 text-sm font-medium" onchange="window._updateAvail(this.value)">
           ${DATA.equipment.map(e => {
             const avail = getAvail(e['รหัส']);
-            return `<option value="${esc(e['รหัส'])}|${esc(e['ชื่ออุปกรณ์'])}" ${eqId === e['รหัส'] ? 'selected' : ''} ${avail <= 0 ? 'disabled' : ''}>
-              ${esc(e['ชื่ออุปกรณ์'])} ${e['รหัส'] ? '[' + esc(e['รหัส']) + ']' : ''} (คงเหลือ: ${avail} ${esc(e['หน่วยนับ'])})
+            // ไม่ disable ตัวเลือกที่ "วันนี้" ไม่ว่าง — อาจว่างในช่วงวันที่ผู้ใช้จะเลือก (ตรวจจริงอีกครั้งตอนบันทึก)
+            return `<option value="${esc(e['รหัส'])}|${esc(e['ชื่ออุปกรณ์'])}" ${eqId === e['รหัส'] ? 'selected' : ''}>
+              ${esc(e['ชื่ออุปกรณ์'])} ${e['รหัสครุภัณฑ์'] ? '[' + esc(e['รหัสครุภัณฑ์']) + ']' : (e['รหัส'] ? '[' + esc(e['รหัส']) + ']' : '')} (${avail > 0 ? 'ว่างวันนี้: ' + avail : 'ไม่ว่างวันนี้'} ${esc(e['หน่วยนับ'])})
             </option>`;
           }).join('')}
         </select>
@@ -5363,8 +5367,8 @@ input, select, textarea, button {
       <div class="field"><label>เบอร์ติดต่อ</label><input id="b_phone" placeholder="08x-xxx-xxxx" value="${esc(CURRENT_USER.phone || '')}"></div>
       <div class="field full"><label>วัตถุประสงค์ *</label><input id="b_purpose" placeholder="เช่น ใช้ในการประชุมประจำสัปดาห์"></div>
       <div class="field full"><label>📍 สถานที่นำไปใช้งาน *</label><input id="b_location" placeholder="เช่น ห้องประชุม ทับทิมจันทร์, อาคาร 1 ชั้น 3"></div>
-      <div class="field"><label>วันที่ต้องการรับ *</label><input id="b_pickup" type="date"></div>
-      <div class="field"><label>วันที่ครบกำหนดคืน *</label><input id="b_due" type="date"></div>
+      <div class="field"><label>วันที่ต้องการรับ *</label><input id="b_pickup" type="date" onchange="window._updateAvail($('b_eq').value)"></div>
+      <div class="field"><label>วันที่ครบกำหนดคืน *</label><input id="b_due" type="date" onchange="window._updateAvail($('b_eq').value)"></div>
       <div class="field full"><label>หมายเหตุ</label><textarea id="b_note" rows="2"></textarea></div>
       <div class="field full">
         <label>✍️ ลายเซ็นดิจิทัลผู้ยืม</label>
@@ -5387,11 +5391,15 @@ input, select, textarea, button {
         if (!$('b_dept').value.trim()) { toast('กรุณาระบุหน่วยงาน', 'warning'); return; }
         if (!(await eqDeptEnsure('b_dept'))) return;
         const eq = $('b_eq').value.split('|');
-        const avail = getAvail(eq[0]);
+        const avail = getAvail(eq[0], $('b_pickup').value, $('b_due').value);
         const reqQty = +$('b_qty').value;
 
+        if ($('b_due').value && $('b_pickup').value && $('b_due').value < $('b_pickup').value) {
+          toast('วันที่ครบกำหนดคืนต้องไม่ก่อนวันที่ต้องการรับ', 'error');
+          return;
+        }
         if (reqQty > avail) {
-          toast(`ไม่สามารถยืมได้: จำนวนคงเหลือไม่พอ (${avail})`, 'error');
+          toast(`ไม่สามารถยืมได้: จำนวนคงเหลือในช่วงวันที่เลือกไม่พอ (${avail})`, 'error');
           return;
         }
 
@@ -5408,8 +5416,10 @@ input, select, textarea, button {
         callApi('saveBorrowing', data, CURRENT_USER.name).then(r => { showLoading(false); if (r.success) { toast('สร้างคำขอ+แจ้ง LINE สำเร็จ'); closeModal(); refreshData(); } else toast(r.message, 'error'); });
       }, true);
 
-      $('b_pickup').value = new Date().toISOString().split('T')[0];
-      $('b_due').value = new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0];
+      // วันที่ตามเวลาเครื่อง (toISOString เป็น UTC ช่วง 00:00-07:00 ไทยจะได้วันก่อนหน้า)
+      $('b_pickup').value = todayLocal;
+      const dueD = new Date(); dueD.setDate(dueD.getDate() + 7);
+      $('b_due').value = dueD.toLocaleDateString('en-CA');
       setTimeout(() => initSignatureCanvas('b_sig_canvas'), 150);
 
       window._filterEquipSelect = (kw) => {
@@ -5435,7 +5445,7 @@ input, select, textarea, button {
         const parts = val.split('|');
         const id = parts[0];
         const name = parts[1] || '';
-        const avail = getAvail(id);
+        const avail = getAvail(id, $('b_pickup') && $('b_pickup').value, $('b_due') && $('b_due').value);
         const info = $('availInfo');
         const micNotice = $('micNoticeAlert');
 
@@ -5448,10 +5458,14 @@ input, select, textarea, button {
 
         if (avail <= 0) {
           info.style.color = 'var(--danger)';
-          info.textContent = '❌ อุปกรณ์นี้ถูกยืมครบตามจำนวนแล้ว ไม่สามารถยืมเพิ่มได้';
+          const e0 = DATA.equipment.find(x => x['รหัส'] === id);
+          const next = e0 ? BorrowAvail.nextFreeDate(e0['จำนวน'], BorrowAvail.busyWindows(id, DATA.borrowing, todayLocal), todayLocal, 1) : '';
+          info.textContent = e0 && !BorrowAvail.isBorrowableStatus(e0['สถานะ'])
+            ? `❌ อุปกรณ์นี้อยู่ในสถานะ ${e0['สถานะ']} ยืมไม่ได้`
+            : '❌ ไม่ว่างในช่วงวันที่เลือก' + (next ? ' — ว่างอีกครั้งตั้งแต่ ' + next.split('-').reverse().join('/') : '');
         } else {
           info.style.color = 'var(--success)';
-          info.textContent = `✅ สามารถยืมได้คงเหลือ ${avail} รายการ`;
+          info.textContent = `✅ ยืมได้ในช่วงวันที่เลือก คงเหลือ ${avail} รายการ`;
         }
       };
       window._updateAvail($('b_eq').value);

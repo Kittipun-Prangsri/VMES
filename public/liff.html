@@ -15,6 +15,7 @@
   <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   <!-- Tailwind CSS v3 -->
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="/borrow-availability.js"></script>
   <script>
     tailwind.config = {
       darkMode: 'class',
@@ -362,6 +363,37 @@
       color: var(--text-muted);
       margin-bottom: 24px;
     }
+    /* ===== ตัวเลือกอุปกรณ์ (ค้นหา/กรองหมวด/จัดกลุ่ม) ===== */
+    .eq-search { width:100%; padding:12px 14px; border:1.5px solid #c7d2fe; border-radius:12px; background:#eef2ff; font-size:.95rem; outline:none; }
+    .eq-search:focus { background:#fff; border-color:#4f46e5; box-shadow:0 0 0 3px rgba(79,70,229,.15); }
+    .eq-cats { display:flex; gap:6px; overflow-x:auto; padding:8px 0 4px; -webkit-overflow-scrolling:touch; }
+    .eq-chip { flex:0 0 auto; border:1px solid #cbd5e1; background:#fff; color:#334155; border-radius:16px; padding:5px 11px; font-size:.75rem; font-weight:600; white-space:nowrap; }
+    .eq-chip b { color:#059669; margin-left:2px; }
+    .eq-chip.on { background:#4f46e5; border-color:#4f46e5; color:#fff; } .eq-chip.on b { color:#c7f9e0; }
+    .eq-chip.dim { opacity:.55; }
+    .eq-opt { display:flex; align-items:center; gap:6px; font-size:.78rem; color:#475569; margin:4px 0; }
+    .eq-info { font-size:.75rem; color:#64748b; margin-bottom:6px; }
+    .eq-muted { color:#94a3b8; font-weight:400; font-size:.75rem; }
+    .eq-list { max-height:52vh; overflow-y:auto; border:1px solid #e2e8f0; border-radius:12px; background:#fff; -webkit-overflow-scrolling:touch; }
+    .eq-empty { padding:22px 12px; text-align:center; color:#64748b; font-size:.85rem; }
+    .eq-group { border-bottom:1px solid #eef2f7; }
+    .eq-group-head { width:100%; display:flex; justify-content:space-between; align-items:center; gap:8px; text-align:left; padding:11px 12px; background:#f8fafc; border:none; font-size:.85rem; color:#0f172a; }
+    .eq-group-body { background:#fff; border-top:1px solid #eef2f7; }
+    .eq-quick { width:calc(100% - 20px); margin:8px 10px 2px; padding:8px; border:1px dashed #6366f1; background:#eef2ff; color:#4338ca; border-radius:10px; font-size:.78rem; font-weight:700; }
+    .eq-unit { display:flex; align-items:center; gap:8px; padding:10px 12px; border-bottom:1px solid #f1f5f9; }
+    .eq-unit.off { background:#fafafa; } .eq-unit.off .eq-unit-name { color:#94a3b8; } .eq-unit.sel { background:#ecfdf5; }
+    .eq-unit-main { flex:1; min-width:0; }
+    .eq-unit-name { font-size:.85rem; font-weight:600; color:#0f172a; overflow:hidden; text-overflow:ellipsis; }
+    .eq-unit-sub { font-size:.72rem; color:#64748b; margin-top:2px; word-break:break-word; }
+    .eq-badge { flex:0 0 auto; font-size:.7rem; font-weight:700; padding:3px 8px; border-radius:10px; }
+    .eq-badge.ok { background:#dcfce7; color:#15803d; } .eq-badge.off { background:#f1f5f9; color:#64748b; }
+    .eq-pick { flex:0 0 auto; border:none; background:#4f46e5; color:#fff; font-weight:700; font-size:.78rem; border-radius:9px; padding:7px 12px; }
+    .eq-more { width:100%; padding:11px; border:none; background:#f8fafc; color:#4f46e5; font-weight:700; font-size:.8rem; }
+    .eq-link { border:none; background:none; color:#4f46e5; font-weight:700; font-size:.78rem; text-decoration:underline; }
+    .eq-chosen { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; background:#ecfdf5; border:1.5px solid #6ee7b7; border-radius:12px; padding:10px 12px; }
+    .eq-chosen-name { font-weight:700; font-size:.88rem; color:#065f46; }
+    .eq-warn { margin-top:6px; font-size:.75rem; color:#b45309; font-weight:600; }
+    .eq-toast { position:fixed; left:50%; transform:translateX(-50%); bottom:90px; background:#0f172a; color:#fff; padding:9px 16px; border-radius:12px; font-size:.8rem; z-index:9999; max-width:90%; text-align:center; }
   </style>
 </head>
 <body class="bg-slate-900 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-950 via-slate-900 to-slate-950 text-slate-100 min-h-screen p-3 sm:p-6 font-sans flex justify-center items-start">
@@ -409,14 +441,19 @@
       <!-- เลือกอุปกรณ์ -->
       <div class="form-group space-y-1.5">
         <div class="flex justify-between items-center">
-          <label class="form-label text-sm font-bold text-slate-700" for="equipSelect">เลือกอุปกรณ์ <span class="req text-rose-500">*</span></label>
+          <label class="form-label text-sm font-bold text-slate-700" for="eqSearch">เลือกอุปกรณ์ <span class="req text-rose-500">*</span></label>
           <button type="button" class="btn-scan-qr bg-gradient-to-r from-emerald-600 to-teal-600 text-white border-0 rounded-full px-3 py-1 text-xs font-semibold shadow-md hover:shadow-emerald-500/25 active:scale-95 transition-all flex items-center gap-1.5" onclick="scanEquipQr()">
             📷 สแกน QR Code
           </button>
         </div>
-        <select id="equipSelect" class="form-select w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:outline-none transition-all text-sm font-medium" required onchange="handleEquipChange()">
-          <option value="">-- กำลังโหลดรายการอุปกรณ์... --</option>
-        </select>
+        <div id="eqChosen" style="display:none;"></div>
+        <div id="eqPicker">
+          <input type="search" id="eqSearch" class="eq-search" autocomplete="off" placeholder="🔍 พิมพ์ค้นหา ชื่อ / เลขครุภัณฑ์ / ยี่ห้อ / รุ่น / ห้อง" oninput="eqRender(true)">
+          <div id="eqCats" class="eq-cats"></div>
+          <label class="eq-opt"><input type="checkbox" id="eqOnlyFree" checked onchange="eqRender(true)"> แสดงเฉพาะที่ว่างในช่วงวันที่เลือก (เอาออกเพื่อดูว่าติดยืมถึงเมื่อไร)</label>
+          <div id="eqInfo" class="eq-info"></div>
+          <div id="eqList" class="eq-list"><div class="eq-empty">กำลังโหลดรายการอุปกรณ์...</div></div>
+        </div>
         <div id="micNoticeLiff" class="bg-amber-50/90 border border-amber-300/80 rounded-xl p-3 text-xs text-amber-900 font-bold shadow-sm space-y-1" style="display:none;">
           ⚠️ IT ไม่ได้รับผิดชอบเรื่องเครื่องเสียงและไมค์โครโฟนโดยตรง กรุณาติดต่อ ฝ่ายดูแล
         </div>
@@ -525,15 +562,19 @@
 
     document.addEventListener('DOMContentLoaded', async () => {
       // Set Default Pickup Date to today, Due Date to +3 days from today
-      const todayStr = new Date().toISOString().split('T')[0];
+      // วันที่ตามเวลาเครื่อง (toISOString เป็น UTC ช่วง 00:00-07:00 ไทยจะได้วันก่อนหน้า)
+      const nowLocal = new Date();
+      const todayStr = `${nowLocal.getFullYear()}-${String(nowLocal.getMonth() + 1).padStart(2, '0')}-${String(nowLocal.getDate()).padStart(2, '0')}`;
       document.getElementById('pickupDateInput').value = todayStr;
       document.getElementById('pickupDateInput').min = todayStr;
 
-      const today = new Date();
-      today.setDate(today.getDate() + 3);
-      const defaultDate = today.toISOString().split('T')[0];
+      const due = new Date();
+      due.setDate(due.getDate() + 3);
+      const defaultDate = `${due.getFullYear()}-${String(due.getMonth() + 1).padStart(2, '0')}-${String(due.getDate()).padStart(2, '0')}`;
       document.getElementById('dueDateInput').value = defaultDate;
       document.getElementById('dueDateInput').min = todayStr;
+      document.getElementById('pickupDateInput').addEventListener('change', eqOnDatesChanged);
+      document.getElementById('dueDateInput').addEventListener('change', eqOnDatesChanged);
 
       // Init LIFF & Load Data
       initLiff();
@@ -682,77 +723,195 @@
       }
     }
 
+    // ================= เลือกอุปกรณ์: ค้นหา + กรองหมวด + จัดกลุ่มเครื่องชื่อซ้ำ + ความว่างตามวันที่ =================
+    // เดิมเป็น <select> เดียวยาวทั้งคลัง (เลื่อนหาไม่ไหว ชื่อซ้ำแยกไม่ออก) และคำนวณความว่างไม่ดูวันที่/ไม่นับคำขอหลายรายการ
+    // ตอนนี้ backend ส่ง catalog (อุปกรณ์ + ช่วงวันที่ที่ถูกกันไว้ ไม่มีข้อมูลบุคคล) แล้วหน้านี้คำนวณความว่างตามช่วงวันที่ที่ผู้ใช้เลือก
+    // ด้วยตัวคำนวณชุดเดียวกับ backend (/borrow-availability.js) จึงตรงกับที่ระบบจะตรวจตอนบันทึก
+    let catalog = { today: '', items: [], categories: [] };
+    const EQ = { text: '', cat: '', onlyFree: true, open: {}, limit: 30, chosenCollapsed: false };
+
+    const $id = (id) => document.getElementById(id);
+    const escHtml = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const pad2 = (n) => String(n).padStart(2, '0');
+    // วันที่ตามเวลาเครื่อง (toISOString เป็น UTC — ช่วงเที่ยงคืนถึง 07:00 ไทยจะได้วันก่อนหน้า)
+    const localISO = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+    const dmy = (iso) => (iso ? iso.split('-').reverse().join('/') : '-');
+
+    function eqWindow() {
+      const today = catalog.today || localISO(new Date());
+      const from = $id('pickupDateInput').value || today;
+      let to = $id('dueDateInput').value || from;
+      if (to < from) to = from;
+      return { from, to };
+    }
+    function eqAvail(e) {
+      if (!e || !BorrowAvail.isBorrowableStatus(e['สถานะ'])) return 0;
+      const w = eqWindow();
+      return BorrowAvail.availableFor(e['จำนวน'], e.busy, w.from, w.to);
+    }
+    function eqReason(e) {
+      if (!BorrowAvail.isBorrowableStatus(e['สถานะ'])) return 'สถานะ: ' + e['สถานะ'];
+      if (eqAvail(e) > 0) return '';
+      const next = BorrowAvail.nextFreeDate(e['จำนวน'], e.busy, catalog.today, 1);
+      return next ? 'ว่างอีกครั้ง ' + dmy(next) : 'ไม่ว่าง';
+    }
+    const eqText = (e) => [e['ชื่ออุปกรณ์'], e['รหัสครุภัณฑ์'], e['รหัส'], e['ยี่ห้อ'], e['รุ่น'], e['Serial'], e['ที่เก็บ'], e['หมวดหมู่']].map((v) => String(v == null ? '' : v)).join(' ').toLowerCase();
+    function eqFiltered(ignoreCat) {
+      const words = EQ.text.trim().toLowerCase().split(/\s+/).filter(Boolean);
+      return equipmentList.filter((e) => {
+        if (!ignoreCat && EQ.cat && (e['หมวดหมู่'] || '') !== (EQ.cat === '__none' ? '' : EQ.cat)) return false;
+        if (words.length) { const t = eqText(e); if (!words.every((w) => t.includes(w))) return false; }
+        return true;
+      });
+    }
+
     async function loadEquipmentList() {
+      const listEl = $id('eqList');
       try {
-        const [resEquip, resBorrow] = await Promise.all([
-          fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fn: 'getEquipment', args: [] }) }),
-          fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fn: 'getBorrowing', args: [] }) }).catch(() => null)
-        ]);
-
-        equipmentList = await resEquip.json();
-        let borrowingList = [];
-        if (resBorrow && resBorrow.ok) {
-          try { borrowingList = await resBorrow.json(); } catch(e) {}
-        }
-        if (!Array.isArray(borrowingList)) borrowingList = [];
-
-        const ACTIVE_STATUSES = ['รอรับเรื่อง', 'รับเรื่องแล้ว', 'อยู่ในระหว่างการยืม', 'ถึงวันครบกำหนดคืน', 'อยู่ในระหว่างการคืน'];
-
-        const selectEl = document.getElementById('equipSelect');
-        selectEl.innerHTML = '<option value="">-- เลือกอุปกรณ์ที่ต้องการยืม --</option>';
-
-        if (Array.isArray(equipmentList) && equipmentList.length > 0) {
-          equipmentList.forEach(eq => {
-            const eqCode = eq['รหัส'];
-            const totalStock = parseFloat(eq['จำนวน']) || 0;
-            const statusStr = String(eq['สถานะ'] || '').trim();
-            const UNAVAILABLE_STATUSES = ['ชำรุด', 'ยืมอยู่', 'จำหน่าย', 'ส่งซ่อม', 'สูญหาย'];
-
-            // Find active borrowings for this equipment
-            const activeB = borrowingList.filter(b => b['รหัสอุปกรณ์'] === eqCode && ACTIVE_STATUSES.includes(b['สถานะ']));
-            const borrowedQty = activeB.reduce((sum, b) => sum + (parseFloat(b['จำนวน']) || 0), 0);
-            const netAvailable = totalStock - borrowedQty;
-
-            let isAvailable = netAvailable > 0 && !UNAVAILABLE_STATUSES.includes(statusStr);
-            let displayNote = `[ยืมได้: ${netAvailable < 0 ? 0 : netAvailable}/${totalStock} ${eq['หน่วยนับ'] || ''}]`;
-
-            if (netAvailable <= 0 && activeB.length > 0) {
-              const sortedB = [...activeB].sort((a, b) => String(b['วันที่ครบกำหนด'] || '').localeCompare(String(a['วันที่ครบกำหนด'] || '')));
-              const dueDate = sortedB[0]['วันที่ครบกำหนด'] || '-';
-              displayNote = `[ติดยืม/จองค้างไว้ ถึง ${dueDate}]`;
-            } else if (UNAVAILABLE_STATUSES.includes(statusStr)) {
-              displayNote = `[สถานะ: ${statusStr}]`;
-            }
-
-            eq.netAvailable = netAvailable < 0 ? 0 : netAvailable;
-
-            const option = document.createElement('option');
-            option.value = eqCode;
-            option.textContent = `${eq['ชื่ออุปกรณ์']} ${eq['รุ่น'] ? '(' + eq['รุ่น'] + ')' : ''} ${displayNote}`;
-            if (!isAvailable) {
-              option.disabled = true;
-              option.textContent += ' - ไม่พร้อมยืม';
-            }
-            selectEl.appendChild(option);
-          });
-
-          // Check if URL has code/eq parameter to auto select
-          const urlParams = new URLSearchParams(window.location.search);
-          const autoCode = urlParams.get('code') || urlParams.get('eq');
-          if (autoCode) {
-            const matchIndex = Array.from(selectEl.options).findIndex(o => o.value.toUpperCase() === autoCode.toUpperCase());
-            if (matchIndex !== -1) {
-              selectEl.selectedIndex = matchIndex;
-              handleEquipChange();
-            }
-          }
-        } else {
-          selectEl.innerHTML = '<option value="">❌ ไม่พบอุปกรณ์ในระบบ</option>';
+        const res = await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fn: 'getBorrowCatalog', args: [] }) });
+        const data = await res.json();
+        if (!data || !data.success) throw new Error((data && data.message) || 'โหลดไม่สำเร็จ');
+        catalog = data;
+        equipmentList = catalog.items;
+        eqRender(true);
+        // ลิงก์ลัดจากการ์ด/QR: ?code=EQ-xxx เลือกอุปกรณ์ให้เลย
+        const urlParams = new URLSearchParams(window.location.search);
+        const autoCode = urlParams.get('code') || urlParams.get('eq');
+        if (autoCode) {
+          const hit = eqFind(autoCode);
+          if (hit) eqChoose(hit['รหัส']);
         }
       } catch (err) {
         console.error('Error loading equipment:', err);
-        document.getElementById('equipSelect').innerHTML = '<option value="">❌ โหลดข้อมูลไม่สำเร็จ</option>';
+        listEl.innerHTML = '<div class="eq-empty">❌ โหลดรายการอุปกรณ์ไม่สำเร็จ <button type="button" class="eq-link" onclick="loadEquipmentList()">ลองใหม่</button></div>';
       }
+    }
+
+    function eqFind(codeOrTag) {
+      const c = String(codeOrTag || '').trim().toUpperCase();
+      return equipmentList.find((e) => String(e['รหัส']).toUpperCase() === c) || equipmentList.find((e) => String(e['รหัสครุภัณฑ์'] || '').trim().toUpperCase() === c);
+    }
+
+    function eqRender(resetLimit) {
+      if (resetLimit) EQ.limit = 30;
+      // ช่องค้นหา: อัปเดตเฉพาะรายการ ไม่สร้างช่อง input ใหม่ (ไม่เสีย focus / คีย์บอร์ดไม่หุบ)
+      EQ.text = $id('eqSearch').value;
+      EQ.onlyFree = $id('eqOnlyFree').checked;
+
+      // ชิปหมวดหมู่: นับเฉพาะที่ "ว่างในช่วงวันที่เลือก" ตามคำค้นปัจจุบัน
+      const base = eqFiltered(true);
+      const counts = new Map();
+      base.forEach((e) => { const k = e['หมวดหมู่'] || '__none'; const c = counts.get(k) || { free: 0, all: 0 }; c.all++; if (eqAvail(e) > 0) c.free++; counts.set(k, c); });
+      const catMeta = new Map(catalog.categories.map((c) => [c.name, c]));
+      const keys = Array.from(counts.keys()).sort((a, b) => {
+        const ca = catMeta.get(a), cb = catMeta.get(b);
+        if (ca && cb && ca.code && cb.code) return ca.code.localeCompare(cb.code);
+        if (ca && ca.code) return -1; if (cb && cb.code) return 1;
+        return String(a).localeCompare(String(b), 'th');
+      });
+      const totalFree = Array.from(counts.values()).reduce((s, c) => s + c.free, 0);
+      $id('eqCats').innerHTML = '<button type="button" class="eq-chip' + (EQ.cat ? '' : ' on') + '" onclick="eqSetCat(\'\')">ทั้งหมด <b>' + totalFree + '</b></button>'
+        + keys.map((k) => {
+          const c = counts.get(k), name = k === '__none' ? 'ไม่ระบุหมวด' : k;
+          return '<button type="button" class="eq-chip' + (EQ.cat === k ? ' on' : '') + (c.free ? '' : ' dim') + '" data-cat="' + escHtml(k) + '" onclick="eqSetCat(this.dataset.cat)">' + escHtml(name) + ' <b>' + c.free + '</b></button>';
+        }).join('');
+
+      // จัดกลุ่มเครื่องชื่อ/ยี่ห้อ/รุ่นเดียวกัน (เช่น คอมพิวเตอร์ 100 เครื่อง) แล้วแตกดูทีละเครื่องเมื่อกด
+      const items = eqFiltered(false);
+      const groups = new Map();
+      items.forEach((e) => {
+        const key = [e['ชื่ออุปกรณ์'], e['ยี่ห้อ'], e['รุ่น']].map((v) => String(v || '').trim().toLowerCase()).join('|');
+        if (!groups.has(key)) groups.set(key, { key, name: e['ชื่ออุปกรณ์'], brand: e['ยี่ห้อ'], model: e['รุ่น'], units: [] });
+        groups.get(key).units.push(e);
+      });
+      let list = Array.from(groups.values()).map((g) => {
+        g.avail = g.units.filter((u) => eqAvail(u) > 0);
+        g.shown = EQ.onlyFree ? g.avail : g.units;
+        return g;
+      }).filter((g) => g.shown.length);
+      list.sort((a, b) => (b.avail.length > 0) - (a.avail.length > 0) || String(a.name).localeCompare(String(b.name), 'th'));
+
+      const hiddenBusy = EQ.onlyFree ? items.length - items.filter((e) => eqAvail(e) > 0).length : 0;
+      const w = eqWindow();
+      $id('eqInfo').innerHTML = 'ช่วงที่ยืม <b>' + dmy(w.from) + (w.to !== w.from ? ' – ' + dmy(w.to) : '') + '</b> · พบ ' + items.filter((e) => eqAvail(e) > 0).length + ' ชิ้นที่ว่าง'
+        + (hiddenBusy ? ' <span class="eq-muted">(ซ่อนที่ไม่ว่าง ' + hiddenBusy + ' ชิ้น)</span>' : '');
+
+      const unitRow = (e) => {
+        const a = eqAvail(e), reason = eqReason(e);
+        const sub = [e['รหัสครุภัณฑ์'] ? '🏷️ ' + e['รหัสครุภัณฑ์'] : '', e['ที่เก็บ'] ? '📍 ' + e['ที่เก็บ'] : '', e['Serial'] ? 'S/N ' + e['Serial'] : ''].filter(Boolean).map(escHtml).join(' · ');
+        return '<div class="eq-unit' + (a > 0 ? '' : ' off') + (selectedEquip && selectedEquip['รหัส'] === e['รหัส'] ? ' sel' : '') + '">'
+          + '<div class="eq-unit-main"><div class="eq-unit-name">' + escHtml(e['ชื่ออุปกรณ์']) + (e['รุ่น'] ? ' <span class="eq-muted">(' + escHtml(e['รุ่น']) + ')</span>' : '') + '</div>'
+          + '<div class="eq-unit-sub">' + (sub || escHtml(e['รหัส'])) + '</div></div>'
+          + (a > 0
+            ? '<span class="eq-badge ok">ว่าง ' + a + (e['จำนวน'] > 1 ? '/' + e['จำนวน'] : '') + '</span><button type="button" class="eq-pick" data-id="' + escHtml(e['รหัส']) + '" onclick="eqChoose(this.dataset.id)">เลือก</button>'
+            : '<span class="eq-badge off">' + escHtml(reason) + '</span>')
+          + '</div>';
+      };
+
+      const html = list.slice(0, EQ.limit).map((g) => {
+        if (g.units.length === 1) return unitRow(g.units[0]);
+        const open = !!EQ.open[g.key] || (EQ.text.trim() && g.shown.length <= 8);
+        const first = g.avail[0];
+        return '<div class="eq-group"><button type="button" class="eq-group-head" data-key="' + escHtml(g.key) + '" onclick="eqToggle(this.dataset.key)">'
+          + '<span>' + (open ? '▼' : '▶') + ' <b>' + escHtml(g.name) + '</b>' + (g.brand || g.model ? ' <span class="eq-muted">' + escHtml([g.brand, g.model].filter(Boolean).join(' ')) + '</span>' : '') + '</span>'
+          + '<span class="eq-badge ' + (g.avail.length ? 'ok' : 'off') + '">ว่าง ' + g.avail.length + '/' + g.units.length + '</span></button>'
+          + (open ? '<div class="eq-group-body">'
+            + (first ? '<button type="button" class="eq-quick" data-id="' + escHtml(first['รหัส']) + '" onclick="eqChoose(this.dataset.id)">⚡ เอาเครื่องที่ว่างเครื่องแรก' + (first['รหัสครุภัณฑ์'] ? ' (' + escHtml(first['รหัสครุภัณฑ์']) + ')' : '') + '</button>' : '')
+            + g.shown.slice(0, 60).map(unitRow).join('')
+            + (g.shown.length > 60 ? '<div class="eq-muted" style="padding:6px 10px;">แสดง 60 จาก ' + g.shown.length + ' — พิมพ์ค้นหาเพื่อกรอง</div>' : '') + '</div>' : '')
+          + '</div>';
+      }).join('');
+
+      const emptyMsg = '<div class="eq-empty">' + (equipmentList.length
+        ? 'ไม่พบอุปกรณ์ตามที่ค้นหา' + (EQ.onlyFree ? '<br><span class="eq-muted">ลองเอาติ๊ก “แสดงเฉพาะที่ว่าง” ออก เพื่อดูว่าติดยืมถึงเมื่อไร</span>' : '')
+        : '❌ ไม่พบอุปกรณ์ในระบบ') + '</div>';
+      $id('eqList').innerHTML = (html || emptyMsg)
+        + (list.length > EQ.limit ? '<button type="button" class="eq-more" onclick="EQ.limit += 30; eqRender(false)">แสดงเพิ่ม (อีก ' + (list.length - EQ.limit) + ' กลุ่ม)</button>' : '');
+    }
+
+    function eqSetCat(k) { EQ.cat = k; eqRender(true); }
+    function eqToggle(key) { EQ.open[key] = !EQ.open[key]; eqRender(false); }
+
+    // ผู้ใช้เปลี่ยนวันรับ/คืน -> คำนวณความว่างใหม่ทั้งรายการ ตะกร้า และอุปกรณ์ที่เลือกอยู่
+    function eqOnDatesChanged() {
+      const f = $id('pickupDateInput'), t = $id('dueDateInput');
+      if (f.value && t.value && t.value < f.value) t.value = f.value; // วันคืนต้องไม่ก่อนวันรับ
+      t.min = f.value || t.min;
+      if (equipmentList.length) eqRender(false);
+      renderChosen();
+      renderCart();
+    }
+
+    function eqChoose(id) {
+      const e = equipmentList.find((x) => x['รหัส'] === id);
+      if (!e) return;
+      selectedEquip = e;
+      EQ.chosenCollapsed = true;
+      handleEquipChange();
+      renderChosen();
+      eqRender(false);
+      const box = $id('eqChosen');
+      if (box && box.scrollIntoView) box.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+    function eqClearChoice() {
+      selectedEquip = null;
+      EQ.chosenCollapsed = false;
+      handleEquipChange();
+      renderChosen();
+      eqRender(false);
+      $id('eqSearch').focus();
+    }
+    function renderChosen() {
+      const box = $id('eqChosen'), picker = $id('eqPicker');
+      if (!selectedEquip) { box.style.display = 'none'; picker.style.display = 'block'; return; }
+      const e = selectedEquip, a = eqAvail(e), w = eqWindow();
+      box.style.display = 'block';
+      picker.style.display = EQ.chosenCollapsed ? 'none' : 'block';
+      box.innerHTML = '<div class="eq-chosen"><div style="min-width:0;"><div class="eq-chosen-name">✅ ' + escHtml(e['ชื่ออุปกรณ์']) + (e['รุ่น'] ? ' (' + escHtml(e['รุ่น']) + ')' : '') + '</div>'
+        + '<div class="eq-unit-sub">' + [e['รหัสครุภัณฑ์'] ? '🏷️ ' + e['รหัสครุภัณฑ์'] : '', e['ที่เก็บ'] ? '📍 ' + e['ที่เก็บ'] : '', e['Serial'] ? 'S/N ' + e['Serial'] : ''].filter(Boolean).map(escHtml).join(' · ') + '</div>'
+        + (a > 0 ? '' : '<div class="eq-warn">⚠️ ช่วง ' + dmy(w.from) + ' – ' + dmy(w.to) + ' ไม่ว่าง — ' + escHtml(eqReason(e)) + ' (เปลี่ยนวันที่หรือเลือกเครื่องอื่น)</div>') + '</div>'
+        + '<button type="button" class="eq-link" onclick="eqClearChoice()">เปลี่ยน</button></div>';
+      handleEquipChange(true);
     }
 
     async function scanEquipQr() {
@@ -775,22 +934,15 @@
         if (scannedText) {
           const match = scannedText.match(/EQ-[A-Z0-9-]+/i);
           const equipCode = match ? match[0].toUpperCase() : scannedText.trim().toUpperCase();
-
-          const selectEl = document.getElementById('equipSelect');
-          let foundIndex = -1;
-          for (let i = 0; i < selectEl.options.length; i++) {
-            if (selectEl.options[i].value.toUpperCase() === equipCode) {
-              foundIndex = i;
-              break;
-            }
-          }
-
-          if (foundIndex !== -1) {
-            selectEl.selectedIndex = foundIndex;
-            handleEquipChange();
-            alert(`✅ สแกนสำเร็จ: เลือกอุปกรณ์ ${equipCode} เรียบร้อยแล้ว`);
+          const hit = eqFind(equipCode);
+          if (!hit) {
+            alert(`❌ ไม่พบอุปกรณ์รหัส "${equipCode}" ในคลัง`);
+          } else if (eqAvail(hit) <= 0) {
+            eqChoose(hit['รหัส']); // แสดงสถานะ/วันที่ว่างให้เห็นเลย แทนที่จะเงียบ
+            alert(`⚠️ ${hit['ชื่ออุปกรณ์']} ไม่ว่างในช่วงวันที่เลือก — ${eqReason(hit)}`);
           } else {
-            alert(`❌ ไม่พบอุปกรณ์รหัส "${equipCode}" ในคลังหรืออุปกรณ์ไม่อยู่ในสถานะพร้อมยืม`);
+            eqChoose(hit['รหัส']);
+            toast(`✅ สแกนสำเร็จ: เลือก ${hit['ชื่ออุปกรณ์']}`);
           }
         }
       } catch (err) {
@@ -801,16 +953,23 @@
       }
     }
 
+    // แจ้งเตือนสั้นๆ แทน alert ที่ต้องกดปิดทุกครั้ง (เพิ่มหลายชิ้นติดกันจะได้ไม่เมื่อย)
+    function toast(msg) {
+      const t = document.createElement('div');
+      t.className = 'eq-toast';
+      t.textContent = msg;
+      document.body.appendChild(t);
+      setTimeout(() => t.remove(), 2200);
+    }
+
     function isMicEquipment(name) {
       if (!name) return false;
       const s = String(name).toLowerCase();
       return s.includes('ไมค์') || s.includes('ไมโครโฟน') || s.includes('microphone') || s.includes('mic') || s.includes('เครื่องเสียง');
     }
 
-    function handleEquipChange() {
-      const code = document.getElementById('equipSelect').value;
-      selectedEquip = equipmentList.find(e => e['รหัส'] === code);
-      
+    // quiet = มาจาก renderChosen (แค่รีเฟรชตัวเลข ไม่เตือนเรื่องไมค์ซ้ำ ไม่รีเซ็ตจำนวน)
+    function handleEquipChange(quiet) {
       const catEl = document.getElementById('equipCat');
       const availEl = document.getElementById('equipAvailable');
       const qtyInput = document.getElementById('qtyInput');
@@ -820,15 +979,16 @@
         const name = selectedEquip['ชื่ออุปกรณ์'] || '';
         if (isMicEquipment(name)) {
           if (micNotice) micNotice.style.display = 'block';
-          alert('⚠️ IT ไม่ได้รับผิดชอบเรื่องเครื่องเสียงและไมค์โครโฟนโดยตรง กรุณาติดต่อ ฝ่ายดูแล');
+          if (!quiet) alert('⚠️ IT ไม่ได้รับผิดชอบเรื่องเครื่องเสียงและไมค์โครโฟนโดยตรง กรุณาติดต่อ ฝ่ายดูแล');
         } else {
           if (micNotice) micNotice.style.display = 'none';
         }
-        const qty = selectedEquip.netAvailable !== undefined ? selectedEquip.netAvailable : (parseFloat(selectedEquip['จำนวน']) || 0);
+        const qty = eqAvail(selectedEquip);
         catEl.textContent = `หมวดหมู่: ${selectedEquip['หมวดหมู่'] || '-'}`;
-        availEl.textContent = `พร้อมยืมได้จริง: ${qty} ${selectedEquip['หน่วยนับ'] || ''}`;
+        availEl.textContent = `พร้อมยืมในช่วงนี้: ${qty} ${selectedEquip['หน่วยนับ'] || ''}`;
+        availEl.style.color = qty > 0 ? '' : '#b45309';
         qtyInput.max = qty;
-        qtyInput.value = 1;
+        if (!quiet || (parseFloat(qtyInput.value) || 1) > Math.max(qty, 1)) qtyInput.value = Math.min(1, Math.max(qty, 1));
       } else {
         if (micNotice) micNotice.style.display = 'none';
         catEl.textContent = '';
@@ -844,7 +1004,7 @@
       }
 
       const reqQty = parseFloat(document.getElementById('qtyInput').value) || 1;
-      const maxAvailable = selectedEquip.netAvailable !== undefined ? selectedEquip.netAvailable : (parseFloat(selectedEquip['จำนวน']) || 0);
+      const maxAvailable = eqAvail(selectedEquip);
 
       if (reqQty <= 0) {
         alert('กรุณาระบุจำนวนที่ต้องการยืมอย่างน้อย 1 รายการ');
@@ -852,7 +1012,9 @@
       }
 
       if (reqQty > maxAvailable) {
-        alert(`จำนวนที่ขอ (${reqQty}) เกินกว่าจำนวนพร้อมยืมจริงในคลัง (${maxAvailable})`);
+        alert(maxAvailable > 0
+          ? `จำนวนที่ขอ (${reqQty}) เกินกว่าจำนวนพร้อมยืมในช่วงวันที่เลือก (${maxAvailable})`
+          : `อุปกรณ์นี้ไม่ว่างในช่วงวันที่เลือก — ${eqReason(selectedEquip)}`);
         return;
       }
 
@@ -874,7 +1036,8 @@
       }
 
       renderCart();
-      alert(`✅ เพิ่ม "${selectedEquip['ชื่ออุปกรณ์']} (x${reqQty})" ลงในรายการเรียบร้อยแล้ว`);
+      toast(`✅ เพิ่ม "${selectedEquip['ชื่ออุปกรณ์']} (x${reqQty})" ลงในรายการแล้ว`);
+      eqClearChoice(); // เคลียร์ที่เลือก เปิดตัวค้นหาให้เลือกชิ้นถัดไปได้เลย
     }
 
     function removeItemFromCart(index) {
@@ -886,25 +1049,26 @@
       const section = document.getElementById('cartSection');
       const listEl = document.getElementById('cartList');
       const badgeEl = document.getElementById('cartBadge');
-      const equipSelect = document.getElementById('equipSelect');
 
       if (selectedCartItems.length === 0) {
         section.style.display = 'none';
         listEl.innerHTML = '';
         badgeEl.textContent = '0 รายการ';
-        equipSelect.setAttribute('required', 'required');
       } else {
         section.style.display = 'block';
-        equipSelect.removeAttribute('required');
         badgeEl.textContent = `${selectedCartItems.length} อุปกรณ์ (${selectedCartItems.reduce((s, i) => s + i['จำนวน'], 0)} ชิ้น)`;
         
-        listEl.innerHTML = selectedCartItems.map((item, idx) => `
-          <div class="cart-item">
-            <span class="cart-item-name">📦 ${item['ชื่ออุปกรณ์']}</span>
+        listEl.innerHTML = selectedCartItems.map((item, idx) => {
+          const eqItem = equipmentList.find((e) => e['รหัส'] === item['รหัสอุปกรณ์']);
+          const short = eqItem && eqAvail(eqItem) < item['จำนวน'];
+          return `
+          <div class="cart-item"${short ? ' style="border-color:#f59e0b;background:#fffbeb;"' : ''}>
+            <span class="cart-item-name">📦 ${escHtml(item['ชื่ออุปกรณ์'])}${short ? ' <span style="color:#b45309;font-size:.7rem;font-weight:700;">⚠️ ไม่ว่างในช่วงวันที่เลือก</span>' : ''}</span>
             <span class="cart-item-qty">x${item['จำนวน']} ${item['หน่วยนับ']}</span>
             <button type="button" class="btn-remove-item" onclick="removeItemFromCart(${idx})" title="ลบออก">✕</button>
           </div>
-        `).join('');
+        `;
+        }).join('');
       }
     }
 
@@ -916,6 +1080,21 @@
       const rawPickupDate = document.getElementById('pickupDateInput').value;
       const pickupDateParts = rawPickupDate.split('-');
       const formattedPickupDate = pickupDateParts.length === 3 ? `${pickupDateParts[2]}/${pickupDateParts[1]}/${pickupDateParts[0]}` : rawPickupDate;
+
+      // ตรวจความว่างตามช่วงวันที่ก่อนส่ง (ตัวเดียวกับที่ระบบหลังบ้านจะตรวจ — เจอปัญหาตรงนี้ได้เร็วกว่ารอ error ตอนบันทึก)
+      {
+        const w = eqWindow();
+        if (w.to < w.from) { alert('วันที่ครบกำหนดคืนต้องไม่ก่อนวันที่ต้องการรับ'); return; }
+        const toCheck = selectedCartItems.length > 0
+          ? selectedCartItems.map((i) => ({ eq: equipmentList.find((e) => e['รหัส'] === i['รหัสอุปกรณ์']), qty: i['จำนวน'], name: i['ชื่ออุปกรณ์'] }))
+          : (selectedEquip ? [{ eq: selectedEquip, qty: parseFloat(document.getElementById('qtyInput').value) || 1, name: selectedEquip['ชื่ออุปกรณ์'] }] : []);
+        for (const c of toCheck) {
+          if (c.eq && c.qty > eqAvail(c.eq)) {
+            alert(`"${c.name}" ไม่ว่างพอในช่วง ${dmy(w.from)} – ${dmy(w.to)} (เหลือ ${eqAvail(c.eq)}) — ${eqReason(c.eq) || 'ลดจำนวนหรือเปลี่ยนวันที่'}`);
+            return;
+          }
+        }
+      }
 
       let payload = {};
       if (selectedCartItems.length > 0) {
@@ -947,12 +1126,6 @@
         }
 
         const reqQty = parseFloat(document.getElementById('qtyInput').value) || 1;
-        const maxAvailable = selectedEquip.netAvailable !== undefined ? selectedEquip.netAvailable : (parseFloat(selectedEquip['จำนวน']) || 0);
-
-        if (reqQty > maxAvailable) {
-          alert(`จำนวนที่ขอ (${reqQty}) เกินกว่าจำนวนคงเหลือในคลัง (${maxAvailable})`);
-          return;
-        }
 
         const rawDate = document.getElementById('dueDateInput').value;
         const dateParts = rawDate.split('-');
