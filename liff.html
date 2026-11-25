@@ -367,6 +367,12 @@
     .eq-search { width:100%; padding:12px 14px; border:1.5px solid #c7d2fe; border-radius:12px; background:#eef2ff; font-size:.95rem; outline:none; }
     .eq-search:focus { background:#fff; border-color:#4f46e5; box-shadow:0 0 0 3px rgba(79,70,229,.15); }
     .eq-cats { display:flex; gap:6px; overflow-x:auto; padding:8px 0 4px; -webkit-overflow-scrolling:touch; }
+    .qf-row { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
+    .qf-chip { border:1px solid #c7d2fe; background:#eef2ff; color:#3730a3; border-radius:16px; padding:6px 12px; font-size:.78rem; font-weight:700; }
+    .qf-chip.on { background:#4f46e5; border-color:#4f46e5; color:#fff; }
+    .qf-label { font-size:.68rem; color:#64748b; font-weight:700; width:100%; margin-top:2px; }
+    .qf-repeat { width:100%; text-align:left; border:2px dashed #34d399; background:#ecfdf5; color:#047857; border-radius:12px; padding:10px 12px; font-size:.82rem; font-weight:800; line-height:1.35; }
+    .qf-repeat small { display:block; font-weight:600; color:#065f46; }
     .eq-kinds { display:flex; gap:8px; margin:8px 0 4px; }
     .eq-kind { flex:1; border:2px solid #c7d2fe; background:#eef2ff; color:#3730a3; border-radius:12px; padding:10px 6px; font-size:.82rem; font-weight:800; line-height:1.25; }
     .eq-kind small { display:block; font-weight:600; color:#059669; }
@@ -443,6 +449,9 @@
 
     <form id="borrowForm" class="form-body p-5 sm:p-6 space-y-4" onsubmit="handleSubmit(event)">
 
+      <!-- ยืมซ้ำครั้งล่าสุด (จำไว้ในเครื่องผู้ใช้เอง) -->
+      <div id="repeatBox" style="display:none;"></div>
+
       <!-- เลือกอุปกรณ์ -->
       <div class="form-group space-y-1.5">
         <div class="flex justify-between items-center">
@@ -509,6 +518,7 @@
       <div class="form-group space-y-1.5">
         <label class="form-label text-sm font-bold text-slate-700" for="locationInput">📍 สถานที่นำไปใช้งาน <span class="req text-rose-500">*</span></label>
         <input type="text" id="locationInput" class="form-input w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:outline-none transition-all text-sm font-medium" placeholder="เช่น ห้องประชุมทับทิมจันทร์, อาคาร 1 ชั้น 3" required>
+        <div id="locChips" class="qf-row"></div>
       </div>
 
       <!-- วันที่และเวลาที่ต้องการรับ -->
@@ -516,10 +526,12 @@
         <div class="form-group space-y-1.5">
           <label class="form-label text-sm font-bold text-slate-700" for="pickupDateInput">วันที่ต้องการรับ <span class="req text-rose-500">*</span></label>
           <input type="date" id="pickupDateInput" class="form-input w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:outline-none transition-all text-sm font-medium" required>
+          <div id="pickupChips" class="qf-row"></div>
         </div>
         <div class="form-group space-y-1.5">
           <label class="form-label text-sm font-bold text-slate-700" for="pickupTimeInput">เวลาที่ต้องการรับ</label>
           <input type="time" id="pickupTimeInput" class="form-input w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:outline-none transition-all text-sm font-medium">
+          <div id="timeChips" class="qf-row"></div>
         </div>
       </div>
 
@@ -527,11 +539,13 @@
       <div class="form-group space-y-1.5">
         <label class="form-label text-sm font-bold text-slate-700" for="dueDateInput">วันที่ครบกำหนดคืน <span class="req text-rose-500">*</span></label>
         <input type="date" id="dueDateInput" class="form-input w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:outline-none transition-all text-sm font-medium" required>
+        <div id="dueChips" class="qf-row"></div>
       </div>
 
       <!-- วัตถุประสงค์ -->
       <div class="form-group space-y-1.5">
         <label class="form-label text-sm font-bold text-slate-700" for="purposeInput">วัตถุประสงค์การยืม <span class="req text-rose-500">*</span></label>
+        <div id="purposeChips" class="qf-row" style="margin:0 0 6px;"></div>
         <textarea id="purposeInput" class="form-textarea w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:outline-none transition-all text-sm font-medium" rows="3" placeholder="ระบุรายละเอียดงานหรือสถานที่นำไปใช้งาน..." required></textarea>
       </div>
 
@@ -1212,6 +1226,7 @@
         if (result && result.success !== false) {
           document.getElementById('borrowForm').style.display = 'none';
           document.getElementById('successCard').style.display = 'block';
+          saveLastBorrow(payload);
 
           // Close LIFF automatically after 2.5 seconds
           setTimeout(() => {
@@ -1239,6 +1254,136 @@
         window.close();
       }
     }
+
+    // ================= ลดการพิมพ์: ปุ่มลัดสถานที่/วัตถุประสงค์/วัน-เวลา + ยืมซ้ำครั้งล่าสุด =================
+    // จำเฉพาะในเครื่องผู้ใช้ (localStorage) ไม่ส่งข้อมูลส่วนตัวขึ้นเซิร์ฟเวอร์ — อ่าน/เขียนไม่ได้ก็ใช้ฟอร์มได้ตามปกติ
+    const QF_KEY = 'vmes_borrow_last_v1';
+    const qfLoad = () => { try { return JSON.parse(localStorage.getItem(QF_KEY) || 'null') || {}; } catch (e) { return {}; } };
+    const qfSave = (o) => { try { localStorage.setItem(QF_KEY, JSON.stringify(o)); } catch (e) { /* โหมดส่วนตัว/ปิดการเก็บข้อมูล — ข้าม */ } };
+    const QF_PURPOSES = {
+      pj: ['ประชุม', 'อบรม/สัมมนา', 'นำเสนองาน', 'กิจกรรมหน่วยงาน'],
+      nb: ['ทำงานนอกสถานที่', 'ประชุม/อบรม', 'ใช้แทนเครื่องที่ส่งซ่อม', 'งานเอกสาร/รายงาน'],
+      other: ['ใช้งานประจำวัน', 'ประชุม/อบรม', 'ลงพื้นที่/นอกสถานที่'],
+    };
+    const QF_TIMES = ['08:30', '13:00', '15:30'];
+    const qfEsc = (s) => escHtml(s);
+    function qfFire(el) { el.dispatchEvent(new Event('change', { bubbles: true })); el.dispatchEvent(new Event('input', { bubbles: true })); }
+    const qfAdd = (iso, n) => BorrowAvail.addDays(iso, n);
+    const qfToday = () => localISO(new Date());
+
+    // ----- สถานที่: ที่เคยใช้ล่าสุด 3 แห่ง -----
+    function renderLocChips() {
+      const box = $id('locChips'); if (!box) return;
+      const list = (qfLoad().locations || []).slice(0, 3);
+      const cur = $id('locationInput').value.trim();
+      box.innerHTML = list.length ? '<span class="qf-label">ที่เคยใช้ล่าสุด (แตะเพื่อเลือก)</span>'
+        + list.map((l) => '<button type="button" class="qf-chip' + (l === cur ? ' on' : '') + '" data-v="' + qfEsc(l) + '" onclick="qfPickLoc(this.dataset.v)">📍 ' + qfEsc(l) + '</button>').join('') : '';
+    }
+    function qfPickLoc(v) { const el = $id('locationInput'); el.value = v; renderLocChips(); el.focus(); }
+
+    // ----- วัตถุประสงค์: ปุ่มตามชนิดอุปกรณ์ที่เลือก แตะแล้วต่อท้าย/เอาออก -----
+    function qfSelectedKinds() {
+      const eqs = selectedCartItems.length
+        ? selectedCartItems.map((i) => equipmentList.find((e) => e['รหัส'] === i['รหัสอุปกรณ์'])).filter(Boolean)
+        : (selectedEquip ? [selectedEquip] : []);
+      return Array.from(new Set(eqs.map(eqKindOf)));
+    }
+    function qfPurposeList() {
+      const kinds = qfSelectedKinds();
+      const out = [];
+      (kinds.length ? kinds : ['other']).forEach((k) => (QF_PURPOSES[k] || QF_PURPOSES.other).forEach((p) => { if (!out.includes(p)) out.push(p); }));
+      return out;
+    }
+    function renderPurposeChips() {
+      const box = $id('purposeChips'); if (!box) return;
+      const cur = $id('purposeInput').value;
+      box.innerHTML = qfPurposeList().map((p) => '<button type="button" class="qf-chip' + (cur.includes(p) ? ' on' : '') + '" data-v="' + qfEsc(p) + '" onclick="qfTogglePurpose(this.dataset.v)">' + qfEsc(p) + '</button>').join('');
+    }
+    function qfTogglePurpose(p) {
+      const el = $id('purposeInput');
+      const parts = el.value.split(/\s*,\s*/).map((x) => x.trim()).filter(Boolean);
+      const i = parts.indexOf(p);
+      if (i >= 0) parts.splice(i, 1); else parts.push(p);
+      el.value = parts.join(', ');
+      renderPurposeChips();
+    }
+
+    // ----- วัน/เวลา -----
+    function renderDateChips() {
+      const t = qfToday(), pu = $id('pickupDateInput').value || t;
+      const dow = new Date(t + 'T00:00:00Z').getUTCDay(); // 0=อาทิตย์
+      const nextMon = qfAdd(t, ((8 - dow) % 7) || 7);
+      const chip = (label, on, fn) => '<button type="button" class="qf-chip' + (on ? ' on' : '') + '" onclick="' + fn + '">' + label + '</button>';
+      $id('pickupChips').innerHTML = [['วันนี้', t], ['พรุ่งนี้', qfAdd(t, 1)], ['จันทร์หน้า', nextMon]].map((x) => chip(x[0], pu === x[1], "qfSetDate('pickup','" + x[1] + "')")).join('');
+      const du = $id('dueDateInput').value;
+      $id('dueChips').innerHTML = '<span class="qf-label">คืนภายใน (นับจากวันรับ)</span>'
+        + [['วันเดียวกัน', 0], ['+1 วัน', 1], ['+3 วัน', 3], ['+7 วัน', 7]].map((x) => chip(x[0], du === qfAdd(pu, x[1]), 'qfSetDue(' + x[1] + ')')).join('');
+      const tm = $id('pickupTimeInput').value;
+      $id('timeChips').innerHTML = QF_TIMES.map((x) => chip(x, tm === x, "qfSetTime('" + x + "')")).join('');
+    }
+    function qfSetDate(which, iso) { const el = $id('pickupDateInput'); el.value = iso; qfFire(el); }
+    function qfSetDue(n) { const pu = $id('pickupDateInput').value || qfToday(); const el = $id('dueDateInput'); el.value = qfAdd(pu, n); qfFire(el); }
+    function qfSetTime(v) { const el = $id('pickupTimeInput'); el.value = el.value === v ? '' : v; renderDateChips(); }
+
+    // ----- ยืมซ้ำครั้งล่าสุด -----
+    function saveLastBorrow(payload) {
+      try {
+        const old = qfLoad();
+        const loc = (payload['สถานที่ใช้งาน'] || '').trim();
+        const locs = [loc].concat(old.locations || []).filter(Boolean);
+        const seen = new Set();
+        const uniq = locs.filter((l) => { const k = l.toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, 5);
+        qfSave({
+          locations: uniq, location: loc, purpose: payload['วัตถุประสงค์'] || '',
+          time: payload['เวลาที่ต้องการรับ'] || '',
+          items: (payload['รายการอุปกรณ์'] || []).map((i) => ({ id: i['รหัสอุปกรณ์'], name: i['ชื่ออุปกรณ์'], qty: i['จำนวน'], unit: i['หน่วยนับ'] || 'เครื่อง' })),
+        });
+      } catch (e) { /* ไม่กระทบการส่งคำขอ */ }
+    }
+    function renderRepeatBox() {
+      const box = $id('repeatBox'); if (!box) return;
+      const last = qfLoad();
+      if (!last.items || !last.items.length || selectedCartItems.length) { box.style.display = 'none'; return; }
+      box.style.display = 'block';
+      box.innerHTML = '<button type="button" class="qf-repeat" onclick="qfRepeatLast()">🔁 ยืมซ้ำครั้งล่าสุด<small>'
+        + qfEsc(last.items.map((i) => i.name + ' x' + i.qty).join(', ')) + (last.location ? ' · 📍 ' + qfEsc(last.location) : '') + '</small></button>';
+    }
+    function qfRepeatLast() {
+      const last = qfLoad();
+      if (!last.items || !last.items.length) return;
+      if (!equipmentList.length) { alert('กำลังโหลดรายการอุปกรณ์ กรุณารอสักครู่แล้วลองอีกครั้ง'); return; }
+      const missing = [];
+      const w = eqWindow();
+      last.items.forEach((i) => {
+        const e = equipmentList.find((x) => x['รหัส'] === i.id);
+        if (!e) { missing.push(i.name + ' (ไม่มีในรายการยืมแล้ว)'); return; }
+        const av = eqAvail(e);
+        if (av < 1) { missing.push(i.name + ' (' + (eqReason(e) || 'ไม่ว่าง') + ')'); return; }
+        const q = Math.min(i.qty, av);
+        if (q < i.qty) missing.push(i.name + ' (ว่างเพียง ' + av + ' จาก ' + i.qty + ')');
+        const ex = selectedCartItems.find((c) => c['รหัสอุปกรณ์'] === e['รหัส']);
+        if (ex) ex['จำนวน'] = q; else selectedCartItems.push({ 'รหัสอุปกรณ์': e['รหัส'], 'ชื่ออุปกรณ์': e['ชื่ออุปกรณ์'], 'จำนวน': q, 'หน่วยนับ': e['หน่วยนับ'] || 'เครื่อง' });
+      });
+      if (last.location && !$id('locationInput').value.trim()) $id('locationInput').value = last.location;
+      if (last.purpose && !$id('purposeInput').value.trim()) $id('purposeInput').value = last.purpose;
+      if (last.time && !$id('pickupTimeInput').value) $id('pickupTimeInput').value = last.time;
+      renderCart(); renderRepeatBox(); renderLocChips(); renderPurposeChips(); renderDateChips();
+      if (missing.length) alert('เติมข้อมูลครั้งก่อนให้แล้ว แต่บางรายการยืมซ้ำช่วง ' + dmy(w.from) + ' – ' + dmy(w.to) + ' ไม่ได้:\n• ' + missing.join('\n• ') + '\n\nเลือกอุปกรณ์ทดแทนหรือเปลี่ยนวันได้เลย');
+    }
+
+    // ให้ปุ่มวัตถุประสงค์/ยืมซ้ำอัปเดตตามอุปกรณ์ที่เลือก และปุ่มวันตามวันที่ที่เปลี่ยน
+    (function qfWire() {
+      const wrap = (name) => { const f = window[name]; window[name] = function () { const r = f.apply(this, arguments); renderPurposeChips(); renderRepeatBox(); return r; }; };
+      wrap('renderChosen'); wrap('renderCart');
+      document.addEventListener('DOMContentLoaded', () => {
+        renderLocChips(); renderPurposeChips(); renderDateChips(); renderRepeatBox();
+        $id('locationInput').addEventListener('input', renderLocChips);
+        $id('purposeInput').addEventListener('input', renderPurposeChips);
+        $id('pickupDateInput').addEventListener('change', renderDateChips);
+        $id('dueDateInput').addEventListener('change', renderDateChips);
+        $id('pickupTimeInput').addEventListener('change', renderDateChips);
+      });
+    })();
   </script>
 </body>
 </html>
