@@ -8016,7 +8016,7 @@ input, select, textarea, button {
         return `
     <div class="toolbar">
       <div class="search"><input id="dSearch" placeholder="ค้นหาหน่วยงาน/หัวหน้า..." oninput="window._df(this.value)" value="${esc(filter)}"></div>
-      ${isAdmin() ? `<button class="btn btn-success" onclick="addDept()">➕ เพิ่มหน่วยงาน</button>` : ''}
+      ${isAdmin() ? `<button class="btn btn-success" onclick="addDept()">➕ เพิ่มหน่วยงาน</button> <button class="btn btn-secondary" onclick="syncDepts()" title="เติมรายชื่อหน่วยงานจริงของโรงพยาบาลที่ยังไม่มีในตาราง (ไม่ลบของเดิม)">🔄 ซิงก์รายชื่อจริง</button>` : ''}
       ${(isAdmin() || isManager()) ? `<button class="btn btn-info" onclick="exportSheet('หน่วยงาน')">📥 Export</button>` : ''}
     </div>
     <div class="row-3">
@@ -8066,6 +8066,26 @@ input, select, textarea, button {
       <div class="field"><label>จำนวนเจ้าหน้าที่ (คน)</label><input id="d_staff" type="number" value="${esc(d['จำนวนเจ้าหน้าที่'] || 0)}"></div>
     </div>
       `;
+    }
+
+    // เติมหน่วยงานจริงที่ขาด (ดูตัวอย่างก่อน แล้วถามยืนยัน) — ชื่อทดสอบ/ชื่อเก่าไม่ถูกลบ ผู้ดูแลลบเองทีละรายการ
+    async function syncDepts() {
+      if (!requireAdmin()) return;
+      showLoading(true);
+      try {
+        const pv = await callApi('syncDepartmentsFromMaster', ADMIN_PASS, true);
+        showLoading(false);
+        if (!pv.success) { toast(pv.message, 'error'); return; }
+        const legacy = pv.legacyInDb && pv.legacyInDb.length ? '\n\nชื่อทดสอบ/ชื่อเก่าที่ยังค้างในตาราง (ไม่ลบให้ — ลบเองได้ทีละรายการ):\n• ' + pv.legacyInDb.join('\n• ') : '';
+        if (!pv.missing.length) { toast('หน่วยงานจริงครบทุกชื่อแล้ว' + (pv.legacyInDb.length ? ' (ยังมีชื่อเก่าค้าง ' + pv.legacyInDb.length + ' ชื่อ)' : ''), 'success'); if (pv.legacyInDb.length) alert('หน่วยงานจริงครบแล้ว' + legacy); return; }
+        if (!confirm('จะเพิ่มหน่วยงานจริงที่ยังไม่มีในตาราง ' + pv.missing.length + ' ชื่อ:\n• ' + pv.missing.slice(0, 12).join('\n• ') + (pv.missing.length > 12 ? '\n… และอีก ' + (pv.missing.length - 12) + ' ชื่อ' : '') + legacy + '\n\nยืนยันเพิ่ม?')) return;
+        showLoading(true);
+        const r = await callApi('syncDepartmentsFromMaster', ADMIN_PASS);
+        showLoading(false);
+        if (!r.success) { toast(r.message, 'error'); return; }
+        toast('เพิ่มหน่วยงานจริง ' + r.added + ' ชื่อแล้ว', 'success');
+        refreshData();
+      } catch (err) { showLoading(false); toast('ผิดพลาด: ' + err.message, 'error'); }
     }
 
     function addDept() {

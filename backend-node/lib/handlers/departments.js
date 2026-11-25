@@ -41,6 +41,27 @@ async function saveDepartment(data, adminCode) {
   }
 }
 
+// เติมหน่วยงานจริงที่ยังไม่มีในตารางเข้าไป (ไม่ลบ/ไม่แก้อะไรที่มีอยู่) — ชื่อทดสอบ/ชื่อเก่าที่ค้างในตารางแค่รายงานให้ผู้ดูแลลบเองทีละรายการ
+// dryRun: นับอย่างเดียว ไม่แก้ข้อมูล
+async function syncDepartmentsFromMaster(adminCode, dryRun) {
+  if (!verifyAdmin(adminCode)) return { success: false, message: 'ต้องเป็น Admin' };
+  try {
+    const all = await listDocs(SHEETS.DEPARTMENTS);
+    const have = new Set(all.map((d) => DeptMaster.key(d['ชื่อหน่วยงาน'])));
+    const missing = DeptMaster.REAL.filter((n) => !have.has(DeptMaster.key(n)));
+    const legacyKeys = new Set(DeptMaster.LEGACY.map(DeptMaster.key));
+    const legacyInDb = all.filter((d) => legacyKeys.has(DeptMaster.key(d['ชื่อหน่วยงาน']))).map((d) => normName(d['ชื่อหน่วยงาน']));
+    if (dryRun) return { success: true, missing, legacyInDb, total: all.length };
+    for (let i = 0; i < missing.length; i += 10) {
+      await Promise.all(missing.slice(i, i + 10).map((n) => { const id = newId('DP'); return setDoc(SHEETS.DEPARTMENTS, id, { 'รหัส': id, 'ชื่อหน่วยงาน': n }); }));
+    }
+    if (missing.length) await logAudit('ซิงก์รายชื่อหน่วยงานจริง', 'admin', 'เพิ่ม ' + missing.length + ' หน่วยงาน');
+    return { success: true, added: missing.length, legacyInDb };
+  } catch (err) {
+    return { success: false, message: err.message };
+  }
+}
+
 // รายชื่อหน่วยงานสำหรับช่องเลือกบน LIFF (สาธารณะ — คืนเฉพาะชื่อ ไม่ส่งหัวหน้า/เบอร์โทร/จำนวนคน)
 async function getDepartmentNames() {
   try {
@@ -64,4 +85,4 @@ async function deleteDepartment(code, adminCode) {
   }
 }
 
-module.exports = { getDepartments, getDepartmentNames, saveDepartment, deleteDepartment };
+module.exports = { getDepartments, syncDepartmentsFromMaster, getDepartmentNames, saveDepartment, deleteDepartment };
