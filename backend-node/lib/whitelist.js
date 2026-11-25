@@ -39,7 +39,7 @@ const { saveEquipmentCategory, deleteEquipmentCategory, assignEquipmentCategorie
 const { saveDriver, deleteDriver } = require('./handlers/drivers');
 const { saveBooking, approveBooking, updateBookingStatus, deleteBooking, getLiffBookingInfo, saveLiffBooking, cancelLiffBooking } = require('./handlers/booking');
 const { saveInspection, deleteInspection } = require('./handlers/inspection');
-const { saveDepartment, deleteDepartment } = require('./handlers/departments');
+const { saveDepartment, deleteDepartment, getDepartmentNames } = require('./handlers/departments');
 const { saveEquipmentHandover, deleteEquipmentHandover } = require('./handlers/equipmentHandover');
 const { importUsers, importEquipment, importVehicles, importDrivers, fetchGoogleSheetData } = require('./handlers/imports');
 const { exportToCSV, getDashboard, checkOverdue } = require('./handlers/dashboard');
@@ -144,6 +144,7 @@ const API_WHITELIST = {
 
   // Departments
   saveDepartment,
+  getDepartmentNames,
   deleteDepartment,
 
   // Equipment Handover (ใบส่งมอบ/รับคืนครุภัณฑ์)

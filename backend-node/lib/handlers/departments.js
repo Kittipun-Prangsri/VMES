@@ -40,6 +40,23 @@ async function saveDepartment(data, adminCode) {
   }
 }
 
+// รายชื่อหน่วยงานสำหรับช่องเลือกบน LIFF (สาธารณะ — คืนเฉพาะชื่อ ไม่ส่งหัวหน้า/เบอร์โทร/จำนวนคน)
+async function getDepartmentNames() {
+  try {
+    const seen = new Set();
+    const names = [];
+    (await listDocs(SHEETS.DEPARTMENTS)).forEach((d) => {
+      const n = normName(d['ชื่อหน่วยงาน']);
+      const k = n.toLowerCase();
+      if (n && !seen.has(k)) { seen.add(k); names.push(n); }
+    });
+    names.sort((a, b) => a.localeCompare(b, 'th'));
+    return { success: true, names };
+  } catch (err) {
+    return { success: false, message: err.message };
+  }
+}
+
 async function deleteDepartment(code, adminCode) {
   if (!verifyAdmin(adminCode)) return { success: false, message: 'ต้องเป็น Admin' };
   try {
@@ -52,4 +69,4 @@ async function deleteDepartment(code, adminCode) {
   }
 }
 
-module.exports = { getDepartments, saveDepartment, deleteDepartment };
+module.exports = { getDepartments, getDepartmentNames, saveDepartment, deleteDepartment };

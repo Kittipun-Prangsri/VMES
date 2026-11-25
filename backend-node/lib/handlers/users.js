@@ -80,11 +80,19 @@ async function registerLiffUser(lineUserId, displayName, name, phone, dept) {
     const users = await getUsers();
     const existing = findUserByLineId(users, cleanLineId);
 
+    // หน่วยงานที่พิมพ์ตรงกับรายชื่อหลัก (ต่างแค่ช่องว่าง/ตัวพิมพ์) ให้เก็บตามชื่อในรายชื่อหลัก ข้อมูลจะไม่แตกเป็นหลายสะกด
+    let cleanDept = String(dept || '').replace(/\s+/g, ' ').trim();
+    try {
+      const key = (v) => String(v || '').replace(/\s+/g, '').toLowerCase();
+      const hit = (await listDocs(SHEETS.DEPARTMENTS)).find((d) => key(d['ชื่อหน่วยงาน']) === key(cleanDept));
+      if (hit && cleanDept) cleanDept = String(hit['ชื่อหน่วยงาน']).replace(/\s+/g, ' ').trim();
+    } catch (e) { /* ไม่มีรายชื่อหลักก็ใช้ตามที่กรอก */ }
+
     const data = {
       'รหัส': existing ? existing['รหัส'] : newId('UR'),
       'ชื่อ-นามสกุล': cleanName,
       'เบอร์ติดต่อ': cleanPhone,
-      'หน่วยงาน': String(dept || '').trim() || (existing && existing['หน่วยงาน']) || '',
+      'หน่วยงาน': cleanDept || (existing && existing['หน่วยงาน']) || '',
       'บทบาท': (existing && existing['บทบาท']) || 'ผู้ใช้งานเฉพาะตัวเอง',
       'สถานะ': (existing && existing['สถานะ']) || 'พร้อมใช้งาน',
       'LINE ID': cleanLineId,

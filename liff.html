@@ -373,6 +373,7 @@
     .qf-label { font-size:.68rem; color:#64748b; font-weight:700; width:100%; margin-top:2px; }
     .qf-repeat { width:100%; text-align:left; border:2px dashed #34d399; background:#ecfdf5; color:#047857; border-radius:12px; padding:10px 12px; font-size:.82rem; font-weight:800; line-height:1.35; }
     .qf-repeat small { display:block; font-weight:600; color:#065f46; }
+    .dept-sel { appearance:auto; }
     .eq-kinds { display:flex; gap:8px; margin:8px 0 4px; }
     .eq-kind { flex:1; border:2px solid #c7d2fe; background:#eef2ff; color:#3730a3; border-radius:12px; padding:10px 6px; font-size:.82rem; font-weight:800; line-height:1.25; }
     .eq-kind small { display:block; font-weight:600; color:#059669; }
@@ -440,6 +441,7 @@
       </div>
       <div class="form-group space-y-1.5">
         <label class="form-label text-sm font-bold text-slate-700" for="reg_dept">หน่วยงาน/สังกัด</label>
+        <select id="reg_dept_sel" class="form-input dept-sel w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:outline-none transition-all text-sm font-medium" onchange="deptSelChanged('reg_dept')"><option value="">กำลังโหลดรายชื่อหน่วยงาน...</option></select>
         <input type="text" id="reg_dept" class="form-input w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:outline-none transition-all text-sm font-medium" placeholder="เช่น งานสารสนเทศ, งานบริหาร (ไม่กรอกก็ได้)">
       </div>
       <button type="button" id="registerBtn" class="submit-btn w-full py-3.5 px-6 bg-gradient-to-r from-indigo-600 via-indigo-700 to-purple-700 hover:from-indigo-500 hover:to-purple-600 text-white font-extrabold rounded-xl shadow-lg shadow-indigo-500/30 active:scale-[0.98] transition-all duration-200 flex items-center justify-center gap-2 text-base mt-4" onclick="submitLiffRegistration()">
@@ -505,7 +507,8 @@
       <!-- หน่วยงาน -->
       <div class="form-group space-y-1.5">
         <label class="form-label text-sm font-bold text-slate-700" for="deptInput">หน่วยงาน/สังกัด <span class="req text-rose-500">*</span></label>
-        <input type="text" id="deptInput" class="form-input w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:outline-none transition-all text-sm font-medium" placeholder="เช่น งานสารสนเทศ, งานบริหาร" required>
+        <select id="deptInput_sel" class="form-input dept-sel w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:outline-none transition-all text-sm font-medium" onchange="deptSelChanged('deptInput')"><option value="">กำลังโหลดรายชื่อหน่วยงาน...</option></select>
+        <input type="text" id="deptInput" class="form-input w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:outline-none transition-all text-sm font-medium" placeholder="เช่น งานสารสนเทศ, งานบริหาร">
       </div>
 
       <!-- เบอร์ติดต่อ -->
@@ -689,7 +692,7 @@
         if (result && result.success && result.found) {
           document.getElementById('borrowerName').value = result.name || profile.displayName || '';
           document.getElementById('phoneInput').value = result.phone || '';
-          if (result.dept) document.getElementById('deptInput').value = result.dept;
+          if (result.dept) { document.getElementById('deptInput').value = result.dept; deptSync(); }
           liffRegistered = true;
           document.getElementById('registerCard').style.display = 'none';
           document.getElementById('borrowForm').style.display = 'block';
@@ -730,7 +733,7 @@
         if (result && result.success) {
           document.getElementById('borrowerName').value = name;
           document.getElementById('phoneInput').value = phone;
-          if (dept) document.getElementById('deptInput').value = dept;
+          if (dept) { document.getElementById('deptInput').value = dept; deptSync(); }
           liffRegistered = true;
           document.getElementById('registerCard').style.display = 'none';
           document.getElementById('borrowForm').style.display = 'block';
@@ -1142,6 +1145,13 @@
     async function handleSubmit(e) {
       e.preventDefault();
 
+      if (!$id('deptInput').value.trim()) {
+        alert('กรุณาเลือกหน่วยงาน/สังกัด' + ($id('deptInput_sel').style.display === 'none' ? '' : ' (ถ้าไม่มีในรายการให้เลือก “อื่น ๆ” แล้วพิมพ์ชื่อ)'));
+        const f = $id('deptInput_sel').style.display === 'none' ? $id('deptInput') : $id('deptInput_sel');
+        if (f.scrollIntoView) f.scrollIntoView({ block: 'center' }); f.focus();
+        return;
+      }
+
       const locationValue = document.getElementById('locationInput').value.trim();
       const pickupTimeValue = document.getElementById('pickupTimeInput').value;
       const rawPickupDate = document.getElementById('pickupDateInput').value;
@@ -1427,6 +1437,41 @@
         $id('pickupTimeInput').addEventListener('change', renderDateChips);
       });
     })();
+
+    // ================= หน่วยงาน: ช่องเลือกจากรายชื่อหลัก (พิมพ์เองเฉพาะกรณี "อื่น ๆ") =================
+    // ช่อง input เดิม (#reg_dept, #deptInput) ยังเป็นแหล่งค่าจริง — select เป็นตัวเลือกที่เขียนค่าลงช่องนั้น จึงไม่ต้องแก้ตรรกะส่งข้อมูล
+    let deptNames = [];
+    const DEPT_FIELDS = ['reg_dept', 'deptInput'];
+    const deptKey = (v) => String(v || '').replace(/\s+/g, '').toLowerCase();
+    function deptRender(id) {
+      const sel = $id(id + '_sel'), inp = $id(id);
+      if (!sel || !inp) return;
+      if (!deptNames.length) { sel.style.display = 'none'; inp.style.display = ''; return; } // โหลดรายชื่อไม่ได้ -> พิมพ์เองตามเดิม
+      const cur = inp.value.trim();
+      const hit = deptNames.find((n) => deptKey(n) === deptKey(cur));
+      sel.innerHTML = '<option value="">— เลือกหน่วยงาน —</option>'
+        + deptNames.map((n) => '<option value="' + escHtml(n) + '">' + escHtml(n) + '</option>').join('')
+        + '<option value="__other">อื่น ๆ (ไม่มีในรายการ — พิมพ์เอง)</option>';
+      sel.style.display = '';
+      if (hit) { sel.value = hit; inp.value = hit; inp.style.display = 'none'; }
+      else if (cur) { sel.value = '__other'; inp.style.display = ''; }
+      else { sel.value = ''; inp.style.display = 'none'; }
+    }
+    function deptSelChanged(id) {
+      const sel = $id(id + '_sel'), inp = $id(id);
+      if (sel.value === '__other') { inp.value = ''; inp.style.display = ''; inp.focus(); }
+      else { inp.value = sel.value; inp.style.display = 'none'; }
+    }
+    const deptSync = () => DEPT_FIELDS.forEach(deptRender);
+    async function loadDepartmentNames() {
+      try {
+        const res = await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fn: 'getDepartmentNames', args: [] }) });
+        const d = await res.json();
+        if (d && d.success && Array.isArray(d.names)) deptNames = d.names;
+      } catch (e) { /* ไม่มีรายชื่อ = ใช้ช่องพิมพ์ */ }
+      deptSync();
+    }
+    document.addEventListener('DOMContentLoaded', () => { DEPT_FIELDS.forEach((id) => $id(id) && ($id(id).style.display = 'none')); loadDepartmentNames(); });
   </script>
 </body>
 </html>
