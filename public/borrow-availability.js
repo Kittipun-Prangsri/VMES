@@ -111,6 +111,8 @@
     const u = String(unit == null ? '' : unit).trim();
     return !!u && /สารสนเทศ|ไอที|(^|[^A-Za-z])IT([^A-Za-z]|$)/i.test(u);
   }
+  // ตัดสินจาก "หน่วยงานที่รับผิดชอบ" เท่านั้น — ไม่เดาจากชื่อห้อง/ที่เก็บ (ชื่อห้องเคยไม่ตรงความจริง เช่น "ห้องไอที ชั้น2"
+  // คือห้องการเงินและธุรการ); ตั้งค่าทั้งห้องทีเดียวได้ด้วยปุ่ม "ตั้งหน่วยงานทั้งหมวด/ห้อง" ในคลังอุปกรณ์
   function isBorrowPoolEquipment(e) { return !!e && isITUnit(e['หน่วยงานที่รับผิดชอบ']); }
 
   return { isITUnit, isBorrowPoolEquipment, ACTIVE_STATUSES, UNBORROWABLE_STATUSES, toIso, addDays, linesOf, windowOf, busyWindows, peakUsage, availableFor, nextFreeDate, isBorrowableStatus };

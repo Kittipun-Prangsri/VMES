@@ -81,6 +81,12 @@ assert.ok(fs.existsSync(pub), 'public/borrow-availability.js missing — run `np
 assert.equal(fs.readFileSync(pub, 'utf8'), fs.readFileSync(path.join(__dirname, '../backend-node/lib/borrowAvailability.js'), 'utf8'), 'browser copy is stale — run `npm run build`');
 for (const u of ['งานสารสนเทศ', 'งานเทคโนโลยีสารสนเทศ', 'IT', 'ไอที']) assert.equal(A.isITUnit(u), true, u);
 for (const u of ['', undefined, 'ผู้ป่วยนอก', 'ห้องคลอด', 'ADMIT']) assert.equal(A.isITUnit(u), false, String(u));
-console.log('  ✅ IT unit matching');
+const pool = (u, l) => A.isBorrowPoolEquipment({ 'หน่วยงานที่รับผิดชอบ': u, 'ที่เก็บ': l });
+assert.equal(pool('งานสารสนเทศ', 'ห้องคลอด'), true, 'explicit IT unit wins over location');
+assert.equal(pool('ห้องคลอด', 'ห้องไอที ชั้น2'), false);
+assert.equal(pool('', 'ห้องไอที ชั้น2'), false, 'location names are never guessed (this room is really finance/admin)');
+assert.equal(pool(undefined, 'งานสารสนเทศ ชั้น2'), false);
+assert.equal(pool('', ''), false); assert.equal(A.isBorrowPoolEquipment(null), false);
+console.log('  ✅ IT unit matching (by responsible unit only)');
 console.log('  ✅ browser copy identical to source');
 console.log('\n🎉 ALL BORROW AVAILABILITY TESTS PASSED');

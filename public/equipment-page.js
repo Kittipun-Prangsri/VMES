@@ -391,7 +391,7 @@ function renderEquipment() {
           ` : ''}
           ${canManageEquipment() ? `<button class="btn btn-sm" onclick="openCategoryManager()" title="จัดการหมวดหมู่ครุภัณฑ์ (ตามรหัส 4 หลักแรก)" style="${heroBtn}">🗂️ จัดการหมวดหมู่</button>` : ''}
           ${canManageEquipment() ? `<button class="btn btn-sm" onclick="openLocationManager()" title="เพิ่ม/แก้ไขสถานที่จัดเก็บ" style="${heroBtn}">📍 จัดการสถานที่</button>
-          <button class="btn btn-sm" onclick="bulkSetUnitByCategory()" title="ตั้งหน่วยงานที่รับผิดชอบให้ทั้งหมวด (เฉพาะงานสารสนเทศยืมผ่านระบบได้)" style="${heroBtn}">🏢 ตั้งหน่วยงานทั้งหมวด</button>` : ''}
+          <button class="btn btn-sm" onclick="bulkSetUnitByCategory()" title="ตั้งหน่วยงานที่รับผิดชอบให้ทั้งหมวด (เฉพาะงานสารสนเทศยืมผ่านระบบได้)" style="${heroBtn}">🏢 ตั้งหน่วยงานทั้งหมวด/ห้อง</button>` : ''}
           ${isAdmin() ? `<button class="btn btn-sm" onclick="window._efPrintLabels()" title="พิมพ์ป้ายสติกเกอร์ Brother PT-P710BT ของรายการที่กรองอยู่" style="${heroBtn}">🏷️ พิมพ์ป้าย</button>` : ''}
           <button class="btn btn-sm" onclick="exportSheet('อุปกรณ์')" style="${heroBtn}">📊 Export</button>
         </div>
@@ -1312,7 +1312,7 @@ if (typeof module === 'object' && module.exports) {
 // ตั้ง "หน่วยงานที่รับผิดชอบ" ทั้งหมวดทีเดียว — เฉพาะอุปกรณ์ของงานสารสนเทศเท่านั้นที่เปิดให้ยืมผ่านระบบ
 async function bulkSetUnitByCategory() {
   if (!canManageEquipment()) return;
-  const code = (prompt('รหัสหมวด 4 หลักที่จะตั้งหน่วยงานให้ทั้งหมวด', '7440') || '').trim();
+  const code = (prompt('ตั้งหน่วยงานให้ทั้งหมวดหรือทั้งห้อง — ใส่รหัสหมวด 4 หลัก (เช่น 7440) หรือชื่อสถานที่เก็บ (เช่น ห้องไอที ชั้น2)', '7440') || '').trim();
   if (!code) return;
   const unit = (prompt('หน่วยงานที่รับผิดชอบ', 'งานสารสนเทศ') || '').trim();
   if (!unit) return;
@@ -1321,8 +1321,8 @@ async function bulkSetUnitByCategory() {
     const d = await callApi('bulkSetEquipmentUnit', code, unit, ADMIN_PASS, true);
     showLoading(false);
     if (!d.success) { toast(d.message, 'error'); return; }
-    if (!d.matched) { toast('ไม่พบอุปกรณ์ในหมวด ' + code, 'warning'); return; }
-    if (!confirm('พบอุปกรณ์หมวด ' + code + ' จำนวน ' + d.matched + ' รายการ (จะเปลี่ยน ' + d.willChange + ' รายการ)\nตั้งหน่วยงานที่รับผิดชอบเป็น "' + unit + '" ?')) return;
+    if (!d.matched) { toast('ไม่พบอุปกรณ์ที่ตรงกับ ' + code, 'warning'); return; }
+    if (!confirm('พบอุปกรณ์ที่ตรงกับ ' + code + ' จำนวน ' + d.matched + ' รายการ (จะเปลี่ยน ' + d.willChange + ' รายการ)\nตั้งหน่วยงานที่รับผิดชอบเป็น "' + unit + '" ?')) return;
     showLoading(true);
     const r = await callApi('bulkSetEquipmentUnit', code, unit, ADMIN_PASS);
     showLoading(false);

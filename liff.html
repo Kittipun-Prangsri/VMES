@@ -898,7 +898,8 @@
         const open = !!EQ.open[g.key] || (EQ.text.trim() && g.shown.length <= 8);
         const first = g.avail[0];
         return '<div class="eq-group"><button type="button" class="eq-group-head" data-key="' + escHtml(g.key) + '" onclick="eqToggle(this.dataset.key)">'
-          + '<span>' + (open ? '▼' : '▶') + ' <b>' + escHtml(g.name) + '</b>' + (g.brand || g.model ? ' <span class="eq-muted">' + escHtml([g.brand, g.model].filter(Boolean).join(' ')) + '</span>' : '') + '</span>'
+          + '<span>' + (open ? '▼' : '▶') + ' <b>' + escHtml(g.name) + '</b>' + (g.brand || g.model ? ' <span class="eq-muted">' + escHtml([g.brand, g.model].filter(Boolean).join(' ')) + '</span>' : '')
+            + (eqGroupLocs(g) ? '<br><span class="eq-muted">📍 ' + escHtml(eqGroupLocs(g)) + '</span>' : '') + '</span>'
           + '<span class="eq-badge ' + (g.avail.length ? 'ok' : 'off') + '">ว่าง ' + g.avail.length + '/' + g.units.length + '</span></button>'
           + (first ? '<button type="button" class="eq-quick" data-id="' + escHtml(first['รหัส']) + '" onclick="eqChoose(this.dataset.id)">⚡ เลือกเครื่องที่ว่าง (ไม่ต้องดูทีละเครื่อง)</button>' : '')
           + (open ? '<div class="eq-group-body">' 
@@ -923,6 +924,15 @@
         if (words.length) { const t = eqText(e); if (!words.every((w) => t.includes(w))) return false; }
         return true;
       });
+    }
+    // ที่เก็บปัจจุบันของเครื่องในกลุ่ม (เฉพาะที่ยืมได้ในช่วงนี้ ถ้าไม่มีใช้ทั้งกลุ่ม) — บอกผู้ยืมว่าไปรับที่ไหน
+    function eqGroupLocs(g) {
+      const src = g.avail.length ? g.avail : g.units;
+      const counts = new Map();
+      src.forEach((u) => { const l = String(u['ที่เก็บ'] || '').trim(); if (l) counts.set(l, (counts.get(l) || 0) + 1); });
+      const arr = Array.from(counts.entries()).sort((a, b) => b[1] - a[1]);
+      if (!arr.length) return '';
+      return arr.slice(0, 2).map((x) => x[0] + (arr.length > 1 ? ' (' + x[1] + ')' : '')).join(' · ') + (arr.length > 2 ? ' +' + (arr.length - 2) + ' ที่' : '');
     }
     function eqSetCat(k) { EQ.cat = k; eqRender(true); }
     function eqToggle(key) { EQ.open[key] = !EQ.open[key]; eqRender(false); }
