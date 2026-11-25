@@ -52,7 +52,7 @@ function checkBorrowRequest(data, equipments, borrowings, today) {
     const equip = (equipments || []).find((e) => e['รหัส'] === l.id);
     if (!equip) return { error: `ไม่พบข้อมูลอุปกรณ์รหัส ${l.id || '-'} ในระบบ` };
     if (!(l.qty > 0)) return { error: `จำนวนที่ยืม "${equip['ชื่ออุปกรณ์']}" ต้องมากกว่า 0` };
-    if (!BA.isBorrowPoolEquipment(equip)) return { error: `ไม่สามารถยืมได้: "${equip['ชื่ออุปกรณ์']}" ${equip['หน่วยงานที่รับผิดชอบ'] ? 'เป็นอุปกรณ์ประจำหน่วยงาน ' + equip['หน่วยงานที่รับผิดชอบ'] : 'ยังไม่ได้ระบุหน่วยงานที่รับผิดชอบ'} (ยืมผ่านระบบได้เฉพาะอุปกรณ์ของงานสารสนเทศ)` };
+    if (!BA.isBorrowPoolEquipment(equip)) return { error: `ไม่สามารถยืมได้: "${equip['ชื่ออุปกรณ์']}" ${equip['หน่วยงานที่รับผิดชอบ'] ? 'เป็นอุปกรณ์ประจำหน่วยงาน ' + equip['หน่วยงานที่รับผิดชอบ'] : (String(equip['สถานะ'] || '').trim() === 'ประจำจุด' ? 'เป็นอุปกรณ์ประจำจุดที่ใช้งานอยู่ที่ ' + (equip['ที่เก็บ'] || 'หน่วยงานอื่น') : 'อยู่ที่ ' + (equip['ที่เก็บ'] || '-') + ' (ไม่ใช่คลังของงานสารสนเทศ)')} (ยืมผ่านระบบได้เฉพาะอุปกรณ์ของงานสารสนเทศ)` };
     if (!BA.isBorrowableStatus(equip['สถานะ'])) return { error: `ไม่สามารถยืมได้: อุปกรณ์ "${equip['ชื่ออุปกรณ์']}" อยู่ในสถานะ ${equip['สถานะ']}` };
 
     const busy = BA.busyWindows(equip['รหัส'], borrowings, today);

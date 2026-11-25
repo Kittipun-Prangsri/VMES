@@ -116,13 +116,15 @@ const reset = () => { store.borrowing = {}; sent.length = 0; };
   reset();
   eq('IT1', { 'หน่วยงานที่รับผิดชอบ': 'งานสารสนเทศ' }); eq('IT2', { 'หน่วยงานที่รับผิดชอบ': 'ศูนย์คอมพิวเตอร์ (IT)' });
   eq('OPD1', { 'หน่วยงานที่รับผิดชอบ': 'ผู้ป่วยนอก', 'ที่เก็บ': 'ห้องไอที ชั้น2' }); eq('OLD1', { 'หน่วยงานที่รับผิดชอบ': '' });
-  eq('LOC1', { 'หน่วยงานที่รับผิดชอบ': '', 'ที่เก็บ': 'ห้องไอที ชั้น2' }); eq('LOC2', { 'หน่วยงานที่รับผิดชอบ': '', 'ที่เก็บ': 'ห้องคลอด' }); // ยังไม่ระบุหน่วยงาน -> ยังไม่เปิดให้ยืม
+  eq('LOC1', { 'หน่วยงานที่รับผิดชอบ': '', 'ที่เก็บ': 'งานสารสนเทศ' }); eq('LOC2', { 'หน่วยงานที่รับผิดชอบ': '', 'ที่เก็บ': 'งานอุบัติเหตุ' }); eq('FIX1', { 'สถานะ': 'ประจำจุด', 'หน่วยงานที่รับผิดชอบ': '', 'ที่เก็บ': 'งานสารสนเทศ' }); // ยังไม่ระบุหน่วยงาน -> ยังไม่เปิดให้ยืม
   const cat2 = await B.getBorrowCatalog();
   const ids = cat2.items.map((i) => i['รหัส']).sort();
-  assert.ok(ids.includes('IT1') && ids.includes('IT2') && !ids.includes('OLD1') && !ids.includes('OPD1') && !ids.includes('LOC1') && !ids.includes('LOC2'), 'catalog lists only IT equipment: ' + ids);
+  assert.ok(ids.includes('IT1') && ids.includes('IT2') && !ids.includes('OLD1') && !ids.includes('OPD1') && ids.includes('LOC1') && !ids.includes('LOC2') && !ids.includes('FIX1'), 'catalog lists only IT equipment: ' + ids);
   const badOpd = await B.saveBorrowing(req([['OPD1', 1]], plus(1), plus(2)), 'x');
   assert.equal(badOpd.success, false); assert.match(badOpd.message, /ประจำหน่วยงาน ผู้ป่วยนอก.*งานสารสนเทศ/);
-  const badLoc = await B.saveBorrowing(req([['LOC1', 1]], plus(1), plus(2)), 'x'); assert.equal(badLoc.success, false); assert.match(badLoc.message, /ยังไม่ได้ระบุหน่วยงานที่รับผิดชอบ/);
+  const badLoc = await B.saveBorrowing(req([['LOC2', 1]], plus(1), plus(2)), 'x'); assert.equal(badLoc.success, false); assert.match(badLoc.message, /อยู่ที่ งานอุบัติเหตุ/);
+  const badFix = await B.saveBorrowing(req([['FIX1', 1]], plus(1), plus(2)), 'x'); assert.equal(badFix.success, false); assert.match(badFix.message, /ประจำจุด/);
+  assert.equal((await B.saveBorrowing(req([['LOC1', 1]], plus(1), plus(2)), 'x')).success, true, 'IT stock w/o unit is borrowable');
   assert.equal((await B.saveBorrowing(req([['IT1', 1]], plus(1), plus(2)), 'x')).success, true);
   console.log('  ✅ only IT-unit equipment is borrowable (catalog + save)');
   console.log('\n🎉 ALL BORROWING TESTS PASSED');
