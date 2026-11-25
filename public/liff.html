@@ -778,11 +778,13 @@
     const eqText = (e) => [e['ชื่ออุปกรณ์'], e['รหัสครุภัณฑ์'], e['รหัส'], e['ยี่ห้อ'], e['รุ่น'], e['Serial'], e['ที่เก็บ'], e['หมวดหมู่']].map((v) => String(v == null ? '' : v)).join(' ').toLowerCase();
     // อุปกรณ์ที่ยืมบ่อย: โน้ตบุ๊ก/โปรเจคเตอร์ ขึ้นเป็นปุ่มใหญ่ก่อน — ที่เหลือเก็บไว้ใต้ "อื่น ๆ" ไม่ให้รายการยาวท่วมหน้าจอ
     const EQ_KINDS = [
-      { k: 'nb', label: '💻 โน้ตบุ๊ก', re: /โน้ต?บุ๊?[คก]|notebook|laptop/i },
-      { k: 'pj', label: '📽️ โปรเจคเตอร์', re: /โปรเจ[คก]เตอร์|projector/i },
+      { k: 'nb', label: '💻 โน้ตบุ๊ก', re: /โน[ตด]บุ[คก]|โน[ตด]บุค|note\s*book|laptop|แล็ปท็อป|แลปท็อป/i },
+      { k: 'pj', label: '📽️ โปรเจคเตอร์', re: /โปรเจ[คก]เต[อ]?ร?์?|projector/i },
     ];
+    // ชื่อที่คนพิมพ์สะกดต่างกัน (โน้ตบุ๊ก / โน๊ตบุ๊ค / โน๊ดบุ๊ค) -> ตัดวรรณยุกต์/ช่องว่างก่อนเทียบ
+    const eqNorm = (v) => String(v || '').replace(/[\u0E47-\u0E4E\s]+/g, '');
     function eqKindOf(e) {
-      const t = (e['ชื่ออุปกรณ์'] || '') + ' ' + (e['รุ่น'] || '');
+      const t = eqNorm(e['ชื่ออุปกรณ์']) + ' ' + eqNorm(e['รุ่น']) + ' ' + eqNorm(e['ยี่ห้อ']);
       const hit = EQ_KINDS.find((x) => x.re.test(t));
       return hit ? hit.k : 'other';
     }
@@ -1362,10 +1364,16 @@
       const last = qfLoad();
       if (!last.items || !last.items.length) return;
       if (!equipmentList.length) { alert('กำลังโหลดรายการอุปกรณ์ กรุณารอสักครู่แล้วลองอีกครั้ง'); return; }
-      const missing = [];
+      const missing = [], swapped = [];
       const w = eqWindow();
       last.items.forEach((i) => {
-        const e = equipmentList.find((x) => x['รหัส'] === i.id);
+        let e = equipmentList.find((x) => x['รหัส'] === i.id);
+        // เครื่องเดิมไม่ว่าง (เช่นมีคนจองต่อ) -> สลับเป็นเครื่องอื่นรุ่นเดียวกันที่ว่างแทน ไม่ต้องเลือกใหม่เอง
+        const sameModel = (x, y) => ['ชื่ออุปกรณ์', 'ยี่ห้อ', 'รุ่น'].every((k) => String(x[k] || '').trim().toLowerCase() === String(y[k] || '').trim().toLowerCase());
+        if (e && eqAvail(e) < 1) {
+          const alt = equipmentList.find((x) => x['รหัส'] !== e['รหัส'] && sameModel(x, e) && eqAvail(x) >= 1 && !selectedCartItems.some((c) => c['รหัสอุปกรณ์'] === x['รหัส']));
+          if (alt) { swapped.push(i.name + (alt['รหัสครุภัณฑ์'] ? ' → เครื่อง ' + alt['รหัสครุภัณฑ์'] : ' → อีกเครื่องรุ่นเดียวกัน')); e = alt; }
+        }
         if (!e) { missing.push(i.name + ' (ไม่มีในรายการยืมแล้ว)'); return; }
         const av = eqAvail(e);
         if (av < 1) { missing.push(i.name + ' (' + (eqReason(e) || 'ไม่ว่าง') + ')'); return; }
@@ -1378,6 +1386,7 @@
       if (last.purpose && !$id('purposeInput').value.trim()) $id('purposeInput').value = last.purpose;
       if (last.time && !$id('pickupTimeInput').value) $id('pickupTimeInput').value = last.time;
       renderCart(); renderRepeatBox(); renderLocChips(); renderPurposeChips(); renderDateChips();
+      if (swapped.length && !missing.length) alert('เครื่องเดิมไม่ว่างในช่วง ' + dmy(w.from) + ' – ' + dmy(w.to) + ' ระบบสลับเป็นเครื่องรุ่นเดียวกันที่ว่างให้แล้ว:\n• ' + swapped.join('\n• '));
       if (missing.length) alert('เติมข้อมูลครั้งก่อนให้แล้ว แต่บางรายการยืมซ้ำช่วง ' + dmy(w.from) + ' – ' + dmy(w.to) + ' ไม่ได้:\n• ' + missing.join('\n• ') + '\n\nเลือกอุปกรณ์ทดแทนหรือเปลี่ยนวันได้เลย');
     }
 

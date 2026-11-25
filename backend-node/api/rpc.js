@@ -20,8 +20,6 @@ const PUBLIC_FUNCTIONS = new Set([
   'testMikrotikConnection',
   'setupSystem',
   // LIFF & Public Borrowing Form functions
-  'getEquipment',
-  'getEquipmentCategories',
   'getBorrowCatalog', // รายการอุปกรณ์ + ช่วงวันที่ที่ถูกกันไว้ (ไม่มีข้อมูลบุคคล) สำหรับหน้าเลือกอุปกรณ์บน LIFF
   'getBorrowingByCode',
   'saveBorrowing',
